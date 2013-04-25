@@ -5,6 +5,7 @@
  * @brief The joystick definitions.
  */
 
+
 /// Joystick interface
 class Joystick {
 public:

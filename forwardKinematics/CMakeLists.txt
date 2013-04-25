@@ -2,7 +2,7 @@
 # @date Jan 15, 2012
 
 cmake_minimum_required(VERSION 2.6)
-project(krang-balance-hack)
+project(forwardKinematics)
 
 # ================================================================================================
 # Macro to check if a set has a particular value
@@ -45,7 +45,7 @@ file(GLOB scripts_source "exe/*.cpp")
 
 # Build the library and set the executables that use it (have to hardcode for now)
 add_library(Main SHARED ${main_source})
-set(MainDependents krang-balance-hack checkCoM)
+set(MainDependents krang-balance-hack forwardKinematics)
 
 # Build scripts
 message(STATUS "\n-- SCRIPTS: ")
