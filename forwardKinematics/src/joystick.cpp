@@ -44,7 +44,7 @@ void Joystick::update() {
 			SOMATIC_GET_LAST_UNPACK( r, somatic__joystick, &protobuf_c_system_allocator, 4096, &js_chan );
 
 	// Make sure the message is received correctly
-	somatic_d_check( &krang_cx.d_cx, SOMATIC__EVENT__PRIORITIES__EMERG,
+	somatic_d_check( &daemon_cx, SOMATIC__EVENT__PRIORITIES__EMERG,
 					 SOMATIC__EVENT__CODES__COMM_FAILED_TRANSPORT,
 					 ACH_OK != r || ACH_STALE_FRAMES != r,
 					 NULL,
@@ -57,12 +57,12 @@ void Joystick::update() {
 	if(!(ACH_OK == r || ACH_MISSED_FRAME == r) || (js_msg == NULL)) return;
 
 	// Make sure the button data is received correctly
-	bool buttonDataGood = somatic_d_check_msg( &krang_cx.d_cx, js_msg->buttons &&
+	bool buttonDataGood = somatic_d_check_msg( &daemon_cx, js_msg->buttons &&
 			js_msg->buttons->data && (js_msg->buttons->n_data >= sizeof(jsvals.b)/sizeof(jsvals.b[0])),
  		  "msg_msg", "bad button data");
 
 	// Make sure the axes data is received correctly
-	bool axesDataGood = somatic_d_check_msg( &krang_cx.d_cx, js_msg->axes &&
+	bool axesDataGood = somatic_d_check_msg( &daemon_cx, js_msg->axes &&
 			js_msg->axes->data && (js_msg->axes->n_data >= sizeof(jsvals.x)/sizeof(jsvals.x[0])),
 			"msg_msg", "bad axes data");
 

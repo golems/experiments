@@ -5,6 +5,9 @@
  * @brief The joystick definitions.
  */
 
+#pragma once 
+
+somatic_d_t daemon_cx;
 
 /// Joystick interface
 class Joystick {

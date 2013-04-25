@@ -1,5 +1,4 @@
-#ifndef KRANG_H
-#define KRANG_H
+#pragma once
 
 #include <amino.h>
 #include <somatic.h>
@@ -34,13 +33,12 @@ typedef struct {
 
 typedef struct {
   krang_state_t X;										///< The state definition
-	somatic_d_t d_cx;										///< Somatic channel it uses
 	ach_channel_t state_chan;
 	krang_js_t ui;
 } krang_cx_t;
 
 extern krang_cx_t krang_cx;
+extern somatic_d_t daemon_cx;
 
 void krang_init( krang_cx_t *cx );
 
-#endif //KRANG_H
