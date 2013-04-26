@@ -1,0 +1,26 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../include/krang.h
+amino.h
+-
+somatic.h
+-
+reflex.h
+-
+somatic/daemon.h
+-
+
+/home/munzir/Documents/Software/project/krang/experiments/balancing/src/state.cpp
+somatic.h
+-
+somatic/daemon.h
+-
+krang.h
+/home/munzir/Documents/Software/project/krang/experiments/balancing/src/krang.h
+

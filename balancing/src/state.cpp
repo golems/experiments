@@ -48,60 +48,16 @@ void krang_init( krang_cx_t *cx ) {
 	dopt.ident = "bal-hack";
 	somatic_d_init( &cx->d_cx, &dopt );
 
-	// - Init FT sensor buffers
-	aa_fzero(rft_buffer,15);
-
 	// --------- open channels ----------
 	somatic_d_channel_open( &cx->d_cx,
 							&cx->state_chan, "krang-state",
 							NULL );
-	somatic_d_channel_open( &cx->d_cx,
-							&cx->X.arm[1].ft_chan, "rlwa_ft",
-							NULL );
-	somatic_d_channel_open( &cx->d_cx,
-							&cx->X.arm[0].ft_chan, "llwa_ft",
-							NULL );
-	somatic_d_channel_open( &cx->d_cx,
-							&cx->spnav_chan, "spacenav-data",
-							NULL );
-
-
 	// --------- init parse table ----------
 	// set initial mode
 	krang_parse_init(cx->parse_table);
 
 	cx->X.mode = KRANG_MODE_HALT;
 
-	// --------- init arm controller ----------------
-	for( size_t i = 0; i < 2; i ++ ) {
-		rfx_ctrl_ws_init( &cx->X.arm[i].G, 7 );
-		rfx_ctrl_ws_lin_k_init( &cx->X.arm[i].K, 7 );
-		if(KRANG_I_RIGHT==i){
-			aa_fset( cx->X.arm[i].K.f, 0.0, 3 );
-			aa_fset( cx->X.arm[i].K.f+3, 0.0, 3 );
-			cx->X.arm[i].ftweight = 22.54;
-			cx->X.arm[i].ftcm = 0.05035;
-		} else {
-			aa_fset( cx->X.arm[i].K.f, 0, 3 );
-			aa_fset( cx->X.arm[i].K.f+3, 0, 3 );
-			cx->X.arm[i].ftweight = 18;
-			cx->X.arm[i].ftcm = 0.05035;
-		}			
-		aa_fset( cx->X.arm[i].K.q, .3, 7 );
-		aa_fset( cx->X.arm[i].K.p, 1.0, 3 );
-		aa_fset( cx->X.arm[i].K.p+3, 1.0, 3 );
-		cx->X.arm[i].K.dls = .005;
-		// FIXME: better limits
-		aa_fset( cx->X.arm[i].G.q_min, -M_PI, 7 );
-		aa_fset( cx->X.arm[i].G.q_max, M_PI, 7 );
-	cx->X.arm[i].G.q_min[6] = -2*M_PI; // gripper rotate module has free-rotate
-	cx->X.arm[i].G.q_max[6] = 2*M_PI;
-		aa_fset( cx->X.arm[i].G.x_min, -4, 3 );
-		aa_fset( cx->X.arm[i].G.x_max, 4, 3 );
-
-		double temp_ident[9] = {1,0,0, 0,1,0, 0,0,1};
-		aa_fcpy(cx->X.arm[i].R0, temp_ident, 9);
-	}
 }
 
 void krang_parse_init
@@ -218,126 +174,3 @@ void krang_destroy( krang_cx_t *cx ) {
 	somatic_d_channel_close( &cx->d_cx,
 							 &cx->state_chan);
 }
-
-void krang_send_state( krang_cx_t *cx) {
-	Somatic__Event msg;
-	Somatic__Vector vec;
-	double data[] = {
-		cx->X.q1_0,
-		cx->X.dq1_0,
-		cx->X.q1_1,
-		cx->X.dq1_1,
-		cx->X.q2,
-		cx->X.dq2,
-		cx->X.q3,
-		cx->X.dq3,
-		cx->X.q1_ref[0],
-		cx->X.q1_ref[1],
-		cx->X.dq1_ref[0],
-		cx->X.dq1_ref[1]
-	};
-	somatic__event__init(&msg);
-	somatic__vector__init(&vec);
-	msg.attr = &vec;
-	msg.attr->data = data;
-	msg.attr->n_data = sizeof(data)/sizeof(double);
-
-	ach_status_t r =
-		(ach_status_t)SOMATIC_PACK_SEND( &cx->state_chan,
-										 somatic__event, &msg );
-	somatic_d_check(&cx->d_cx, SOMATIC__EVENT__PRIORITIES__ERR,
-					SOMATIC__EVENT__CODES__COMM_FAILED_TRANSPORT,
-					ACH_OK == r, "krang_send_state",
-					"sending state: %s\n",
-					ach_result_to_string(r));
-
-}
-
-
-/* ********************************************************************************************** */
-void krang_poll( krang_cx_t *cx ) {
-	int r;
-	// left FT --Sam making horrible guesses
-	{
-		Somatic__ForceMoment *msg =
-			SOMATIC_GET_LAST_UNPACK( r, somatic__force_moment,
-									 &cx->d_cx.pballoc, 4096,
-									 &cx->X.arm[0].ft_chan);
-		if( msg &&
-			somatic_d_check_msg(&cx->d_cx,
-								msg->force->data && 3 == msg->force->n_data &&
-								msg->moment->data && 3 == msg->moment->n_data ,
-								"force_moment", "bad data") ) {
-
-
-			//double rot[4];
-			aa_fcpy( cx->X.arm[0].ft, msg->force->data, 3 );
-			aa_fcpy( cx->X.arm[0].ft+3, msg->moment->data, 3 );
-		}
-	}
-	// right FT
-	{
-		Somatic__ForceMoment *msg =
-			SOMATIC_GET_LAST_UNPACK( r, somatic__force_moment,
-									 &cx->d_cx.pballoc, 4096,
-									 &cx->X.arm[1].ft_chan);
-		if( msg &&
-			somatic_d_check_msg(&cx->d_cx,
-								msg->force->data && 3 == msg->force->n_data &&
-								msg->moment->data && 3 == msg->moment->n_data ,
-								"force_moment", "bad data") ) {
-			//double rot[4];
-
-			// Apply a kalman filter to the FT sensor data here.
-			// TODO not implemented yet
-
-			// Update FT buffer, so we can ignore outliers
-			for (int i=0; i<4; ++i) {
-				rft_buffer[3*i] = rft_buffer[3*i+3];
-				rft_buffer[3*i+1] = rft_buffer[3*i+4];
-				rft_buffer[3*i+2] = rft_buffer[3*i+5];
-			}
-			// Add most recent to end of buffer
-			rft_buffer[12] = msg->force->data[0];
-			rft_buffer[13] = msg->force->data[1];
-			rft_buffer[14] = msg->force->data[2];
-
-			//aa_dump_vec(stdout,rft_buffer,15);
-
-			// If most recent x is min, don't update
-			if ( msg->force->data[0] < rft_buffer[0] && 
-				 msg->force->data[0] < rft_buffer[3] && 
-				 msg->force->data[0] < rft_buffer[6] &&
-				 msg->force->data[0] < rft_buffer[9])  {
-				//printf("FT min %g skipping...",msg->force->data[0]);
-			}
-			// or if most recent x is max, dont update
-			else if ( msg->force->data[0] > rft_buffer[0] && 
-					  msg->force->data[0] > rft_buffer[3] && 
-					  msg->force->data[0] > rft_buffer[6] && 
-					  msg->force->data[0] < rft_buffer[9])  {
-				//printf("FT max %g skipping...",msg->force->data[0]);
-			}
-			else {
-				aa_fcpy( cx->X.arm[1].ft, msg->force->data, 3 );
-				aa_fcpy( cx->X.arm[1].ft+3, msg->moment->data, 3 );
-			}
-			
-		}
-	}
-	// spacenav
-	{
-		Somatic__Joystick *msg =
-			SOMATIC_GET_LAST_UNPACK( r, somatic__joystick,
-									 &cx->d_cx.pballoc, 4096,
-									 &cx->spnav_chan);
-		if( msg &&
-			somatic_d_check_msg(&cx->d_cx,
-								msg->axes && msg->axes->data &&
-								6 == msg->axes->n_data,
-								"spnav", "bad data") ) {
-			aa_fcpy( cx->spnav, msg->axes->data, 6 );
-		}
-	}
-}
-

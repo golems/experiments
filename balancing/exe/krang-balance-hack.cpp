@@ -26,7 +26,6 @@ void main_loop(Krang *io) {
 	struct timespec t_now, t_prev;
 	t_prev = aa_tm_now();
 
-	printf(">> CAUTION: Control loop is active.\n\n");
 	static int c_ = 0;
 	while (!somatic_sig_received ) {
 		bool debug = 0;
@@ -36,28 +35,18 @@ void main_loop(Krang *io) {
 		// Get the current time and compute the time difference
 		t_now = aa_tm_now();						
 		dt = (double)aa_tm_timespec2sec(aa_tm_sub(t_now, t_prev));	
-		c_++;
 
-		// Get the initial data
+		// Read ach channels for imu, wheels and waist pos/vel and filter the data 
 		io->update_and_filter();
 
-		// Set the Krang state of the context, the joystick values, f/t and workspace 
 		// control from joystick 
-		io->get_state(&krang_cx.X);
 		io->get_js(&krang_cx.ui); 
-		krang_poll(&krang_cx);
 		
-		// ===============================================================
-		// Set discrete mode and continuous joint values
-
-		// Evaluate the current imu and torso readings and set the current mode 
+		// Evaluate the current imu and torso readings and generate thresh event
 		krang_threshold(&krang_cx);
 
 		// Change the control mode based on the joystick and set the reference velocity arm/wheel vels.
 		Joystick::process_input(&krang_cx, dt);
-
-		// Update the end effector position/orientation and Jacobians and set in the rflx struct.	
-		Controllers::kinematics(&krang_cx.X);
 
 		// ===============================================================
 		// Wheel control
@@ -109,9 +98,6 @@ void main_loop(Krang *io) {
 		// Update previous measured time
 		t_prev = t_now;
 
-		// Send the current state for recording purposes (?)
-		krang_send_state(&krang_cx);
-
 		// Release memory
 		aa_mem_region_release( &krang_cx.d_cx.memreg );
 	}
@@ -123,9 +109,6 @@ int main() {
 	// daemon setup
 	krang_init(&krang_cx);
 	Krang *io = new Krang(&(krang_cx.X));
-
-	// Tell the user how to start the motion	
-	fprintf(stderr, ">> Press button [7] & [8] to activate...\n\n");
 
 	// Send the event massage
 	somatic_d_event( &krang_cx.d_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,

@@ -104,7 +104,6 @@ public:
 	void get_state(krang_state_t *X);
 	void get_js(krang_js_t *js);
 	void update_and_filter();
-	void update_param();
 	static void krang_dump_state(Krang *krang, double dt);
 	void read_position_offsets_from_file();
 	void read_previous_positions_from_file();
