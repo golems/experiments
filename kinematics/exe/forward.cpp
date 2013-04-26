@@ -11,6 +11,9 @@
 #include <iostream>
 #include "helpers.h"
 
+using namespace Eigen;
+using namespace std;
+
 /* ********************************************************************************************** */
 somatic_d_t daemon_cx;
 ach_channel_t js_chan;				
@@ -26,15 +29,19 @@ void run() {
 			SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
 
 	// Unless an interrupt or terminate message is received, process the new message
+	size_t c = 0;
 	while(!somatic_sig_received) {
 
 		// Receive the 3-D coordinate of the red dot from vision PC
 		double x [3];
 		getRedMarkerPosition(daemon_cx, chan_transform, &x[0]);
 		
-		// Get the motor positions
+		// Get the right arm joint values and the end-effector value
+		Vector3d pos, dir;
 		somatic_motor_update(&daemon_cx, &llwa);
-		somatic_motor_update(&daemon_cx, &rlwa);
+		getEEinKinectFrame(llwa.pos, pos, dir);					
+		if(c++ % 1000 == 0)
+			cout << "pos: " << pos.transpose() << endl;
 
 		// Read the joystick data and send the input velocities to the arms
 		setJoystickInput(daemon_cx, js_chan, llwa, rlwa);

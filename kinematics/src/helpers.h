@@ -34,5 +34,5 @@ bool getRedMarkerPosition(somatic_d_t& daemon_cx, ach_channel_t& chan_transform,
 void setJoystickInput (somatic_d_t& daemon_cx, ach_channel_t& js_chan, somatic_motor_t& llwa, 
 	somatic_motor_t& rlwa);
 
-/// Returns the position/orientation of the end-effector in the Kinect frame, T^k_e
-Eigen::Matrix4d getEEinKinectFrame (double* q);
+/// Returns the position/direction of the end-effector in the Kinect frame, T^k_e
+void getEEinKinectFrame (double* q, Eigen::Vector3d& pos, Eigen::Vector3d& dir);

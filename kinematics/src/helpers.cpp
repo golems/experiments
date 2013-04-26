@@ -7,20 +7,67 @@
  */
 
 #include "helpers.h"
+#include "kinematics.h"
+#include <iostream>
 
 using namespace Eigen;
+using namespace std;
+using namespace kinematics;
 
 /* ********************************************************************************************* */
-Matrix4d getEEinKinectFrame (double* q) {
+void getEEinKinectFrame (double* q, Vector3d& pos, Vector3d& dir) {
 
-	// Start with the pos/ori of the shoulder bracket in Kinect frame: T^k_b. This transformation
-	// is first a translation to the location of the Kinect hinge and then a rotation of some
-	// fixed/measured angle (see vision/getKinectAngle project). 
-	
-	
-	
+	/// Set the constants
+	const double r = 2, s = 3, a = 6, b = 4, t = 0.5, th = 150.0 / 180.0 * M_PI;
 
+	// =============================================================================
+	// Start with the pos/ori of the shoulder bracket in Kinect frame. We first 
+	// compute the transformation from the bracket to the hinge, then to hinge to
+	// Kinect and then inverse all.
+	
+	// Get the transformations T^b_h and T^h_k
+	MatrixXd Tbh (4,4), Thk (4,4);
+	Tbh << cos(th), -sin(th), 0, a, sin(th), cos(th), 0, b, 0, 0, 1, 0, 0, 0, 0, 1;
+	Thk << 0, 0, 1, r, 0, 1, 0, -s, -1, 0, 0, -t, 0, 0, 0, 1;
+
+	// Compute the inverses
+	MatrixXd Tkb = (Tbh * Thk).inverse();
+
+	// =============================================================================
 	// Compute the transformations along each joint
+
+	// Create the DH table for the arm
+	double T [7][4] = {
+		{0.0, -M_PI_2, -L4, q[0]},
+		{0.0, M_PI_2, 0.0, q[1]},
+		{0.0, -M_PI_2, -L5, q[2]},
+		{0.0, M_PI_2, 0.0, q[3]},
+		{0.0, -M_PI_2, -L6, q[4]},
+		{0.0, M_PI_2, 0.0, q[5]},
+		{0.0, 0.0, -L7-L8, q[6]}};
+
+	// Loop through the joints and aggregate the transformations multiplying from left
+	MatrixXd Tk10 = Tkb;
+	for(size_t i = 0; i < 7; i++) 
+		Tk10 *= dh(T[i][0], T[i][1], T[i][2], T[i][3]);		
+
+	// Now we have the transformation T^k_10 where 10 is a frame at the end of the
+	// end-effector. Add a transform that moves along z to get the tip.
+	MatrixXd T10_11 = MatrixXd::Identity(4,4);
+	T10_11(2,3) = 7.0;			// TODO 
+	MatrixXd Tk11 = Tk10 * T10_11;
+	
+	// =============================================================================
+	// Now get the position of the end effector and the Euler angles of the rotation
+	// matrix in Tk11 
+
+	// Set position
+	Vector4d origin (0.0, 0.0, 0.0, 1.0); 
+	pos = (Tk11 * origin).head<3>();
+
+	// Set direction
+	Vector4d temp (0.0, 0.0, 1.0, 0.0); 
+	dir = (Tk11 * temp).head<3>();
 }
 
 /* ********************************************************************************************* */
