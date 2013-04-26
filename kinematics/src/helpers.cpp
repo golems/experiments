@@ -8,6 +8,21 @@
 
 #include "helpers.h"
 
+using namespace Eigen;
+
+/* ********************************************************************************************* */
+Matrix4d getEEinKinectFrame (double* q) {
+
+	// Start with the pos/ori of the shoulder bracket in Kinect frame: T^k_b. This transformation
+	// is first a translation to the location of the Kinect hinge and then a rotation of some
+	// fixed/measured angle (see vision/getKinectAngle project). 
+	
+	
+	
+
+	// Compute the transformations along each joint
+}
+
 /* ********************************************************************************************* */
 void init (somatic_d_t& daemon_cx, somatic_motor_t& llwa, somatic_motor_t& rlwa, 
 	ach_channel_t& js_chan, ach_channel_t& state_chan, ach_channel_t& chan_transform) {
@@ -100,7 +115,7 @@ void setJoystickInput (somatic_d_t& daemon_cx, ach_channel_t& js_chan, somatic_m
 
 	// Get the values
 	char b [10];
-	float x [6];
+	double x [6];
 	for(size_t i = 0; i < 10; i++) 
 		b[i] = js_msg->buttons->data[i] ? 1 : 0;
 	memcpy(x, js_msg->axes->data, sizeof(x));

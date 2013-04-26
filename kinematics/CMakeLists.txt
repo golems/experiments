@@ -64,3 +64,7 @@ foreach(script_src_file ${scripts_source})
 	add_custom_target(${script_base}.run ${script_base} ${ARGN})
 endforeach(script_src_file)
 message(STATUS " ")
+
+# Include the tests
+enable_testing()
+add_subdirectory(tests)

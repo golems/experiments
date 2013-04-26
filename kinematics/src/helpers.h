@@ -17,6 +17,11 @@
 #include <unistd.h>
 #include <syslog.h>
 #include <fcntl.h>
+#include <Eigen/Dense>
+
+#define DEG2RAD(x) ((x) / 180.0 * M_PI)
+
+static const double kinectAngle = DEG2RAD(-9.6);
 
 /// Initializes the somatic daemon context, the motors and joystick/state/transform channels
 void init(somatic_d_t& daemon_cx, somatic_motor_t& llwa, somatic_motor_t& rlwa, 
@@ -28,3 +33,6 @@ bool getRedMarkerPosition(somatic_d_t& daemon_cx, ach_channel_t& chan_transform,
 /// Set motor values with joystick input
 void setJoystickInput (somatic_d_t& daemon_cx, ach_channel_t& js_chan, somatic_motor_t& llwa, 
 	somatic_motor_t& rlwa);
+
+/// Returns the position/orientation of the end-effector in the Kinect frame, T^k_e
+Eigen::Matrix4d getEEinKinectFrame (double* q);
