@@ -40,12 +40,12 @@ include_directories(/usr/local/include/eigen3)
 include_directories(include)
 
 # Collect the source, script and fortran files
-file(GLOB main_source "src/*.cpp" "src/*.c")
+#file(GLOB main_source "src/*.cpp" "src/*.c")
 file(GLOB scripts_source "exe/*.cpp")
 
 # Build the library and set the executables that use it (have to hardcode for now)
-add_library(Main SHARED ${main_source})
-set(MainDependents krang-balance-hack forwardKinematics)
+#add_library(Main SHARED ${main_source})
+#set(MainDependents forward)
 
 # Build scripts
 message(STATUS "\n-- SCRIPTS: ")

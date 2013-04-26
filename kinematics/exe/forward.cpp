@@ -21,18 +21,16 @@
 #include <amino.h>
 #include <iostream>
 
-#include "krang.h"
-#include "Joystick.h"
-#include "Controllers.h"
 
 /* ********************************************************************************************** */
 
-krang_cx_t krang_cx;									
+somatic_d_t daemon_cx;
+ach_channel_t js_chan;				
+ach_channel_t state_chan;
 
 // The ach channel and its name to receive information from vision PC
 ach_channel_t chan_transform;
 
-Joystick *js;
 somatic_motor_t llwa, rlwa;
 
 /* ********************************************************************************************* */
@@ -40,7 +38,6 @@ void init() {
 	
 	// Initialize this daemon (program!)
 	somatic_d_opts_t dopt;
-	memset(&krang_cx, 0, sizeof(krang_cx)); // zero initialize
 	memset(&dopt, 0, sizeof(dopt)); // zero initialize
 	dopt.ident = "bal-hack";
 	somatic_d_init( &daemon_cx, &dopt );
@@ -65,26 +62,21 @@ void init() {
 	somatic_motor_update(&daemon_cx, &rlwa);
 	somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 7, NULL);
 
-	// Create the interfaces for the joystick and schunk modules
-	js	= new Joystick("joystick-data");
+	// Open joystick channel
+	int r  = ach_open(&js_chan, "joystick-data", NULL);
+	aa_hard_assert(r == ACH_OK,
+				   "Ach failure %s on opening Joystick channel (%s, line %d)\n",
+				   ach_result_to_string(static_cast<ach_status_t>(r)), __FILE__, __LINE__);
+	usleep(10000);
 
 	// --------- open channels ----------
-	somatic_d_channel_open( &daemon_cx, &(krang_cx.state_chan), "krang-state", NULL);
+	somatic_d_channel_open(&daemon_cx, &state_chan, "krang-state", NULL);
 	somatic_d_channel_open(&daemon_cx, &chan_transform, "chan_transform", NULL);	
-
-	// --------- init arm controller ----------------
-	for( size_t i = 0; i < 2; i ++ ) {
-		rfx_ctrl_ws_init( &krang_cx.X.arm[i].G, 7 );
-		rfx_ctrl_ws_lin_k_init( &krang_cx.X.arm[i].K, 7 );
-	}
 
 }
 
 /* ********************************************************************************************* */
 void updateRedDot() {
-
-	// =======================================================
-	// A. Get message
 
 	// Check if there is anything to read
 	int result;
@@ -95,9 +87,6 @@ void updateRedDot() {
 
 	// Return if there is nothing to read
 	if(numBytes == 0) return;
-
-	// =======================================================
-	// B. Read message
 
 	// Read the message with the base struct to check its type
 	Somatic__BaseMsg* msg = somatic__base_msg__unpack(&(daemon_cx.pballoc), numBytes, buffer);
@@ -115,6 +104,44 @@ void updateRedDot() {
 }
 
 /* ********************************************************************************************* */
+/// Set motor values with joystick input
+void setJoystickInput () {
+
+	// Get the message and check output is OK.
+	int r = 0;
+	Somatic__Joystick *js_msg = 
+			SOMATIC_GET_LAST_UNPACK( r, somatic__joystick, &protobuf_c_system_allocator, 4096, &js_chan );
+	if(!(ACH_OK == r || ACH_MISSED_FRAME == r) || (js_msg == NULL)) return;
+
+	// Get the values
+	char b [10];
+	float x [6];
+	for(size_t i = 0; i < 10; i++) 
+		b[i] = js_msg->buttons->data[i] ? 1 : 0;
+	memcpy(x, js_msg->axes->data, sizeof(x));
+	
+	// Check the buttons for each arm and apply velocities accordingly
+	// For left: 4 or 6, for right: 5 or 7, lower arm button is smaller (4 or 5)
+	somatic_motor_t* arm [] = {&llwa, &rlwa};
+	for(size_t arm_idx = 0; arm_idx < 2; arm_idx++) {
+
+		// Initialize the input
+		double dq [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+
+		// Change the input based on the lower or higher button input
+		size_t lowerButton = 4 + arm_idx, higherButton = 6 + arm_idx;
+		if(b[lowerButton] && !b[higherButton]) memcpy(&dq[4], x, 3*sizeof(double));
+		else if(!b[lowerButton] && b[higherButton]) memcpy(dq, x, 4*sizeof(double));
+
+		// Set the input for this arm
+		somatic_motor_cmd(&daemon_cx, arm[arm_idx], SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7, NULL);
+	}
+	
+	// Free the joystick message
+	somatic__joystick__free_unpacked(js_msg, &protobuf_c_system_allocator);
+}
+
+/* ********************************************************************************************* */
 void run() {
 
 	// Send a message; set the event code and the priority
@@ -127,28 +154,14 @@ void run() {
 		// Receive the 3-D coordinate of the red dot from vision PC
 		updateRedDot();
 		
-		// Get the data from the ach channel
-		js->update();
+		// Get the motor positions
 		somatic_motor_update(&daemon_cx, &llwa);
 		somatic_motor_update(&daemon_cx, &rlwa);
 
-		// Set the Krang state of the context, the joystick values, f/t and workspace 
-		// control from joystick 
-		memcpy(&krang_cx.ui, &js->jsvals, sizeof(krang_cx.ui));
-		
-		// Change the control mode based on the joystick and set the reference velocity arm/wheel vels.
-		Joystick::process_input(&krang_cx, 0.0);
+		// Read the joystick data and send the input velocities to the arms
+		setJoystickInput();
 
-		// Get the joint torques based on the mode
-		double UR[7] = {0};
-		double UL[7] = {0};
-		Controllers::arm(&krang_cx, 0.0, UR, UL);
-
-		// Set the velocities
-		somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, UL, 7, NULL);
-		somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, UR, 7, NULL);
-
-		// free buffers allocated during this cycle
+		// Free buffers allocated during this cycle
 		aa_mem_region_release(&daemon_cx.memreg);	
 	}
 
@@ -161,7 +174,6 @@ void run() {
 void destroy() {
 	somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
 	somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
-	delete js;
 
 	somatic_d_channel_close(&daemon_cx, &chan_transform);
 	somatic_d_destroy(&daemon_cx);
