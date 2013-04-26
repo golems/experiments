@@ -37,15 +37,15 @@ link_libraries(amino protobuf-c ach ntcan ntcanopen ssdmu filter pcio somatic re
 include_directories(/usr/local/include/eigen3)
 
 # Include the project files
-include_directories(include)
+include_directories(src)
 
 # Collect the source, script and fortran files
-#file(GLOB main_source "src/*.cpp" "src/*.c")
+file(GLOB main_source "src/*.cpp" "src/*.c")
 file(GLOB scripts_source "exe/*.cpp")
 
 # Build the library and set the executables that use it (have to hardcode for now)
-#add_library(Main SHARED ${main_source})
-#set(MainDependents forward)
+add_library(Main SHARED ${main_source})
+set(MainDependents forward)
 
 # Build scripts
 message(STATUS "\n-- SCRIPTS: ")
