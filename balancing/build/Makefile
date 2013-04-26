@@ -112,58 +112,6 @@ Main/fast:
 .PHONY : Main/fast
 
 #=============================================================================
-# Target rules for targets named checkCoM
-
-# Build rule for target.
-checkCoM: cmake_check_build_system
-	$(MAKE) -f CMakeFiles/Makefile2 checkCoM
-.PHONY : checkCoM
-
-# fast build rule for target.
-checkCoM/fast:
-	$(MAKE) -f CMakeFiles/checkCoM.dir/build.make CMakeFiles/checkCoM.dir/build
-.PHONY : checkCoM/fast
-
-#=============================================================================
-# Target rules for targets named checkCoM.run
-
-# Build rule for target.
-checkCoM.run: cmake_check_build_system
-	$(MAKE) -f CMakeFiles/Makefile2 checkCoM.run
-.PHONY : checkCoM.run
-
-# fast build rule for target.
-checkCoM.run/fast:
-	$(MAKE) -f CMakeFiles/checkCoM.run.dir/build.make CMakeFiles/checkCoM.run.dir/build
-.PHONY : checkCoM.run/fast
-
-#=============================================================================
-# Target rules for targets named discoverModules
-
-# Build rule for target.
-discoverModules: cmake_check_build_system
-	$(MAKE) -f CMakeFiles/Makefile2 discoverModules
-.PHONY : discoverModules
-
-# fast build rule for target.
-discoverModules/fast:
-	$(MAKE) -f CMakeFiles/discoverModules.dir/build.make CMakeFiles/discoverModules.dir/build
-.PHONY : discoverModules/fast
-
-#=============================================================================
-# Target rules for targets named discoverModules.run
-
-# Build rule for target.
-discoverModules.run: cmake_check_build_system
-	$(MAKE) -f CMakeFiles/Makefile2 discoverModules.run
-.PHONY : discoverModules.run
-
-# fast build rule for target.
-discoverModules.run/fast:
-	$(MAKE) -f CMakeFiles/discoverModules.run.dir/build.make CMakeFiles/discoverModules.run.dir/build
-.PHONY : discoverModules.run/fast
-
-#=============================================================================
 # Target rules for targets named krang-balance-hack
 
 # Build rule for target.
@@ -188,54 +136,6 @@ krang-balance-hack.run: cmake_check_build_system
 krang-balance-hack.run/fast:
 	$(MAKE) -f CMakeFiles/krang-balance-hack.run.dir/build.make CMakeFiles/krang-balance-hack.run.dir/build
 .PHONY : krang-balance-hack.run/fast
-
-exe/checkCoM.o: exe/checkCoM.cpp.o
-.PHONY : exe/checkCoM.o
-
-# target to build an object file
-exe/checkCoM.cpp.o:
-	$(MAKE) -f CMakeFiles/checkCoM.dir/build.make CMakeFiles/checkCoM.dir/exe/checkCoM.cpp.o
-.PHONY : exe/checkCoM.cpp.o
-
-exe/checkCoM.i: exe/checkCoM.cpp.i
-.PHONY : exe/checkCoM.i
-
-# target to preprocess a source file
-exe/checkCoM.cpp.i:
-	$(MAKE) -f CMakeFiles/checkCoM.dir/build.make CMakeFiles/checkCoM.dir/exe/checkCoM.cpp.i
-.PHONY : exe/checkCoM.cpp.i
-
-exe/checkCoM.s: exe/checkCoM.cpp.s
-.PHONY : exe/checkCoM.s
-
-# target to generate assembly for a file
-exe/checkCoM.cpp.s:
-	$(MAKE) -f CMakeFiles/checkCoM.dir/build.make CMakeFiles/checkCoM.dir/exe/checkCoM.cpp.s
-.PHONY : exe/checkCoM.cpp.s
-
-exe/discoverModules.o: exe/discoverModules.cpp.o
-.PHONY : exe/discoverModules.o
-
-# target to build an object file
-exe/discoverModules.cpp.o:
-	$(MAKE) -f CMakeFiles/discoverModules.dir/build.make CMakeFiles/discoverModules.dir/exe/discoverModules.cpp.o
-.PHONY : exe/discoverModules.cpp.o
-
-exe/discoverModules.i: exe/discoverModules.cpp.i
-.PHONY : exe/discoverModules.i
-
-# target to preprocess a source file
-exe/discoverModules.cpp.i:
-	$(MAKE) -f CMakeFiles/discoverModules.dir/build.make CMakeFiles/discoverModules.dir/exe/discoverModules.cpp.i
-.PHONY : exe/discoverModules.cpp.i
-
-exe/discoverModules.s: exe/discoverModules.cpp.s
-.PHONY : exe/discoverModules.s
-
-# target to generate assembly for a file
-exe/discoverModules.cpp.s:
-	$(MAKE) -f CMakeFiles/discoverModules.dir/build.make CMakeFiles/discoverModules.dir/exe/discoverModules.cpp.s
-.PHONY : exe/discoverModules.cpp.s
 
 exe/krang-balance-hack.o: exe/krang-balance-hack.cpp.o
 .PHONY : exe/krang-balance-hack.o
@@ -436,20 +336,10 @@ help:
 	@echo "... clean"
 	@echo "... depend"
 	@echo "... Main"
-	@echo "... checkCoM"
-	@echo "... checkCoM.run"
-	@echo "... discoverModules"
-	@echo "... discoverModules.run"
 	@echo "... edit_cache"
 	@echo "... krang-balance-hack"
 	@echo "... krang-balance-hack.run"
 	@echo "... rebuild_cache"
-	@echo "... exe/checkCoM.o"
-	@echo "... exe/checkCoM.i"
-	@echo "... exe/checkCoM.s"
-	@echo "... exe/discoverModules.o"
-	@echo "... exe/discoverModules.i"
-	@echo "... exe/discoverModules.s"
 	@echo "... exe/krang-balance-hack.o"
 	@echo "... exe/krang-balance-hack.i"
 	@echo "... exe/krang-balance-hack.s"

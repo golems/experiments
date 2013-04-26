@@ -1,1 +1,0 @@
-/usr/bin/c++       CMakeFiles/discoverModules.dir/exe/discoverModules.cpp.o  -o discoverModules -rdynamic -lamino -lprotobuf-c -lach -lntcan -lntcanopen -lssdmu -lfilter -lpcio -lsomatic -lreflex -lstdc++ -lschkin 

@@ -57,10 +57,6 @@ SET(CMAKE_MAKEFILE_PRODUCTS
 # Dependency information for all targets:
 SET(CMAKE_DEPEND_INFO_FILES
   "CMakeFiles/Main.dir/DependInfo.cmake"
-  "CMakeFiles/checkCoM.dir/DependInfo.cmake"
-  "CMakeFiles/checkCoM.run.dir/DependInfo.cmake"
-  "CMakeFiles/discoverModules.dir/DependInfo.cmake"
-  "CMakeFiles/discoverModules.run.dir/DependInfo.cmake"
   "CMakeFiles/krang-balance-hack.dir/DependInfo.cmake"
   "CMakeFiles/krang-balance-hack.run.dir/DependInfo.cmake"
   )

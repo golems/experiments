@@ -38,8 +38,6 @@ const char *krang_event_str( krang_event_t ev) {
 	return "unknown";
 }
 
-double rft_buffer[3*5];
-
 void krang_init( krang_cx_t *cx ) {
 	// ------ daemon init -----------
 	somatic_d_opts_t dopt;
