@@ -1,0 +1,12 @@
+The purpose of this project is to perform experiments on balancing of Krang. It is intended to pick up
+from krang-balance-hack, prune it to the minimum required code needed to balance krang and to store the 
+values of the states of the systen (imu pos, imu vel, wheel pos and wheel vel) and control input (motor
+current) for reporting, and then use this platform to perform different experiments:
+
+1) Balancing Krang with just the base and spine and do
+	a) velocity control
+	b) trajectory based control (figure 8)
+3) Balancing Krang with a weight placed on spine and repeat the above two experiments
+4) Place back the arms and repeat the above experiments
+5) Allow the arms/waist to move while doing the trajectory control
+ 

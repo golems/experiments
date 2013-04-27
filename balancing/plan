@@ -1,0 +1,23 @@
+1) Write down the current behavior of krang-balance-hack
+	There are the following modes of operation of the controller:
+		a) Halt mode
+		b) Sit Low Mode
+		c) Sit High mode
+		d) To-sit mode
+		e) Balance Low Node
+		f) Balance High Mode
+		g) Quit, Bad, Size(?) modes
+	How does the switching between modes takes place:
+		1. During initializaiton the mode is set to Halt
+		2. The figure shown in the StatMachineKrang.png describes what happens in response to each event
+	How events are generated:
+		1. Pressing buttons 7 and 8 simultaneously causes "Start" Event
+		2. Pressing button 9 generates "Quit" Event
+		3. Pressing button 10 while button 6 is released generates "Sit" Event
+		4. Pressing button 10 and 6 simultaneously generates "Stand" Event
+		5. In each iteration either "Thresh Sit Down" or "Thresh Sit Up" Event is generated based on imu angle
+		6. In each iteration either "Thresh Torso Low" or "Thresh Torso High" Event is generated based 
+				on the waist angle
+
+2) Write down the specifications for the new program. Discuss with Can.
+3) Start writing the program.
