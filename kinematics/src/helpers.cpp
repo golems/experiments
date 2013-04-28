@@ -17,8 +17,8 @@ using namespace kinematics;
 /* ********************************************************************************************* */
 void getEEinKinectFrame (double* q, Vector3d& pos, Vector3d& dir) {
 
-	/// Set the constants
-	const double r = 2, s = 3, a = 6, b = 4, t = 0.5, th = 150.0 / 180.0 * M_PI;
+	/// Set the constant
+	const double th = 172.0 / 180.0 * M_PI;
 
 	// =============================================================================
 	// Start with the pos/ori of the shoulder bracket in Kinect frame. We first 
@@ -27,8 +27,8 @@ void getEEinKinectFrame (double* q, Vector3d& pos, Vector3d& dir) {
 	
 	// Get the transformations T^b_h and T^h_k
 	MatrixXd Tbh (4,4), Thk (4,4);
-	Tbh << cos(th), -sin(th), 0, a, sin(th), cos(th), 0, b, 0, 0, 1, 0, 0, 0, 0, 1;
-	Thk << 0, 0, 1, r, 0, 1, 0, -s, -1, 0, 0, -t, 0, 0, 0, 1;
+	Tbh << cos(th), -sin(th), 0, 11.13, sin(th), cos(th), 0, 9.84, 0, 0, 1, 0, 0, 0, 0, 1;
+	Thk << 0, 0, 1, 5, 0, 1, 0, -4.25, -1, 0, 0, 1.5, 0, 0, 0, 1;
 
 	// Compute the inverses
 	MatrixXd Tkb = (Tbh * Thk).inverse();
