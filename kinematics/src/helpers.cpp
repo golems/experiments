@@ -18,7 +18,7 @@ using namespace kinematics;
 void getEEinKinectFrame (double* q, Vector3d& pos, Vector3d& dir) {
 
 	/// Set the constant
-	const double th = 172.0 / 180.0 * M_PI;
+	const double th = 180.0 / 180.0 * M_PI;
 
 	// =============================================================================
 	// Start with the pos/ori of the shoulder bracket in Kinect frame. We first 
@@ -47,9 +47,15 @@ void getEEinKinectFrame (double* q, Vector3d& pos, Vector3d& dir) {
 		{0.0, 0.0, -L7-L8, q[6]}};
 
 	// Loop through the joints and aggregate the transformations multiplying from left
-	MatrixXd Tk10 = Tkb;
+	MatrixXd Tk10 = MatrixXd::Identity(4,4);
+	Tk10(0,0) = Tk10(2,2) = -1;
 	for(size_t i = 0; i < 7; i++) 
 		Tk10 *= dh(T[i][0], T[i][1], T[i][2], T[i][3]);		
+
+	static size_t co = 0;
+	if(co++ % 1000 == 0) 
+	cout << "\n\t\t" << Tk10(0,3) << ", " << Tk10(1,3) << ", " << Tk10(2,3) << endl;
+	Tk10 = Tkb * Tk10;
 
 	// Now we have the transformation T^k_10 where 10 is a frame at the end of the
 	// end-effector. Add a transform that moves along z to get the tip.

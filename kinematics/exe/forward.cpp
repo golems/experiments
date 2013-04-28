@@ -40,8 +40,12 @@ void run() {
 		Vector3d pos, dir;
 		somatic_motor_update(&daemon_cx, &llwa);
 		getEEinKinectFrame(llwa.pos, pos, dir);					
-		if(c++ % 1000 == 0)
-			cout << "pos: " << pos.transpose() << endl;
+		if(c++ % 1000 == 0) {
+			for(size_t i = 0; i < 7; i++) 
+				printf("%lf, ", llwa.pos[i]);
+			printf("\n"); 
+			cout << "\tpos: " << pos.transpose() << endl;
+		}
 
 		// Read the joystick data and send the input velocities to the arms
 		setJoystickInput(daemon_cx, js_chan, llwa, rlwa);
