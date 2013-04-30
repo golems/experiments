@@ -1,20 +1,34 @@
 #include <somatic.h>
 #include <somatic/daemon.h>
-#include "krang.h"
-#include "krang-io.h"
 #include <schkin.h>
 #include <amino.h>
-#include "Controllers.h"
 #include "Dynamics.h"
 #include <Eigen/Dense>
 #include <iostream>
+#include <unistd.h>
+#include <string>
+#include <argp.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdarg.h>
+#include <stdint.h>
+#include <ach.h>
+#include <somatic/util.h>
+#include <somatic/motor.h>
+#include <somatic.pb-c.h>
+#include <imud.h>
+#include <pciod.h>
+#include <filter.h>
+#include <krang.h>
+#include "krang.h"
+
+
 /* ********************************************************************************************* */
 // Global variables
 somatic_d_opts_t krang_d_opts;
 krang_cx_t krang_cx;									
 extern somatic_d_t krang_d_cx;
 krang_state_t state;
-Joystick *js;
 somatic_motor_t amc, waist; 
 ach_channel_t imu_chan, js_chan;
 filter_kalman_t *kf;
@@ -28,9 +42,6 @@ void init() {
 	memset(&dopt, 0, sizeof(dopt)); // zero initialize
 	dopt.ident = "balancing-experiment";
 	somatic_d_init( &(krang_cx.d_cx), &dopt );
-
-	// Initialize the mode/event table
-	krang_parse_init(krang_cx.parse_table);
 
 	// Set initial mode
 	state.mode = KRANG_MODE_HALT;

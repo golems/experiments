@@ -59,7 +59,7 @@ CMAKE_BINARY_DIR = /home/munzir/Documents/Software/project/krang/experiments/bal
 CMakeFiles/Main.dir/all:
 	$(MAKE) -f CMakeFiles/Main.dir/build.make CMakeFiles/Main.dir/depend
 	$(MAKE) -f CMakeFiles/Main.dir/build.make CMakeFiles/Main.dir/build
-	$(CMAKE_COMMAND) -E cmake_progress_report /home/munzir/Documents/Software/project/krang/experiments/balancing/build/CMakeFiles  1 2 3 4 5 6 7
+	$(CMAKE_COMMAND) -E cmake_progress_report /home/munzir/Documents/Software/project/krang/experiments/balancing/build/CMakeFiles  1
 	@echo "Built target Main"
 .PHONY : CMakeFiles/Main.dir/all
 
@@ -69,7 +69,7 @@ all: CMakeFiles/Main.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/Main.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/munzir/Documents/Software/project/krang/experiments/balancing/build/CMakeFiles 7
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/munzir/Documents/Software/project/krang/experiments/balancing/build/CMakeFiles 1
 	$(MAKE) -f CMakeFiles/Makefile2 CMakeFiles/Main.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/munzir/Documents/Software/project/krang/experiments/balancing/build/CMakeFiles 0
 .PHONY : CMakeFiles/Main.dir/rule
@@ -94,7 +94,7 @@ clean: CMakeFiles/Main.dir/clean
 CMakeFiles/balancing.dir/all: CMakeFiles/Main.dir/all
 	$(MAKE) -f CMakeFiles/balancing.dir/build.make CMakeFiles/balancing.dir/depend
 	$(MAKE) -f CMakeFiles/balancing.dir/build.make CMakeFiles/balancing.dir/build
-	$(CMAKE_COMMAND) -E cmake_progress_report /home/munzir/Documents/Software/project/krang/experiments/balancing/build/CMakeFiles  8
+	$(CMAKE_COMMAND) -E cmake_progress_report /home/munzir/Documents/Software/project/krang/experiments/balancing/build/CMakeFiles  2
 	@echo "Built target balancing"
 .PHONY : CMakeFiles/balancing.dir/all
 
@@ -104,7 +104,7 @@ all: CMakeFiles/balancing.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/balancing.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/munzir/Documents/Software/project/krang/experiments/balancing/build/CMakeFiles 8
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/munzir/Documents/Software/project/krang/experiments/balancing/build/CMakeFiles 2
 	$(MAKE) -f CMakeFiles/Makefile2 CMakeFiles/balancing.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/munzir/Documents/Software/project/krang/experiments/balancing/build/CMakeFiles 0
 .PHONY : CMakeFiles/balancing.dir/rule
@@ -135,7 +135,7 @@ CMakeFiles/balancing.run.dir/all: CMakeFiles/balancing.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/balancing.run.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/munzir/Documents/Software/project/krang/experiments/balancing/build/CMakeFiles 8
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/munzir/Documents/Software/project/krang/experiments/balancing/build/CMakeFiles 2
 	$(MAKE) -f CMakeFiles/Makefile2 CMakeFiles/balancing.run.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/munzir/Documents/Software/project/krang/experiments/balancing/build/CMakeFiles 0
 .PHONY : CMakeFiles/balancing.run.dir/rule

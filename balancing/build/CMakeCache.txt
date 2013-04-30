@@ -164,12 +164,6 @@ balancing_BINARY_DIR:STATIC=/home/munzir/Documents/Software/project/krang/experi
 //Value Computed by CMake
 balancing_SOURCE_DIR:STATIC=/home/munzir/Documents/Software/project/krang/experiments/balancing
 
-//Value Computed by CMake
-krang-balance-hack_BINARY_DIR:STATIC=/home/munzir/Documents/Software/project/krang/experiments/balancing/build
-
-//Value Computed by CMake
-krang-balance-hack_SOURCE_DIR:STATIC=/home/munzir/Documents/Software/project/krang/experiments/balancing
-
 
 ########################
 # INTERNAL cache entries

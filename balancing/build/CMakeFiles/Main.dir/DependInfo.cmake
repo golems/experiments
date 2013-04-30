@@ -4,13 +4,7 @@ SET(CMAKE_DEPENDS_LANGUAGES
   )
 # The set of files for implicit dependencies of each language:
 SET(CMAKE_DEPENDS_CHECK_CXX
-  "/home/munzir/Documents/Software/project/krang/experiments/balancing/src/Controllers.cpp" "/home/munzir/Documents/Software/project/krang/experiments/balancing/build/CMakeFiles/Main.dir/src/Controllers.cpp.o"
   "/home/munzir/Documents/Software/project/krang/experiments/balancing/src/Dynamics.cpp" "/home/munzir/Documents/Software/project/krang/experiments/balancing/build/CMakeFiles/Main.dir/src/Dynamics.cpp.o"
-  "/home/munzir/Documents/Software/project/krang/experiments/balancing/src/imu.cpp" "/home/munzir/Documents/Software/project/krang/experiments/balancing/build/CMakeFiles/Main.dir/src/imu.cpp.o"
-  "/home/munzir/Documents/Software/project/krang/experiments/balancing/src/joystick.cpp" "/home/munzir/Documents/Software/project/krang/experiments/balancing/build/CMakeFiles/Main.dir/src/joystick.cpp.o"
-  "/home/munzir/Documents/Software/project/krang/experiments/balancing/src/krang.cpp" "/home/munzir/Documents/Software/project/krang/experiments/balancing/build/CMakeFiles/Main.dir/src/krang.cpp.o"
-  "/home/munzir/Documents/Software/project/krang/experiments/balancing/src/motor.cpp" "/home/munzir/Documents/Software/project/krang/experiments/balancing/build/CMakeFiles/Main.dir/src/motor.cpp.o"
-  "/home/munzir/Documents/Software/project/krang/experiments/balancing/src/state.cpp" "/home/munzir/Documents/Software/project/krang/experiments/balancing/build/CMakeFiles/Main.dir/src/state.cpp.o"
   )
 SET(CMAKE_CXX_COMPILER_ID "GNU")
 

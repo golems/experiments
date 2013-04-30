@@ -161,30 +161,6 @@ exe/balancing.cpp.s:
 	$(MAKE) -f CMakeFiles/balancing.dir/build.make CMakeFiles/balancing.dir/exe/balancing.cpp.s
 .PHONY : exe/balancing.cpp.s
 
-src/Controllers.o: src/Controllers.cpp.o
-.PHONY : src/Controllers.o
-
-# target to build an object file
-src/Controllers.cpp.o:
-	$(MAKE) -f CMakeFiles/Main.dir/build.make CMakeFiles/Main.dir/src/Controllers.cpp.o
-.PHONY : src/Controllers.cpp.o
-
-src/Controllers.i: src/Controllers.cpp.i
-.PHONY : src/Controllers.i
-
-# target to preprocess a source file
-src/Controllers.cpp.i:
-	$(MAKE) -f CMakeFiles/Main.dir/build.make CMakeFiles/Main.dir/src/Controllers.cpp.i
-.PHONY : src/Controllers.cpp.i
-
-src/Controllers.s: src/Controllers.cpp.s
-.PHONY : src/Controllers.s
-
-# target to generate assembly for a file
-src/Controllers.cpp.s:
-	$(MAKE) -f CMakeFiles/Main.dir/build.make CMakeFiles/Main.dir/src/Controllers.cpp.s
-.PHONY : src/Controllers.cpp.s
-
 src/Dynamics.o: src/Dynamics.cpp.o
 .PHONY : src/Dynamics.o
 
@@ -209,126 +185,6 @@ src/Dynamics.cpp.s:
 	$(MAKE) -f CMakeFiles/Main.dir/build.make CMakeFiles/Main.dir/src/Dynamics.cpp.s
 .PHONY : src/Dynamics.cpp.s
 
-src/imu.o: src/imu.cpp.o
-.PHONY : src/imu.o
-
-# target to build an object file
-src/imu.cpp.o:
-	$(MAKE) -f CMakeFiles/Main.dir/build.make CMakeFiles/Main.dir/src/imu.cpp.o
-.PHONY : src/imu.cpp.o
-
-src/imu.i: src/imu.cpp.i
-.PHONY : src/imu.i
-
-# target to preprocess a source file
-src/imu.cpp.i:
-	$(MAKE) -f CMakeFiles/Main.dir/build.make CMakeFiles/Main.dir/src/imu.cpp.i
-.PHONY : src/imu.cpp.i
-
-src/imu.s: src/imu.cpp.s
-.PHONY : src/imu.s
-
-# target to generate assembly for a file
-src/imu.cpp.s:
-	$(MAKE) -f CMakeFiles/Main.dir/build.make CMakeFiles/Main.dir/src/imu.cpp.s
-.PHONY : src/imu.cpp.s
-
-src/joystick.o: src/joystick.cpp.o
-.PHONY : src/joystick.o
-
-# target to build an object file
-src/joystick.cpp.o:
-	$(MAKE) -f CMakeFiles/Main.dir/build.make CMakeFiles/Main.dir/src/joystick.cpp.o
-.PHONY : src/joystick.cpp.o
-
-src/joystick.i: src/joystick.cpp.i
-.PHONY : src/joystick.i
-
-# target to preprocess a source file
-src/joystick.cpp.i:
-	$(MAKE) -f CMakeFiles/Main.dir/build.make CMakeFiles/Main.dir/src/joystick.cpp.i
-.PHONY : src/joystick.cpp.i
-
-src/joystick.s: src/joystick.cpp.s
-.PHONY : src/joystick.s
-
-# target to generate assembly for a file
-src/joystick.cpp.s:
-	$(MAKE) -f CMakeFiles/Main.dir/build.make CMakeFiles/Main.dir/src/joystick.cpp.s
-.PHONY : src/joystick.cpp.s
-
-src/krang.o: src/krang.cpp.o
-.PHONY : src/krang.o
-
-# target to build an object file
-src/krang.cpp.o:
-	$(MAKE) -f CMakeFiles/Main.dir/build.make CMakeFiles/Main.dir/src/krang.cpp.o
-.PHONY : src/krang.cpp.o
-
-src/krang.i: src/krang.cpp.i
-.PHONY : src/krang.i
-
-# target to preprocess a source file
-src/krang.cpp.i:
-	$(MAKE) -f CMakeFiles/Main.dir/build.make CMakeFiles/Main.dir/src/krang.cpp.i
-.PHONY : src/krang.cpp.i
-
-src/krang.s: src/krang.cpp.s
-.PHONY : src/krang.s
-
-# target to generate assembly for a file
-src/krang.cpp.s:
-	$(MAKE) -f CMakeFiles/Main.dir/build.make CMakeFiles/Main.dir/src/krang.cpp.s
-.PHONY : src/krang.cpp.s
-
-src/motor.o: src/motor.cpp.o
-.PHONY : src/motor.o
-
-# target to build an object file
-src/motor.cpp.o:
-	$(MAKE) -f CMakeFiles/Main.dir/build.make CMakeFiles/Main.dir/src/motor.cpp.o
-.PHONY : src/motor.cpp.o
-
-src/motor.i: src/motor.cpp.i
-.PHONY : src/motor.i
-
-# target to preprocess a source file
-src/motor.cpp.i:
-	$(MAKE) -f CMakeFiles/Main.dir/build.make CMakeFiles/Main.dir/src/motor.cpp.i
-.PHONY : src/motor.cpp.i
-
-src/motor.s: src/motor.cpp.s
-.PHONY : src/motor.s
-
-# target to generate assembly for a file
-src/motor.cpp.s:
-	$(MAKE) -f CMakeFiles/Main.dir/build.make CMakeFiles/Main.dir/src/motor.cpp.s
-.PHONY : src/motor.cpp.s
-
-src/state.o: src/state.cpp.o
-.PHONY : src/state.o
-
-# target to build an object file
-src/state.cpp.o:
-	$(MAKE) -f CMakeFiles/Main.dir/build.make CMakeFiles/Main.dir/src/state.cpp.o
-.PHONY : src/state.cpp.o
-
-src/state.i: src/state.cpp.i
-.PHONY : src/state.i
-
-# target to preprocess a source file
-src/state.cpp.i:
-	$(MAKE) -f CMakeFiles/Main.dir/build.make CMakeFiles/Main.dir/src/state.cpp.i
-.PHONY : src/state.cpp.i
-
-src/state.s: src/state.cpp.s
-.PHONY : src/state.s
-
-# target to generate assembly for a file
-src/state.cpp.s:
-	$(MAKE) -f CMakeFiles/Main.dir/build.make CMakeFiles/Main.dir/src/state.cpp.s
-.PHONY : src/state.cpp.s
-
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -343,27 +199,9 @@ help:
 	@echo "... exe/balancing.o"
 	@echo "... exe/balancing.i"
 	@echo "... exe/balancing.s"
-	@echo "... src/Controllers.o"
-	@echo "... src/Controllers.i"
-	@echo "... src/Controllers.s"
 	@echo "... src/Dynamics.o"
 	@echo "... src/Dynamics.i"
 	@echo "... src/Dynamics.s"
-	@echo "... src/imu.o"
-	@echo "... src/imu.i"
-	@echo "... src/imu.s"
-	@echo "... src/joystick.o"
-	@echo "... src/joystick.i"
-	@echo "... src/joystick.s"
-	@echo "... src/krang.o"
-	@echo "... src/krang.i"
-	@echo "... src/krang.s"
-	@echo "... src/motor.o"
-	@echo "... src/motor.i"
-	@echo "... src/motor.s"
-	@echo "... src/state.o"
-	@echo "... src/state.i"
-	@echo "... src/state.s"
 .PHONY : help
 
 
