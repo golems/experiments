@@ -112,54 +112,54 @@ Main/fast:
 .PHONY : Main/fast
 
 #=============================================================================
-# Target rules for targets named krang-balance-hack
+# Target rules for targets named balancing
 
 # Build rule for target.
-krang-balance-hack: cmake_check_build_system
-	$(MAKE) -f CMakeFiles/Makefile2 krang-balance-hack
-.PHONY : krang-balance-hack
+balancing: cmake_check_build_system
+	$(MAKE) -f CMakeFiles/Makefile2 balancing
+.PHONY : balancing
 
 # fast build rule for target.
-krang-balance-hack/fast:
-	$(MAKE) -f CMakeFiles/krang-balance-hack.dir/build.make CMakeFiles/krang-balance-hack.dir/build
-.PHONY : krang-balance-hack/fast
+balancing/fast:
+	$(MAKE) -f CMakeFiles/balancing.dir/build.make CMakeFiles/balancing.dir/build
+.PHONY : balancing/fast
 
 #=============================================================================
-# Target rules for targets named krang-balance-hack.run
+# Target rules for targets named balancing.run
 
 # Build rule for target.
-krang-balance-hack.run: cmake_check_build_system
-	$(MAKE) -f CMakeFiles/Makefile2 krang-balance-hack.run
-.PHONY : krang-balance-hack.run
+balancing.run: cmake_check_build_system
+	$(MAKE) -f CMakeFiles/Makefile2 balancing.run
+.PHONY : balancing.run
 
 # fast build rule for target.
-krang-balance-hack.run/fast:
-	$(MAKE) -f CMakeFiles/krang-balance-hack.run.dir/build.make CMakeFiles/krang-balance-hack.run.dir/build
-.PHONY : krang-balance-hack.run/fast
+balancing.run/fast:
+	$(MAKE) -f CMakeFiles/balancing.run.dir/build.make CMakeFiles/balancing.run.dir/build
+.PHONY : balancing.run/fast
 
-exe/krang-balance-hack.o: exe/krang-balance-hack.cpp.o
-.PHONY : exe/krang-balance-hack.o
+exe/balancing.o: exe/balancing.cpp.o
+.PHONY : exe/balancing.o
 
 # target to build an object file
-exe/krang-balance-hack.cpp.o:
-	$(MAKE) -f CMakeFiles/krang-balance-hack.dir/build.make CMakeFiles/krang-balance-hack.dir/exe/krang-balance-hack.cpp.o
-.PHONY : exe/krang-balance-hack.cpp.o
+exe/balancing.cpp.o:
+	$(MAKE) -f CMakeFiles/balancing.dir/build.make CMakeFiles/balancing.dir/exe/balancing.cpp.o
+.PHONY : exe/balancing.cpp.o
 
-exe/krang-balance-hack.i: exe/krang-balance-hack.cpp.i
-.PHONY : exe/krang-balance-hack.i
+exe/balancing.i: exe/balancing.cpp.i
+.PHONY : exe/balancing.i
 
 # target to preprocess a source file
-exe/krang-balance-hack.cpp.i:
-	$(MAKE) -f CMakeFiles/krang-balance-hack.dir/build.make CMakeFiles/krang-balance-hack.dir/exe/krang-balance-hack.cpp.i
-.PHONY : exe/krang-balance-hack.cpp.i
+exe/balancing.cpp.i:
+	$(MAKE) -f CMakeFiles/balancing.dir/build.make CMakeFiles/balancing.dir/exe/balancing.cpp.i
+.PHONY : exe/balancing.cpp.i
 
-exe/krang-balance-hack.s: exe/krang-balance-hack.cpp.s
-.PHONY : exe/krang-balance-hack.s
+exe/balancing.s: exe/balancing.cpp.s
+.PHONY : exe/balancing.s
 
 # target to generate assembly for a file
-exe/krang-balance-hack.cpp.s:
-	$(MAKE) -f CMakeFiles/krang-balance-hack.dir/build.make CMakeFiles/krang-balance-hack.dir/exe/krang-balance-hack.cpp.s
-.PHONY : exe/krang-balance-hack.cpp.s
+exe/balancing.cpp.s:
+	$(MAKE) -f CMakeFiles/balancing.dir/build.make CMakeFiles/balancing.dir/exe/balancing.cpp.s
+.PHONY : exe/balancing.cpp.s
 
 src/Controllers.o: src/Controllers.cpp.o
 .PHONY : src/Controllers.o
@@ -336,13 +336,13 @@ help:
 	@echo "... clean"
 	@echo "... depend"
 	@echo "... Main"
+	@echo "... balancing"
+	@echo "... balancing.run"
 	@echo "... edit_cache"
-	@echo "... krang-balance-hack"
-	@echo "... krang-balance-hack.run"
 	@echo "... rebuild_cache"
-	@echo "... exe/krang-balance-hack.o"
-	@echo "... exe/krang-balance-hack.i"
-	@echo "... exe/krang-balance-hack.s"
+	@echo "... exe/balancing.o"
+	@echo "... exe/balancing.i"
+	@echo "... exe/balancing.s"
 	@echo "... src/Controllers.o"
 	@echo "... src/Controllers.i"
 	@echo "... src/Controllers.s"

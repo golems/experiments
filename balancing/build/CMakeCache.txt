@@ -116,7 +116,7 @@ CMAKE_OBJCOPY:FILEPATH=/usr/bin/objcopy
 CMAKE_OBJDUMP:FILEPATH=/usr/bin/objdump
 
 //Value Computed by CMake
-CMAKE_PROJECT_NAME:STATIC=krang-balance-hack
+CMAKE_PROJECT_NAME:STATIC=balancing
 
 //Path to a program.
 CMAKE_RANLIB:FILEPATH=/usr/bin/ranlib
@@ -157,6 +157,12 @@ CMAKE_VERBOSE_MAKEFILE:BOOL=FALSE
 
 //Dependencies for the target
 Main_LIB_DEPENDS:STATIC=general;amino;general;protobuf-c;general;ach;general;ntcan;general;ntcanopen;general;ssdmu;general;filter;general;pcio;general;somatic;general;reflex;general;stdc++;general;schkin;
+
+//Value Computed by CMake
+balancing_BINARY_DIR:STATIC=/home/munzir/Documents/Software/project/krang/experiments/balancing/build
+
+//Value Computed by CMake
+balancing_SOURCE_DIR:STATIC=/home/munzir/Documents/Software/project/krang/experiments/balancing
 
 //Value Computed by CMake
 krang-balance-hack_BINARY_DIR:STATIC=/home/munzir/Documents/Software/project/krang/experiments/balancing/build
