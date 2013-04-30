@@ -39,23 +39,6 @@ const char *krang_event_str( krang_event_t ev) {
 }
 
 void krang_init( krang_cx_t *cx ) {
-	// ------ daemon init -----------
-	somatic_d_opts_t dopt;
-	memset(cx, 0, sizeof(*cx)); // zero initialize
-	memset(&dopt, 0, sizeof(dopt)); // zero initialize
-	dopt.ident = "bal-hack";
-	somatic_d_init( &cx->d_cx, &dopt );
-
-	// --------- open channels ----------
-	somatic_d_channel_open( &cx->d_cx,
-							&cx->state_chan, "krang-state",
-							NULL );
-	// --------- init parse table ----------
-	// set initial mode
-	krang_parse_init(cx->parse_table);
-
-	cx->X.mode = KRANG_MODE_HALT;
-
 }
 
 void krang_parse_init

@@ -6,18 +6,49 @@
 #include <amino.h>
 #include "Controllers.h"
 #include <iostream>
-/* ********************************************************************************************** */
+///////////////////////////////////////////////////////////////////////////////////////////////////
  // Global variables
 
 somatic_d_opts_t krang_d_opts;
 krang_cx_t krang_cx;									
 extern somatic_d_t krang_d_cx;
 
+Krang * io;
 #define RAD2DEG(x) (x*180.0/M_PI)
 
-/* ********************************************************************************************** */
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+void init() {
+	// ------ daemon init -----------
+	somatic_d_opts_t dopt;
+	memset(&krang_cx, 0, sizeof(krang_cx)); // zero initialize
+	memset(&dopt, 0, sizeof(dopt)); // zero initialize
+	dopt.ident = "balancing-experiment";
+	somatic_d_init( &(krang_cx.d_cx), &dopt );
+
+	// --------- open channels ----------
+	somatic_d_channel_open( &(krang_cx.d_cx),
+							&(krang_cx.state_chan), "krang-state",
+							NULL );
+	// --------- init parse table ----------
+	// set initial mode
+	krang_parse_init(krang_cx.parse_table);
+
+	krang_cx.X.mode = KRANG_MODE_HALT;
+
+
+	io = new Krang(&(krang_cx.X));
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // This is the main loop that interfaces with the I/O from the joystick.
-void main_loop(Krang *io) {
+void run() {
+	// Send the event massage
+	somatic_d_event( &krang_cx.d_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
+					 SOMATIC__EVENT__CODES__PROC_RUNNING,
+					 NULL, NULL );
+
 
 	// Set the timestep to update
 	double dt = 0.0;		
@@ -101,34 +132,26 @@ void main_loop(Krang *io) {
 		// Release memory
 		aa_mem_region_release( &krang_cx.d_cx.memreg );
 	}
-}
-
-/// The main function
-int main() {
-
-	// daemon setup
-	krang_init(&krang_cx);
-	Krang *io = new Krang(&(krang_cx.X));
-
-	// Send the event massage
-	somatic_d_event( &krang_cx.d_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
-					 SOMATIC__EVENT__CODES__PROC_RUNNING,
-					 NULL, NULL );
-
-	// The robot is going to be manipulated with the joystick, so start
-	// the main loop that interface with the IO.
-	main_loop(io);
-
 	// Once the main loop returns, the program is done. Send the stopping
 	// event message.
 	somatic_d_event( &krang_cx.d_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
 					 SOMATIC__EVENT__CODES__PROC_STOPPING,
 					 NULL, NULL );
+}
 
+///////////////////////////////////////////////////////////////////////////////////////////////////
+void destroy() {
 	// Clean up
 	io->amc->digital_out(19,0);
 	delete io;
 	somatic_d_destroy( &krang_cx.d_cx );
+}
 
-	return EXIT_SUCCESS;
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// The main function
+int main() {
+	init();
+	run();
+	destroy();
+	return 0;
 }

@@ -20,10 +20,6 @@ vector
 
 ../include/Joystick.h
 
-../include/Kinematics.h
-Eigen/Dense
--
-
 ../include/Motor.h
 somatic/motor.h
 -
@@ -90,16 +86,6 @@ schkin.h
 Dynamics.h
 /home/munzir/Documents/Software/project/krang/experiments/balancing/src/Dynamics.h
 Eigen/Dense
--
-
-/home/munzir/Documents/Software/project/krang/experiments/balancing/src/Dynamics.cpp
-Dynamics.h
-/home/munzir/Documents/Software/project/krang/experiments/balancing/src/Dynamics.h
-Kinematics.h
-/home/munzir/Documents/Software/project/krang/experiments/balancing/src/Kinematics.h
-stdio.h
--
-iostream
 -
 
 /home/munzir/Documents/Software/project/krang/experiments/balancing/src/imu.cpp

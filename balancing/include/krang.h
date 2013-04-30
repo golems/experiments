@@ -40,12 +40,6 @@ typedef enum {
 } krang_arm_mode_t;
 
 typedef enum {
-	KRANG_WAIST_MODE_HALT = 0,
-	KRANG_WAIST_MODE_TILT_FORWARD,
-	KRANG_WAIST_MODE_TILT_BACKWARD
-} krang_waist_mode_t;
-
-typedef enum {
 	KRANG_EVENT_BAD = 0,
 	// valid events
 	KRANG_EVENT_START,
@@ -62,24 +56,8 @@ typedef enum {
 } krang_event_t;
 
 typedef struct {
-	krang_arm_mode_t mode;
-	rfx_ctrl_t G;
-	rfx_ctrl_ws_lin_k_t K;
-	ach_channel_t ft_chan;
-	double ft[6]; ///< raw ft reading
-	double bias[6];
-	double R0[9]; // rotation with respect to the body frame
-	double ftweight;
-	double ftcm;
-
-} krang_arm_t;
-
-typedef struct {
 	// discrete
 	krang_mode_t mode;
-	
-	// waist mode
-	krang_waist_mode_t waist_mode;
 	
 	// continuous
 	// filtered states of Krang
@@ -102,7 +80,6 @@ typedef struct {
 	double q1_ref[2];  // wheel reference pos.
 	double dq1_ref[2]; // wheel reference vel.
 
-	krang_arm_t arm[2];
 } krang_state_t;
 
 typedef krang_mode_t
@@ -143,9 +120,4 @@ void krang_parse_event( krang_cx_t *cx, krang_event_t ev );
 void krang_destroy( krang_cx_t *cx );
 void krang_send_state( krang_cx_t *X);
 void krang_threshold( krang_cx_t *X);
-
-
-void krang_com_eigen(double q2, double q3, double go, double gm,
-							const double ql[7], const double qr[7], double com[3]);
-
 #endif //KRANG_H

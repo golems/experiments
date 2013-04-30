@@ -43,10 +43,6 @@ void Controllers::balance( double *U, krang_state_t *X) {
 
 	// Create vectors for right and left arms to pass to the com function
 	Eigen::VectorXd lq(7), rq(7);
-	for(int i=0; i<7; i++) {
-		lq(i) = X->arm[0].G.q[i];
-		rq(i) = X->arm[1].G.q[i];
-	}
 	// ===============================================================
 	// Get the current CoM, print the error
 
@@ -107,39 +103,4 @@ void Controllers::insit (double *U, krang_state_t *X) {
 	// Ask cerdogan and munzir.
 	U[0] = -Kv*(X->dq1_0 - X->dq1_ref[0] + Kp*(X->q1_0 - X->q1_ref[0]));
 	U[1] = -Kv*(X->dq1_1 - X->dq1_ref[1] + Kp*(X->q1_1 - X->q1_ref[1]) );
-
-	bool debug = 1;
-	static int count = 0;
-	debug &= (count++ % 500 == 1);
-	if(false) {
-		printf("q1: (%.5lf, %.5lf), q1_ref: (%.5lf, %.5lf)\n", X->q1_0, X->q1_1, X->q1_ref[0], X->q1_ref[1]);
-		printf("dq1: (%.5lf, %.5lf), dq1_ref: (%.5lf, %.5lf)\n", X->dq1_0, X->dq1_1, X->dq1_ref[0], X->dq1_ref[1]);
-	}
-	
-  if(debug==false) return;
-
-	// Print the estimation of com and error to see everything makes sense before starting the balancing
-	// Create vectors for right and left arms to pass to the com function
-	Eigen::VectorXd lq(7), rq(7);
-	for(int i=0; i<7; i++) {
-		lq(i) = X->arm[0].G.q[i];
-		rq(i) = X->arm[1].G.q[i];
-	}
-	// Print the waist and imu values
-  printf("\nimu: %.3lf, waist: %.3lf\n", RAD2DEG(X->q2), RAD2DEG(X->q3));
-
-	// Get the current com
-	static Dynamics dynamics (TOP_LEVEL_PATH"/data/MassProp.table", true);
-	Eigen::Vector3d com = dynamics.com(X->q2, X->q3, 0.0, lq, rq);
-  printf("com: %.3lf, %.3lf, %.3lf\n", com(0), com(1), com(2));
-
-	// THIS CODE IS USED FOR THE EXPERIMENT
-	// Compute the error term
-	double error_th = atan2(com(0), com(1));// + 4*M_PI/180.0;
-  printf("insit balancing error: %.3lf\n", RAD2DEG(error_th));	
-	double derror_th = X->dq2;
-	printf("amc_current: (%.5lf, %.5lf)\n", U[0], U[1]);
-	printf("lq :"); for(int i=0; i<7; i++) {printf("  %.2lf", lq(i)*180.0/M_PI); } printf("\n");
-	printf("rq :"); for(int i=0; i<7; i++) {printf("  %.2lf", rq(i)*180.0/M_PI); } printf("\n");
-	fflush(stdout);
 }

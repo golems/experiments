@@ -119,8 +119,6 @@ void Joystick::process_input( krang_cx_t *cx, double dt ) {
 	else if(!b[4] && !b[5] && !b[6] && !b[7]) {
 		cx->X.js_fb = -x[1];	// range [-1, 1]
 		cx->X.js_lr =  x[2];	// range [-1, 1]
-		cx->X.arm[0].mode = KRANG_ARM_MODE_HALT;
-		cx->X.arm[1].mode = KRANG_ARM_MODE_HALT;
 		wheel_ctrl(&cx->X, dt);
 	} 
 
