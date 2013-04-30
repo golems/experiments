@@ -2,7 +2,6 @@
 #include <somatic/daemon.h>
 #include <schkin.h>
 #include <amino.h>
-#include "Dynamics.h"
 #include <Eigen/Dense>
 #include <iostream>
 #include <unistd.h>
@@ -19,15 +18,13 @@
 #include <imud.h>
 #include <pciod.h>
 #include <filter.h>
-#include <krang.h>
-#include "krang.h"
+#include "balancing.h"
+#include "Dynamics.h"
 
 
 /* ********************************************************************************************* */
 // Global variables
-somatic_d_opts_t krang_d_opts;
 krang_cx_t krang_cx;									
-extern somatic_d_t krang_d_cx;
 krang_state_t state;
 somatic_motor_t amc, waist; 
 ach_channel_t imu_chan, js_chan;
@@ -35,8 +32,8 @@ filter_kalman_t *kf;
 #define RAD2DEG(x) (x*180.0/M_PI)
 
 /* ********************************************************************************************* */
+// Initialize the program
 void init() {
-	// Initialize the program
 	somatic_d_opts_t dopt;
 	memset(&krang_cx, 0, sizeof(krang_cx)); // zero initialize
 	memset(&dopt, 0, sizeof(dopt)); // zero initialize
@@ -87,7 +84,7 @@ void init() {
 	somatic_d_channel_open( &(krang_cx.d_cx),
 							&(krang_cx.state_chan), "krang-state",
 							NULL );
-	// ==============================================================================================
+	
 	// Initialize the kalman filter
 	kf = new filter_kalman_t;
 	filter_kalman_init( kf , 8 , 0 , 8 );
@@ -132,10 +129,10 @@ void init() {
 	kf->Q[45] = 0.02;
 	kf->Q[54] = 0.05;   // Torso
 	kf->Q[63] = 0.001;
-	// ==============================================================================================
 }
 
 /* ********************************************************************************************* */
+// Read sensor data from ach channels and fulter out the noise
 void readSensors() {
 	
 	// --------------------------------------------------------------------
@@ -199,7 +196,7 @@ void readSensors() {
 	state.q1 = (state.q1_0 + state.q1_1)/2.0;
 	state.dq1 = (state.dq1_0 + state.dq1_1)/2.0;
 	// --------------------------------------------------------------------
-	// If IMU angle is below the sitting angle, change the mode from TOSIT to SIT
+	// If IMU angle is below the sitting angle and if current mode is TOSIT, change mode toSIT
 	double imu = state.q2, epsilon=.001;
 	if(imu < (SITTING_ANGLE - epsilon)) { if(state.mode == KRANG_MODE_TOSIT) state.mode = KRANG_MODE_SIT; }
 }
@@ -222,7 +219,6 @@ void readJoystick( double dt ) {
 	memcpy(x, js_msg->axes->data, sizeof(x));
 	
 	// Set the forward/backward ad left/right joystick axes values to zero
-	// FIXME: This may not be needed
 	state.js_fb = 0;	state.js_lr = 0;
 
 	// Check for the start, quit, sit and stand conditions
@@ -365,8 +361,7 @@ void run() {
 		// Release memory
 		aa_mem_region_release( &krang_cx.d_cx.memreg );
 	}
-	// Once the main loop returns, the program is done. Send the stopping
-	// event message.
+	// Once the main loop returns, the program is done. Send the stopping event message.
 	somatic_d_event( &krang_cx.d_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
 					 SOMATIC__EVENT__CODES__PROC_STOPPING,
 					 NULL, NULL );
