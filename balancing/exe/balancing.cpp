@@ -6,41 +6,69 @@
 #include <amino.h>
 #include "Controllers.h"
 #include <iostream>
-///////////////////////////////////////////////////////////////////////////////////////////////////
+/* ********************************************************************************************* */
 // Global variables
 somatic_d_opts_t krang_d_opts;
 krang_cx_t krang_cx;									
 extern somatic_d_t krang_d_cx;
 krang_state_t state;
 Joystick *js;
-Motor *amc; 
-Motor *waist;
+somatic_motor_t amc, waist; 
 Imu *imu;
-Krang * io;
 filter_kalman_t *kf;
 #define RAD2DEG(x) (x*180.0/M_PI)
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
+/* ********************************************************************************************* */
 void init() {
-	// ------ daemon init -----------
+	// Initialize the program
 	somatic_d_opts_t dopt;
 	memset(&krang_cx, 0, sizeof(krang_cx)); // zero initialize
 	memset(&dopt, 0, sizeof(dopt)); // zero initialize
 	dopt.ident = "balancing-experiment";
 	somatic_d_init( &(krang_cx.d_cx), &dopt );
-	// --------- open channels ----------
+
+	// Initialize the mode/event table
+	krang_parse_init(krang_cx.parse_table);
+
+	// Set initial mode
+	state.mode = KRANG_MODE_HALT;
+
+	// Initialize the motors with daemon context, channel names and # of motors
+	somatic_motor_init( &krang_cx.d_cx, &amc, 2, "amc-cmd", "amc-state");
+	somatic_motor_init( &krang_cx.d_cx, &waist, 2, "waist-cmd", "waist-state");
+
+	// Set the min and maximum position and velocity valid/limit values for motors
+	double ** limits[] = { 
+		&amc.pos_valid_min, &amc.vel_valid_min, &amc.pos_limit_min, &amc.vel_limit_min, 
+		&waist.vel_valid_max, &waist.pos_limit_max, &waist.vel_limit_max,  &amc.pos_valid_max,
+		&amc.vel_valid_max, &amc.pos_limit_max, &amc.vel_limit_max, &waist.vel_valid_max, 
+		&waist.pos_limit_max, &waist.vel_limit_max};
+	for(size_t i=0; i<7; i++) { aa_fset(*limits[i],-1024.1, 2); }
+	for(size_t i=7; i<14; i++) { aa_fset(*limits[i],1024.1, 2); }
+	aa_fset( waist.pos_valid_min, -5, 2);
+	aa_fset( waist.pos_valid_max, 5, 2);
+	usleep(1e5);
+
+	// Update and reset motors
+	somatic_motor_update(&krang_cx.d_cx, &waist);
+	somatic_motor_cmd(&krang_cx.d_cx, &waist, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 2, NULL);
+	somatic_motor_update(&krang_cx.d_cx, &amc);
+	somatic_motor_cmd(&krang_cx.d_cx, &amc, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 2, NULL);
+	
+	// Check waist positions
+	if (fabs(waist.pos[0] + waist.pos[1]) > 2e-2)
+		fprintf(stderr, "ERROR: Waist position mismatched: (%f, %f)\n", waist.pos[0], -waist.pos[1]);
+
+	imu   = new Imu("imu-data", 0.0);
+	js	= new Joystick("joystick-data");
+	// Open the state channel
 	somatic_d_channel_open( &(krang_cx.d_cx),
 							&(krang_cx.state_chan), "krang-state",
 							NULL );
-	// --------- init parse table ----------
-	// set initial mode
-	krang_parse_init(krang_cx.parse_table);
-	state.mode = KRANG_MODE_HALT;
-	// --------- kalman filter ------------
+	// ==============================================================================================
 	// Initialize the kalman filter
 	kf = new filter_kalman_t;
 	filter_kalman_init( kf , 8 , 0 , 8 );
-	// For now, assume fixed.
 	double T = 2.04 * 1e-3;  // second
 	memcpy(kf->x, kf->z, sizeof(double)*8);
 	// Process matrix - fill every 9th value to 1 and every 18th starting from 8 to T.
@@ -82,44 +110,30 @@ void init() {
 	kf->Q[45] = 0.02;
 	kf->Q[54] = 0.05;   // Torso
 	kf->Q[63] = 0.001;
-	// -------------------------------------------------------------------
-	// Create the interfaces for the joystick, imu, amc and schunk modules
-	js	= new Joystick("joystick-data");
-	imu   = new Imu("imu-data", 0.0);
-	amc   = new Motor("amc-cmd", "amc-state", "AMC", 2);
-	waist = new Motor("waist-cmd", "waist-state", "Waist", 2);
-	// Set the minimum and maximum position of the waist modules
-	aa_fset( waist->motor.pos_valid_min, -5, 2 );
-	aa_fset( waist->motor.pos_valid_max, 5, 2 );
-	// Reset PCIO
-	waist->reset();
-	// Check waist position (module id 14 and 15)
-	if (fabs(waist->get_pos(0) + waist->get_pos(1)) > 2e-2)
-		fprintf(stderr, "ERROR: Waist position mismatched: (%f, %f)\n", waist->get_pos(0), 
-			-waist->get_pos(1));
+	// ==============================================================================================
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
+/* ********************************************************************************************* */
 void update() {
 	// Update all the devices connected
 	js->update();
 	imu->update();
-	amc->update();
-	waist->update();
+	somatic_motor_update(&krang_cx.d_cx, &amc);
+	somatic_motor_update(&krang_cx.d_cx, &waist);
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
+/* ********************************************************************************************* */
 void filter() {
 	// Set up the kalman filter with the raw data for imu, waist and amc
 	// NOTE: The arm values are not filtered. Why not?
 	kf->z[0] = imu->get_th();  // = q2
 	kf->z[1] = imu->get_dth(); // = dq2
-	kf->z[2] = amc->get_pos(0)+imu->get_th();  // = abs. L wheel pos.
-	kf->z[3] = amc->get_vel(0)+imu->get_dth(); // = abs. L wheel vel.
-	kf->z[4] = amc->get_pos(1)+imu->get_th();  // = abs. R wheel pos.
-	kf->z[5] = amc->get_vel(1)+imu->get_dth(); // = abs. R wheel vel.
-	kf->z[6] = waist->get_pos(0);
-	kf->z[7] = waist->get_vel(0);
+	kf->z[2] = amc.pos[0]+imu->get_th();  // = abs. L wheel pos.
+	kf->z[3] = amc.vel[1]+imu->get_dth(); // = abs. L wheel vel.
+	kf->z[4] = amc.pos[1]+imu->get_th();  // = abs. R wheel pos.
+	kf->z[5] = amc.vel[1]+imu->get_dth(); // = abs. R wheel vel.
+	kf->z[6] = waist.pos[0];
+	kf->z[7] = waist.vel[0];
 	// Call the kalman filter
 	filter_kalman_predict( kf );
 	filter_kalman_correct( kf );
@@ -137,7 +151,7 @@ void filter() {
 	state.dq1 = (state.dq1_0 + state.dq1_1)/2.0;
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
+/* ********************************************************************************************* */
 // Read imu angle and speed, wheel position and speed and waist position and speed and filter
 // the data
 void readSensors() {
@@ -145,7 +159,7 @@ void readSensors() {
 	filter();
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
+/* ********************************************************************************************* */
 // Read and process the commands from the joystick
 void readJoystick( double dt ) {
 	// control from joystick 
@@ -156,7 +170,7 @@ void readJoystick( double dt ) {
 	Joystick::process_input(&krang_cx, dt);
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
+/* ********************************************************************************************* */
 // Control the wheels based on the current mode
 void controlWheels() {
 	bool SKIP_AMC=0;
@@ -175,23 +189,23 @@ void controlWheels() {
 			case KRANG_MODE_SIT_LO:
 			case KRANG_MODE_SIT_HI: {
 				Controllers::insit( amc_current, &krang_cx.X);
-				if(!SKIP_AMC) io->amc->set_current(amc_current);
+				if(!SKIP_AMC) somatic_motor_cmd(&krang_cx.d_cx, &amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, amc_current, 2, NULL);;
 			}	break;
 			case KRANG_MODE_TOSIT: {
 				Controllers::tosit( amc_current, &krang_cx.X);
-				if(!SKIP_AMC) io->amc->set_current(amc_current);
+				if(!SKIP_AMC) somatic_motor_cmd(&krang_cx.d_cx, &amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, amc_current, 2, NULL);;
 			}	break;
 			case KRANG_MODE_BALANCE_LO:
 			case KRANG_MODE_BALANCE_HI: {
 				static bool override=0;
 				if(!override) { 
 					printf("Setting the override mode!\n");
-					io->amc->digital_out(19,1); 
+					somatic_motor_digital_out(&krang_cx.d_cx, &amc, 19 ,1);
 					override=1; 
 				}
 				// Balancing mode:
 				Controllers::balance(amc_current, &krang_cx.X);
-				if(!SKIP_AMC) io->amc->set_current(amc_current);
+				if(!SKIP_AMC) somatic_motor_cmd(&krang_cx.d_cx, &amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, amc_current, 2, NULL);;
 			}	break;
 			case KRANG_MODE_QUIT:
 			case KRANG_MODE_BAD:
@@ -202,7 +216,7 @@ void controlWheels() {
 	}	// end of motor control if statement
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
+/* ********************************************************************************************* */
 // This is the main loop that interfaces with the I/O from the joystick.
 void run() {
 	// Send the event massage
@@ -237,23 +251,19 @@ void run() {
 					 NULL, NULL );
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
+/* ********************************************************************************************* */
 void destroy() {
-	// Clean up
-	io->amc->digital_out(19,0);
-	// Halt the modules
-	waist->halt();
 	delete js;
 	delete imu;
-	delete amc;
-	delete waist;
-	filter_kalman_destroy( kf );
+	somatic_motor_digital_out(&krang_cx.d_cx, &amc, 19, 0);
+	somatic_motor_cmd(&krang_cx.d_cx, &amc, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 2, NULL);
+	somatic_motor_cmd(&krang_cx.d_cx, &waist, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 2, NULL);
+filter_kalman_destroy( kf );
 	delete( kf );
 	somatic_d_destroy( &krang_cx.d_cx );
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
-/// The main function
+/* ********************************************************************************************* */
 int main() {
 	init();
 	run();
