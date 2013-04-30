@@ -10,13 +10,13 @@ const char *krang_mode_str( krang_mode_t mode) {
 	case KRANG_MODE_BAD: return "MODE_BAD";
 	case KRANG_MODE_QUIT: return "MODE_QUIT";
 	case KRANG_MODE_HALT: return "MODE_HALT";
-	case KRANG_MODE_SIT_LO: return "MODE_SIT_LO";
+/*	case KRANG_MODE_SIT_LO: return "MODE_SIT_LO";
 	case KRANG_MODE_SIT_HI: return "MODE_SIT_HI";
 	case KRANG_MODE_TOSIT: return "MODE_TOSIT";
 	case KRANG_MODE_BALANCE_LO: return "MODE_BALANCE_LO";
 	case KRANG_MODE_BALANCE_HI: return "MODE_BALANCE_HI";
 	case KRANG_MODE_SIZE: return "MODE_SIZE";
-	case KRANG_MODE_BLOCKED: return "MODE_BLOCKED";
+	case KRANG_MODE_BLOCKED: return "MODE_BLOCKED";*/
 	}
 	return "unknown_mode";
 }
@@ -48,7 +48,7 @@ void krang_parse_init
 		for(size_t event = 0; event < KRANG_EVENT_SIZE; event++ )
 			tab[mode][event] = KRANG_MODE_BAD;
 
-
+/*
 	// This table also generates krang.dot, to make a visual graph from the DFA.
 	// Look at krangdfa.png to verify
 
@@ -117,6 +117,7 @@ void krang_parse_init
 	//quit
 	tab[KRANG_MODE_QUIT][KRANG_EVENT_THRESH_SIT_UP] = KRANG_MODE_BLOCKED;
 	tab[KRANG_MODE_QUIT][KRANG_EVENT_THRESH_SIT_DOWN] = KRANG_MODE_BLOCKED;
+*/
 }
 
 
