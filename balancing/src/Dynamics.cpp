@@ -123,7 +123,7 @@ Vector3d Dynamics::com (double q_imu, double q_w, double q_tor, const VectorXd& 
 	// Combine the center of masses
 
 	// Compute the upper body CoM	
-	bool onlyLowerBody = false;
+	bool onlyLowerBody = true;
 	Vector4d upperBodyCoMNumerator = sectionMasses[2] * shoulder + leftArmMass * leftArm + rightArmMass * rightArm;
 	double upperBodyMass = onlyLowerBody ? 0.0 : (sectionMasses[2] + leftArmMass + rightArmMass);
 
