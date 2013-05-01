@@ -29,8 +29,20 @@ somatic_motor_t amc, waist;
 ach_channel_t imu_chan, js_chan;
 filter_kalman_t *kf;
 DIR * dataFolder;
+struct dirent *dataFolderEntries;
+FILE * dumpFile;
 #define RAD2DEG(x) (x*180.0/M_PI)
 
+// Gains
+double Kp_sit = 3;
+double Kv_sit = 20;
+double K_TH_toSit	= 240;
+double K_DTH_toSit   = 60;
+static const double KP_TH	= 200.0;
+static const double KD_TH   = 65.0;
+static const double KP_WH	 = 3.0;				
+static const double KD_WH	 = 10;				
+static const double KD_WH_LR = 15.0;
 /* ********************************************************************************************* */
 // Initialize the program
 void init() {
@@ -129,7 +141,36 @@ void init() {
 	kf->Q[45] = 0.02;
 	kf->Q[54] = 0.05;   // Torso
 	kf->Q[63] = 0.001;
-	
+
+	// Create file for dumping data
+	int dumpFileNumber=0; char dumpFilePrefix[]="balance-dump-";
+	// Open data folder and browse through existing dump files to pick the largest file number
+	if ((dataFolder = opendir (TOP_LEVEL_PATH"/data")) != NULL) {
+		while ((dataFolderEntries = readdir (dataFolder)) != NULL) {
+			if(strncmp(dataFolderEntries->d_name, dumpFilePrefix, strlen(dumpFilePrefix))==0) {
+				dumpFileNumber=std::max(dumpFileNumber, atoi(dataFolderEntries->d_name+strlen(dumpFilePrefix)));
+			}
+		}
+		// Close the data folder
+		closedir (dataFolder);
+		// Create new dump file
+		dumpFileNumber++;
+		char dumpFileName[strlen(TOP_LEVEL_PATH) + 6 + strlen(dumpFilePrefix) + 9];
+		sprintf(dumpFileName, TOP_LEVEL_PATH"/data/%s%05d.dat", dumpFilePrefix, dumpFileNumber);
+		dumpFile = fopen(dumpFileName, "w");
+	} 
+	// Failure opening data folder
+	else {
+		printf("Error Opening data folder\n");
+	}	
+
+	// Dump a comment describing the experiment
+	fprintf(dumpFile, "# This file contains the sensor readings, joystick readings, and wheel ");
+	fprintf(dumpFile, "motor current (control input) alon with time stamps for ease of plotting\n");
+	fprintf(dumpFile, "# Sit mode gains: Kp_sit=%lf, Kv_sit=%lf\n", Kp_sit, Kv_sit);
+	fprintf(dumpFile, "# To-Sit mode gains: K_TH_toSit=%lf, K_DTH_toSit=%lf\n", K_TH_toSit, K_DTH_toSit);
+	fprintf(dumpFile, "# Balance mode gains: KP_TH=%lf, KD_TH=%lf, KP_WH=%lf, KD_WH=%lf, KP_LR=%lf\n",
+		KP_TH, KD_TH, KP_WH, KD_WH, KD_WH_LR);
 }
 
 /* ********************************************************************************************* */
@@ -294,10 +335,8 @@ void controlWheels(double dt) {
 		// --------------------------------------------------------------------------------------------
 		// Sit Mode: Only control the wheel pos/vel (and not imu pos/vel)
 		case KRANG_MODE_SIT: {
-			double Kp = 3;
-			double Kv = 20;
-			amc_current[0] = -Kv*(state.dq1_0 - state.dq1_ref[0] + Kp*(state.q1_0 - state.q1_ref[0]));
-			amc_current[1] = -Kv*(state.dq1_1 - state.dq1_ref[1] + Kp*(state.q1_1 - state.q1_ref[1]) );
+			amc_current[0] = -Kv_sit*(state.dq1_0 - state.dq1_ref[0] + Kp_sit*(state.q1_0 - state.q1_ref[0]));
+			amc_current[1] = -Kv_sit*(state.dq1_1 - state.dq1_ref[1] + Kp_sit*(state.q1_1 - state.q1_ref[1]) );
 			bool debug=1; static int debug_cnt=0;
 			if(debug & debug_cnt++ % 500 == 0) { 
 				static Dynamics dynamics (TOP_LEVEL_PATH"/data/MassProp.table", true);
@@ -320,9 +359,7 @@ void controlWheels(double dt) {
 			state.q1_ref[1] = state.q1_1;
 			state.dq1_ref[0] = 0;
 			state.dq1_ref[1] = 0;
-			double K_TH	= 240;
-			double K_DTH   = 60;
-			amc_current[0] = K_TH*(state.q2 - SITTING_ANGLE) + K_DTH * state.dq2;
+			amc_current[0] = K_TH_toSit*(state.q2 - SITTING_ANGLE) + K_DTH_toSit * state.dq2;
 			amc_current[1] = amc_current[0];
 			if(!SKIP_AMC) 
 			somatic_motor_cmd(&krang_cx.d_cx,&amc,SOMATIC__MOTOR_PARAM__MOTOR_CURRENT,amc_current,2,NULL);
@@ -338,11 +375,6 @@ void controlWheels(double dt) {
 				override=1; 
 			}
 			// Gains
-			static const double KP_TH	= 200.0;
-			static const double KD_TH   = 65.0;
-			static const double KP_WH	 = 3.0;				
-			static const double KD_WH	 = 10;				
-			static const double KD_WH_LR = 15.0;
 
 			// Compute center of mass
 			static Dynamics dynamics (TOP_LEVEL_PATH"/data/MassProp.table", true);
@@ -425,6 +457,7 @@ void destroy() {
 	filter_kalman_destroy( kf );
 	delete( kf );
 	somatic_d_destroy( &krang_cx.d_cx );
+	fclose(dumpFile);
 }
 
 /* ********************************************************************************************* */
