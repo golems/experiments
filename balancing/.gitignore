@@ -1,0 +1,5 @@
+*.swo
+/build
+*.o
+*.swp
+*.deb

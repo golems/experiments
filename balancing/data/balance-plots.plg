@@ -1,0 +1,45 @@
+# Note: To use this file type this on command line:
+# >> gnuplot -e "filename='balance-dump-00021.dat';xstart=5" balance-plots.plg
+
+set term wxt 0
+set multiplot
+set key font ",5"
+set xtics font ",5"
+set ytics font ",5" 
+set size 0.5,0.5
+set xrange [xstart:]
+set origin 0,0.5; plot filename using 1:3 title 'Raw Imu Position' with lines, filename using 1:11 title 'Filtered Imu Position' with lines
+set origin 0.5,0.5; plot filename using 1:4 title 'Raw Imu Velocity' with lines,  filename using 1:12 title 'Filtered Imu Velocity' with lines
+set origin 0,0;  plot filename using 1:19 title 'Avg Wh Pos' with lines, filename using 1:27 title 'Ref Avg Wh Pos' with lines
+set origin 0.5,0;  plot filename using 1:20 title 'Avg Wh Vel' with lines, filename using 1:28 title 'Ref Avg Wh Vel' with lines
+unset multiplot
+
+set term wxt 1
+set multiplot
+set key font ",5"
+set xtics font ",5"
+set ytics font ",5" 
+set xrange [xstart:]
+set size 0.5,0.5
+set origin 0,0.5; plot filename using 1:5 title 'Raw L Wh Pos' with lines, filename using 1:13 title 'Filtered L Wh Pos' with lines, filename using 1:23 title 'Ref L Wh Pos' with lines
+set origin 0.5,0.5; plot filename using 1:6 title 'Raw L wh Vel' with lines,  filename using 1:14 title 'Filtered L Wh Vel' with lines, filename using 1:24 title 'Ref L Wh Pos' with lines
+set origin 0,0;  plot filename using 1:7 title 'Raw R Wh Pos' with lines, filename using 1:15 title 'Filtered R Wh Pos' with lines, filename using 1:25 title 'Ref R Wh Pos' with lines
+set origin 0.5,0;  plot filename using 1:8 title 'Raw R Wh Vel' with lines, filename using 1:16 title 'Filtered R Wh Vel' with lines, filename using 1:26 title 'Ref R Wh Vel' with lines
+unset multiplot
+
+set term wxt 2
+set multiplot
+set key font ",5"
+set xtics font ",5"
+set ytics font ",5" 
+set xrange [xstart:]
+set size 0.5,0.5
+set origin 0,0.5; plot filename using 1:2 title 'thetaErr' with lines, filename using 1:($23-$13) title 'L Wh Pos Err' with lines, filename using 1:($24-$14) title 'R Wh Pos Err' with lines, \
+	 filename using 1:($25-$15) title 'L Wh Vel Err' with lines, filename using 1:($26-$16) title 'R Wh Vel Err' with lines, filename using 1:($27-$19) title 'Avg Wh Pos Err' with lines, \
+ 	 filename using 1:($28-$20) title 'Avg Wh Vel Err' with lines
+set origin 0.5,0.5; plot filename using 1:21 title 'JS FB' with lines,  filename using 1:22 title 'JS LR' with lines, filename using 1:($33-3)/3 title 'Mode' with lines
+set origin 0,0;  plot filename using 1:31 title 'L Wh Cur' with lines, filename using 1:29 title 'L Wh Cmd' with lines
+set origin 0.5,0;  plot filename using 1:32 title 'R Wh Cur' with lines, filename using 1:30 title 'R Wh Cmd' with lines
+unset multiplot
+
+pause -1

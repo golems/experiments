@@ -7,7 +7,8 @@
 #include <somatic/daemon.h>
 
 #define SITTING_ANGLE -1.6
-#define MAX_LIN_VEL 2.0
+#define STABLE_TH_RANGE 0.785
+#define MAX_LIN_VEL 4.0
 
 #define KRANG_I_LEFT 0
 #define KRANG_I_RIGHT 1
@@ -47,7 +48,10 @@ typedef struct {
 
 	double q1_ref[2];  // wheel reference pos.
 	double dq1_ref[2]; // wheel reference vel.
-
+	
+	double u[2]; // control motor input to wheel motors
+	
+	double pref, vref;
 } krang_state_t;
 
 typedef struct {

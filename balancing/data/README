@@ -1,0 +1,3 @@
+The files 'balance-dump-xxxxx.dat' contain results of experiments performen. To plot the data use
+the gnu plot script file 'balance-plots.plg' by typing this on the terminal:
+>> gnuplot -e "filename='balance-dump-00021.dat';xstart=5" balance-plots.plg

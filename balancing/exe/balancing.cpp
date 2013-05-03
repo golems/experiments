@@ -31,17 +31,19 @@ filter_kalman_t *kf;
 DIR * dataFolder;
 struct dirent *dataFolderEntries;
 FILE * dumpFile;
+double t_elapsed;	
+double error_th, derror_th;	
 #define RAD2DEG(x) (x*180.0/M_PI)
 
 // Gains
-double Kp_sit = 3;
+double Kp_sit = 0;
 double Kv_sit = 20;
 double K_TH_toSit	= 240;
 double K_DTH_toSit   = 60;
-static const double KP_TH	= 200.0;
-static const double KD_TH   = 65.0;
-static const double KP_WH	 = 3.0;				
-static const double KD_WH	 = 10;				
+static const double KP_TH	= 293.8412;
+static const double KD_TH   = 36.1190;
+static const double KP_WH	 = 0;//3.0;				
+static const double KD_WH	 = 5.8077;				
 static const double KD_WH_LR = 15.0;
 /* ********************************************************************************************* */
 // Initialize the program
@@ -100,47 +102,6 @@ void init() {
 	// Initialize the kalman filter
 	kf = new filter_kalman_t;
 	filter_kalman_init( kf , 8 , 0 , 8 );
-	double T = 1.04 * 1e-3;  // second
-	memcpy(kf->x, kf->z, sizeof(double)*8);
-	// Process matrix - fill every 9th value to 1 and every 18th starting from 8 to T.
-	for(size_t i = 0; i < 64; i += 9)
-		kf->A[i] = 1.0;
-	for(size_t i = 8; i < 64; i += 18)
-		kf->A[i] = T;
-	// Process noise covariance matrix
-	const double k1 = 2.0;
-	const double k1b = 5.0;
-	const double k2 = 10.0;
-	const double k3 = 1.0;
-	kf->R[0] = (T*T*T*T)*k1*(1.0/4.0);
-	kf->R[1] = (T*T*T)*k1*(1.0/2.0);
-	kf->R[8] = (T*T*T)*k1*(1.0/2.0);
-	kf->R[9] = (T*T)*k1b;
-	kf->R[18] = (T*T*T*T)*k2*(1.0/4.0);
-	kf->R[19] = (T*T*T)*k2*(1.0/2.0);
-	kf->R[26] = (T*T*T)*k2*(1.0/2.0);
-	kf->R[27] = (T*T)*k2;
-	kf->R[36] = (T*T*T*T)*k2*(1.0/4.0);
-	kf->R[37] = (T*T*T)*k2*(1.0/2.0);
-	kf->R[44] = (T*T*T)*k2*(1.0/2.0);
-	kf->R[45] = (T*T)*k2;
-	kf->R[54] = (T*T*T*T)*k3*(1.0/4.0);
-	kf->R[55] = (T*T*T)*k3*(1.0/2.0);
-	kf->R[62] = (T*T*T)*k3*(1.0/2.0);
-	kf->R[63] = (T*T)*k3;
-	// Measurement matrix - fill every 9th value to 1
-	for(size_t i = 0; i < 64; i += 9)
-		kf->C[i] = 1.0;
-	// Measurement noise covariance matrix
-	double imuCov = 1e-3;	//1e-3
-	kf->Q[0] = imuCov;	// IMU
-	kf->Q[9] = imuCov;
-	kf->Q[18] = 0.0005; // AMC
-	kf->Q[27] = 0.02;
-	kf->Q[36] = 0.0005; // AMC
-	kf->Q[45] = 0.02;
-	kf->Q[54] = 0.05;   // Torso
-	kf->Q[63] = 0.001;
 
 	// Create file for dumping data
 	int dumpFileNumber=0; char dumpFilePrefix[]="balance-dump-";
@@ -171,11 +132,16 @@ void init() {
 	fprintf(dumpFile, "# To-Sit mode gains: K_TH_toSit=%lf, K_DTH_toSit=%lf\n", K_TH_toSit, K_DTH_toSit);
 	fprintf(dumpFile, "# Balance mode gains: KP_TH=%lf, KD_TH=%lf, KP_WH=%lf, KD_WH=%lf, KP_LR=%lf\n",
 		KP_TH, KD_TH, KP_WH, KD_WH, KD_WH_LR);
+	fprintf(dumpFile, "# 1.time 2.error_th 3.rawImuPos 4.rawImuVel 5.rawLWhPos 6.rawLWhVel "
+		"7.rawRWhPos 8.rawRWhVel 9.rawWaistPos 10.rawWaistVel	11.filtImuPos 12.filtImuVel "
+		"13.filtLWhPos 14.filtLWhVel 15.filtRWhPos 16.filtRWhVel 17.filtWaistPos 18.filtWaistVel "
+		"19.avgWhPos 20.avgWhVel 21.jsFB 22.jsLR 23.refLWhPos 24.refLWhVel 25.refRWhPos 26.refRWhVel"
+		"27.avgRefWhPos 28.avgRefWhVel 29.cmdLWhCur 30.cmdRWhCur 31.rawLWhCur 32.rawRWhCur 33.mode\n");
 }
 
 /* ********************************************************************************************* */
 // Read sensor data from ach channels and fulter out the noise
-void readSensors() {
+void readSensors(double dt) {
 	
 	// --------------------------------------------------------------------
 	// Read IMU position and speed
@@ -242,7 +208,51 @@ void readSensors() {
   //		printf("pos0: %.5lf, vel0: %.5lf, pos1: %.5lf, vel1: %.5lf\n", kf->z[2], kf->z[3], kf->z[4], kf->z[5]);
   //	}
 	// --------------------------------------------------------------------
-	// Filter the read values
+	// Filter the read values	
+	static bool firstIteration=1;
+	if(firstIteration) { memcpy(kf->x, kf->z, sizeof(double)*8); firstIteration=0;}
+
+	double T = dt; // second
+	// Process matrix - fill every 9th value to 1 and every 18th starting from 8 to T.
+	for(size_t i = 0; i < 64; i += 9)
+		kf->A[i] = 1.0;
+	for(size_t i = 8; i < 64; i += 18)
+		kf->A[i] = T;
+	// Process noise covariance matrix
+	const double k1 = 2.0;
+	const double k1b = 5.0;
+	const double k2 = 10.0;
+	const double k3 = 1.0;
+	kf->R[0] = (T*T*T*T)*k1*(1.0/4.0);
+	kf->R[1] = (T*T*T)*k1*(1.0/2.0);
+	kf->R[8] = (T*T*T)*k1*(1.0/2.0);
+	kf->R[9] = (T*T)*k1b;
+	kf->R[18] = (T*T*T*T)*k2*(1.0/4.0);
+	kf->R[19] = (T*T*T)*k2*(1.0/2.0);
+	kf->R[26] = (T*T*T)*k2*(1.0/2.0);
+	kf->R[27] = (T*T)*k2;
+	kf->R[36] = (T*T*T*T)*k2*(1.0/4.0);
+	kf->R[37] = (T*T*T)*k2*(1.0/2.0);
+	kf->R[44] = (T*T*T)*k2*(1.0/2.0);
+	kf->R[45] = (T*T)*k2;
+	kf->R[54] = (T*T*T*T)*k3*(1.0/4.0);
+	kf->R[55] = (T*T*T)*k3*(1.0/2.0);
+	kf->R[62] = (T*T*T)*k3*(1.0/2.0);
+	kf->R[63] = (T*T)*k3;
+	// Measurement matrix - fill every 9th value to 1
+	for(size_t i = 0; i < 64; i += 9)
+		kf->C[i] = 1.0;
+	// Measurement noise covariance matrix
+	double imuCov = 1e-3;	//1e-3
+	kf->Q[0] = imuCov;	// IMU
+	kf->Q[9] = imuCov;
+	kf->Q[18] = 0.0005; // AMC
+	kf->Q[27] = 0.02;
+	kf->Q[36] = 0.0005; // AMC
+	kf->Q[45] = 0.02;
+	kf->Q[54] = 0.05;   // Torso
+	kf->Q[63] = 0.001;
+
 
 	// Filter the noise	
 	filter_kalman_predict( kf );
@@ -266,6 +276,17 @@ void readSensors() {
 	// If IMU angle is below the sitting angle and if current mode is TOSIT, change mode toSIT
 	double imu = state.q2, epsilon=.001;
 	if(imu < (SITTING_ANGLE - epsilon)) { if(state.mode == KRANG_MODE_TOSIT) state.mode = KRANG_MODE_SIT; }
+
+	// Compute center of mass
+	static Dynamics dynamics (TOP_LEVEL_PATH"/data/MassProp.table", true);
+	Eigen::VectorXd lq(7), rq(7);
+	Eigen::Vector3d com = dynamics.com(state.q2, state.q3, 0.0, lq, rq);
+
+	// Compute the error terms
+	error_th = atan2(com(0), com(1));// + 4*M_PI/180.0;
+	derror_th = state.dq2;
+	if(error_th < -STABLE_TH_RANGE ) { if(state.mode == KRANG_MODE_BALANCE)	state.mode = KRANG_MODE_TOSIT; }
+	if(error_th > STABLE_TH_RANGE ) { if(state.mode == KRANG_MODE_BALANCE)	state.mode = KRANG_MODE_HALT; }
 }
 
 /* ********************************************************************************************* */
@@ -294,7 +315,7 @@ void readJoystick( double dt ) {
 	// Quit Command
 	else if(b[8]) { state.mode = KRANG_MODE_QUIT; }
 	// Sit Command
-	else if(b[9] && !b[5]) { if(state.mode == KRANG_MODE_BALANCE) state.mode = KRANG_MODE_TOSIT; } 
+//	else if(b[9] && !b[5]) { if(state.mode == KRANG_MODE_BALANCE) state.mode = KRANG_MODE_TOSIT; } 
 	// Stand Command
 	else if(b[9] && b[5]) { if(state.mode == KRANG_MODE_SIT) state.mode = KRANG_MODE_BALANCE; }
 	// Check for the wheel control - no shoulder button should be pressed
@@ -315,6 +336,10 @@ void readJoystick( double dt ) {
     // integrate
     state.q1_ref[0] += 10 * dt * state.dq1_ref[0];
     state.q1_ref[1] += 10 * dt * state.dq1_ref[1];
+
+		// avg ref wheel pos/vel for forward/backward control
+		state.pref = (state.q1_ref[0] + state.q1_ref[1]) / 2.0;
+		state.vref = (state.dq1_ref[0] + state.dq1_ref[1]) / 2.0;
 	} 
 }
 
@@ -322,7 +347,6 @@ void readJoystick( double dt ) {
 // Control the wheels based on the current mode
 void controlWheels(double dt) {
 	bool SKIP_AMC=0;
-	double amc_current[2];
 	switch(state.mode) {
 		// --------------------------------------------------------------------------------------------
 		// Halt Mode: Fix the wheel reference pos/vel to current pos/vel
@@ -331,25 +355,19 @@ void controlWheels(double dt) {
 			state.q1_ref[1] = state.q1_1;
 			state.dq1_ref[0] = 0;
 			state.dq1_ref[1] = 0;
+			state.u[0]=0; state.u[1]=0;
 		}	break;
 		// --------------------------------------------------------------------------------------------
 		// Sit Mode: Only control the wheel pos/vel (and not imu pos/vel)
 		case KRANG_MODE_SIT: {
-			amc_current[0] = -Kv_sit*(state.dq1_0 - state.dq1_ref[0] + Kp_sit*(state.q1_0 - state.q1_ref[0]));
-			amc_current[1] = -Kv_sit*(state.dq1_1 - state.dq1_ref[1] + Kp_sit*(state.q1_1 - state.q1_ref[1]) );
+			state.u[0] = -Kv_sit*(state.dq1_0 - state.dq1_ref[0] + Kp_sit*(state.q1_0 - state.q1_ref[0]));
+			state.u[1] = -Kv_sit*(state.dq1_1 - state.dq1_ref[1] + Kp_sit*(state.q1_1 - state.q1_ref[1]) );
 			bool debug=1; static int debug_cnt=0;
 			if(debug & debug_cnt++ % 500 == 0) { 
-				static Dynamics dynamics (TOP_LEVEL_PATH"/data/MassProp.table", true);
-				Eigen::VectorXd lq(7), rq(7);
-				Eigen::Vector3d com = dynamics.com(state.q2, state.q3, 0.0, lq, rq);
-				double error_th = atan2(com(0), com(1));// + 4*M_PI/180.0;
 				printf("\nimu: %.3lf, waist: %.3lf, error_th: %.3lf\n", state.q2*180.0/M_PI, state.q3*180.0/M_PI, error_th*180.0/M_PI);
-				printf("com: %.3lf, %.3lf, %.3lf\n",com(0),com(1),com(2));
-				printf("amc_current = { %.3lf, %.3lf }  ", amc_current[0], amc_current[1]);
+				printf("amc_current = { %.3lf, %.3lf }  ", state.u[0], state.u[1]);
 				printf("dt=%.5lf\n", dt);
 			}
-			if(!SKIP_AMC) 
-			somatic_motor_cmd(&krang_cx.d_cx,&amc,SOMATIC__MOTOR_PARAM__MOTOR_CURRENT,amc_current,2,NULL);
 		}	break;
 		// --------------------------------------------------------------------------------------------
 		// To-Sit Mode:  Fix the wheel reference pos/vel and control imu angle to the reference 
@@ -359,10 +377,8 @@ void controlWheels(double dt) {
 			state.q1_ref[1] = state.q1_1;
 			state.dq1_ref[0] = 0;
 			state.dq1_ref[1] = 0;
-			amc_current[0] = K_TH_toSit*(state.q2 - SITTING_ANGLE) + K_DTH_toSit * state.dq2;
-			amc_current[1] = amc_current[0];
-			if(!SKIP_AMC) 
-			somatic_motor_cmd(&krang_cx.d_cx,&amc,SOMATIC__MOTOR_PARAM__MOTOR_CURRENT,amc_current,2,NULL);
+			state.u[0] = K_TH_toSit*(state.q2 - SITTING_ANGLE) + K_DTH_toSit * state.dq2;
+			state.u[1] = state.u[0];
 		}	break;
 		// --------------------------------------------------------------------------------------------
 		// Balance Mode: Control imu angle to bring COM right above the wheel axisand control wheels
@@ -376,43 +392,46 @@ void controlWheels(double dt) {
 			}
 			// Gains
 
-			// Compute center of mass
-			static Dynamics dynamics (TOP_LEVEL_PATH"/data/MassProp.table", true);
-			Eigen::VectorXd lq(7), rq(7);
-			Eigen::Vector3d com = dynamics.com(state.q2, state.q3, 0.0, lq, rq);
-		
-			// Compute the error terms
-			double error_th = atan2(com(0), com(1));// + 4*M_PI/180.0;
-			double derror_th = state.dq2;
-			double pref = (state.q1_ref[0] + state.q1_ref[1]) / 2.0;
-			double error_wh = state.q1 - pref;
-			double vref = (state.dq1_ref[0] + state.dq1_ref[1]) / 2.0;
-			double derror_wh = state.dq1 - vref;
+			double error_wh = state.q1 - state.pref;
+			double derror_wh = state.dq1 - state.vref;
 
 			// Control Law
 			double u = ((KP_TH * error_th) + (KD_TH * derror_th)) + ((KD_WH *derror_wh) + (KP_WH * error_wh));
 			double offset = KD_WH_LR * state.js_lr;
-			amc_current[0] = u + offset;
-			amc_current[1] = u - offset;
+			state.u[0] = u + offset;
+			state.u[1] = u - offset;
 			bool debug=1; static int debug_cnt=0;
 			if(debug & debug_cnt++ % 500 == 0) { 
 				printf("\nimu: %.3lf, waist: %.3lf, error_th: %.3lf \n ", state.q2*180.0/M_PI, state.q3*180.0/M_PI, error_th*180.0/M_PI);
-				printf("com: %.3lf, %.3lf, %.3lf\n",com(0),com(1),com(2));
-				printf("amc_current = { %.3lf, %.3lf }  ", amc_current[0], amc_current[1]);
+				printf("amc_current = { %.3lf, %.3lf }  ", state.u[0], state.u[1]);
 				printf("dt=%.5lf\n", dt);
 			}
-			if(!SKIP_AMC) 
-			somatic_motor_cmd(&krang_cx.d_cx,&amc,SOMATIC__MOTOR_PARAM__MOTOR_CURRENT,amc_current,2,NULL);
 		}	break;
 		// --------------------------------------------------------------------------------------------
 		case KRANG_MODE_QUIT:
 		case KRANG_MODE_BAD:
 		case KRANG_MODE_SIZE:
 		default: 
+			state.u[0] = 0; state.u[1]=0;
 			somatic_sig_received = 1;
 	}	// enbd of balancing switch
+	if(!SKIP_AMC) 
+		somatic_motor_cmd(&krang_cx.d_cx,&amc,SOMATIC__MOTOR_PARAM__MOTOR_CURRENT,state.u,2,NULL);
 }
 
+/* ********************************************************************************************* */
+// Dump all the current states to file
+void dumpToFile() {
+	fprintf(dumpFile, "%05.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf "	
+		"%02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf "	
+		"%01.3lf %01.3lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.3lf %02.3lf %02.3lf "
+		"%02.3lf %d\n", 			
+		t_elapsed, error_th, kf->z[0], kf->z[1], amc.pos[0], amc.vel[0], amc.pos[1], amc.vel[1], 
+		kf->z[6],	kf->z[7],	state.q2, state.dq2, state.q1_0, state.dq1_0, state.q1_1, state.dq1_1, 
+		state.q3,	state.dq3, state.q1, state.dq1, state.js_fb, state.js_lr, state.q1_ref[0], 
+		state.dq1_ref[0],	state.q1_ref[1], state.dq1_ref[1], state.pref, state.vref, state.u[0], 
+		state.u[1], amc.cur[0],	amc.cur[1], state.mode);
+}
 /* ********************************************************************************************* */
 // This is the main loop that interfaces with the I/O from the joystick.
 void run() {
@@ -421,21 +440,25 @@ void run() {
 					 SOMATIC__EVENT__CODES__PROC_RUNNING,
 					 NULL, NULL );
 	// Set the timestep to update
-	double dt = 0.0;		
+	double dt = 0.0;
 	// Get the time in the beginning
-	struct timespec t_now, t_prev;
-	t_prev = aa_tm_now();
+	struct timespec t_now, t_prev, t_start;
+	t_start = aa_tm_now();
+	t_prev = t_start;
 	while (!somatic_sig_received ) {
 		// Get the current time and compute the time difference
 		t_now = aa_tm_now();						
 		dt = (double)aa_tm_timespec2sec(aa_tm_sub(t_now, t_prev));	
+		t_elapsed = (double)aa_tm_timespec2sec(aa_tm_sub(t_now, t_start));			
 		// Get wheel, imu, waist positions and velocities from ack chennels
-		readSensors();
+		readSensors(dt);
 		// Get commands from the joystick and process them
 		readJoystick(dt);
 		// Based on the sensor feedback, joystick commands and current state, call the relevant 
 		// controller for controlling the wheels
 		controlWheels(dt);
+		// Dump data to file
+		dumpToFile();
 		// Update previous measured time
 		t_prev = t_now;
 		// Release memory
@@ -454,6 +477,8 @@ void destroy() {
 	somatic_motor_digital_out(&krang_cx.d_cx, &amc, 19, 0);
 //	somatic_motor_cmd(&krang_cx.d_cx, &amc, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 2, NULL);
 	somatic_motor_cmd(&krang_cx.d_cx, &waist, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 2, NULL);
+	somatic_motor_destroy(&krang_cx.d_cx, &amc);
+	somatic_motor_destroy(&krang_cx.d_cx, &waist);
 	filter_kalman_destroy( kf );
 	delete( kf );
 	somatic_d_destroy( &krang_cx.d_cx );
