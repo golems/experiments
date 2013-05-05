@@ -31,7 +31,7 @@ filter_kalman_t *kf;
 DIR * dataFolder;
 struct dirent *dataFolderEntries;
 FILE * dumpFile;
-double t_elapsed;	
+double t_elapsed, t_elapsed_using_dt, t_elapsed_using_dt_js;	
 double error_th, derror_th;	
 #define RAD2DEG(x) (x*180.0/M_PI)
 
@@ -40,10 +40,10 @@ double Kp_sit = 0;
 double Kv_sit = 20;
 double K_TH_toSit	= 240;
 double K_DTH_toSit   = 60;
-static const double KP_TH	= 293.8412;
-static const double KD_TH   = 36.1190;
-static const double KP_WH	 = 0;//3.0;				
-static const double KD_WH	 = 5.8077;				
+static const double KP_TH	= 309.0833;
+static const double KD_TH   = 38.6935;
+static const double KP_WH	 = 3;				
+static const double KD_WH	 = 9.4593;				
 static const double KD_WH_LR = 15.0;
 /* ********************************************************************************************* */
 // Initialize the program
@@ -74,14 +74,14 @@ void init() {
 	usleep(1e5);
 
 	// Update and reset motors
-	somatic_motor_update(&krang_cx.d_cx, &waist);
-	somatic_motor_cmd(&krang_cx.d_cx, &waist, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 2, NULL);
+//	somatic_motor_update(&krang_cx.d_cx, &waist);
+//	somatic_motor_cmd(&krang_cx.d_cx, &waist, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 2, NULL);
 	somatic_motor_update(&krang_cx.d_cx, &amc);
 //	somatic_motor_cmd(&krang_cx.d_cx, &amc, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 2, NULL);
 	
 	// Check waist positions
-	if (fabs(waist.pos[0] + waist.pos[1]) > 2e-2)
-		fprintf(stderr, "ERROR: Waist position mismatched: (%f, %f)\n", waist.pos[0], -waist.pos[1]);
+//	if (fabs(waist.pos[0] + waist.pos[1]) > 2e-2)
+//		fprintf(stderr, "ERROR: Waist position mismatched: (%f, %f)\n", waist.pos[0], -waist.pos[1]);
 
 	// Open the IMU channel
 	int r  = ach_open( &imu_chan, "imu-data" , NULL );
@@ -267,7 +267,7 @@ void readSensors(double dt) {
 	state.dq1_1	   = kf->x[5] - state.dq2;
 	state.q3		  = 117*M_PI/180.0; //FIXME: This is a hack and works for a fixed waist angle. It should have been kf->x[6];
 																	// But for some reason it is behaving strange. Value is slowwwly rising to 117 from 0.
-	state.dq3		 = kf->x[7];
+	state.dq3		 = 0.0;//kf->x[7];
 
 	// Set the wheel position by taking the mean of the two wheel encoders 
 	state.q1 = (state.q1_0 + state.q1_1)/2.0;
@@ -293,21 +293,24 @@ void readSensors(double dt) {
 // Read and process the commands from the joystick
 void readJoystick( double dt ) {
 	
+	// Get the values
+	static char b [10];
+	static double x [6];
+	
 	// Get the message and check output is OK.
 	int r = 0;
 	Somatic__Joystick *js_msg = 
 			SOMATIC_GET_LAST_UNPACK( r, somatic__joystick, &protobuf_c_system_allocator, 4096, &js_chan );
-	if(!(ACH_OK == r || ACH_MISSED_FRAME == r) || (js_msg == NULL)) return;
-
-	// Get the values
-	char b [10];
-	double x [6];
-	for(size_t i = 0; i < 10; i++) 
-		b[i] = js_msg->buttons->data[i] ? 1 : 0;
-	memcpy(x, js_msg->axes->data, sizeof(x));
-	
+	if((ACH_OK == r || ACH_MISSED_FRAME == r) && js_msg != NULL )
+	{
+		for(size_t i = 0; i < 10; i++) 
+			b[i] = js_msg->buttons->data[i] ? 1 : 0;
+		memcpy(x, js_msg->axes->data, sizeof(x));
+	}	
 	// Set the forward/backward ad left/right joystick axes values to zero
 	state.js_fb = 0;	state.js_lr = 0;
+
+	t_elapsed_using_dt_js += dt;
 
 	// Check for the start, quit, sit and stand conditions
 	// Start Command
@@ -324,18 +327,21 @@ void readJoystick( double dt ) {
 		state.js_fb = -x[1];	// range [-1, 1]
 		state.js_lr =  x[2];	// range [-1, 1]
 		
-    // Velocity control when sitting
-    state.dq1_ref[0] = MAX_LIN_VEL*state.js_fb;
-    state.dq1_ref[1] = state.dq1_ref[0];
+		// Velocity control when sitting
+		state.dq1_ref[0] = MAX_LIN_VEL*state.js_fb;
+		state.dq1_ref[1] = state.dq1_ref[0];
 
-    // Moving left/right: Velocity control for heading
-    double max_ang_vel = 2.0;
-    state.dq1_ref[0] += max_ang_vel*state.js_lr;
-    state.dq1_ref[1] -= max_ang_vel*state.js_lr;
+		// Moving left/right: Velocity control for heading
+		double max_ang_vel = 2.0;
+		state.dq1_ref[0] += max_ang_vel*state.js_lr;
+		state.dq1_ref[1] -= max_ang_vel*state.js_lr;
 
-    // integrate
-    state.q1_ref[0] += 10 * dt * state.dq1_ref[0];
-    state.q1_ref[1] += 10 * dt * state.dq1_ref[1];
+		// integrate
+		state.q1_ref[0] += dt * state.dq1_ref[0];
+		state.q1_ref[1] += dt * state.dq1_ref[1];
+
+		//printf("t_elapsed=%lf, t_elapsed_using_dt=%lf, t_elapsed_using_dt_js=%lf dq1_ref=%lf, q1_ref=%lf\n", 
+		//	t_elapsed, t_elapsed_using_dt, t_elapsed_using_dt_js, state.dq1_ref[0], state.q1_ref[0] );
 
 		// avg ref wheel pos/vel for forward/backward control
 		state.pref = (state.q1_ref[0] + state.q1_ref[1]) / 2.0;
@@ -441,6 +447,7 @@ void run() {
 					 NULL, NULL );
 	// Set the timestep to update
 	double dt = 0.0;
+	t_elapsed_using_dt=0.0; t_elapsed_using_dt_js=0.0;
 	// Get the time in the beginning
 	struct timespec t_now, t_prev, t_start;
 	t_start = aa_tm_now();
@@ -449,7 +456,8 @@ void run() {
 		// Get the current time and compute the time difference
 		t_now = aa_tm_now();						
 		dt = (double)aa_tm_timespec2sec(aa_tm_sub(t_now, t_prev));	
-		t_elapsed = (double)aa_tm_timespec2sec(aa_tm_sub(t_now, t_start));			
+		t_elapsed = (double)aa_tm_timespec2sec(aa_tm_sub(t_now, t_start));
+		t_elapsed_using_dt += dt;
 		// Get wheel, imu, waist positions and velocities from ack chennels
 		readSensors(dt);
 		// Get commands from the joystick and process them
@@ -476,7 +484,7 @@ void destroy() {
 	ach_close(&imu_chan);
 	somatic_motor_digital_out(&krang_cx.d_cx, &amc, 19, 0);
 //	somatic_motor_cmd(&krang_cx.d_cx, &amc, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 2, NULL);
-	somatic_motor_cmd(&krang_cx.d_cx, &waist, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 2, NULL);
+//	somatic_motor_cmd(&krang_cx.d_cx, &waist, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 2, NULL);
 	somatic_motor_destroy(&krang_cx.d_cx, &amc);
 	somatic_motor_destroy(&krang_cx.d_cx, &waist);
 	filter_kalman_destroy( kf );

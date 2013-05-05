@@ -8,7 +8,7 @@
 
 #define SITTING_ANGLE -1.6
 #define STABLE_TH_RANGE 0.785
-#define MAX_LIN_VEL 4.0
+#define MAX_LIN_VEL 2.0
 
 #define KRANG_I_LEFT 0
 #define KRANG_I_RIGHT 1
