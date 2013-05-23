@@ -24,6 +24,7 @@ ach_channel_t state_chan;
 somatic_motor_t lgripper;
 
 /* ********************************************************************************************* */
+double lastPos = 0.0;
 void run() {
 
 	// Send a message; set the event code and the priority
@@ -32,28 +33,28 @@ void run() {
 
 	// Unless an interrupt or terminate message is received, process the new message
 	size_t c = 0;
-	double lastPos = 0.0;
 	bool grasped = false;
 	while(!somatic_sig_received) {
 
 		// Set the velocity mode
-		double dq = grasped ? 0.0 : -0.005;
+		static int i = 0;
+		double dq = grasped ? 0.0 : 0.005;
 		somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, &dq, 1);
 
 		// Get the gripper position
 		somatic_motor_update(&daemon_cx, &lgripper);
-		printf("%lf\n", lgripper.pos[0]); 
+		printf("i: %d, pos: %lf, lastPos: %lf, grasped: %d, dq: %lf\n", i, lgripper.pos[0], lastPos, grasped, dq); 
 		fflush(stdout);
 
 		// Free buffers allocated during this cycle
 		aa_mem_region_release(&daemon_cx.memreg);	
 		
 		// Check if the grasp closed
-		if(fabs(lastPos - lgripper.pos[0]) < 1e-3) 
+		if((i > 100) && (fabs(lastPos - lgripper.pos[0]) < 1e-5))
 			grasped = true;
 
 		// Sleep and set the last position
-		lastPos = lgripper.pos[0];
+		if(i++ % 5 == 4) lastPos = lgripper.pos[0];
 		usleep(1e4);
 		
 	}
@@ -89,6 +90,7 @@ void init () {
 	// Update and reset them
 	somatic_motor_update(&daemon_cx, &lgripper);
 	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 1);
+	lastPos = lgripper.pos[0];
 	usleep(1e5);
 
 	// Open the state channel

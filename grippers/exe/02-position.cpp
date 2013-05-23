@@ -27,7 +27,7 @@ using namespace std;
 somatic_d_t daemon_cx;
 ach_channel_t state_chan;
 somatic_motor_t lgripper;
-double goals [] = {0.060, 0.009, 0.040, 0.009};
+double goals [] = {0.058, 0.009, 0.040, 0.009};
 
 /* ********************************************************************************************* */
 void run() {
