@@ -32,7 +32,7 @@ namespace kinematics {
 	static const double L5 = 32.78;				///> Arm link length between modules 2 and 4
 	static const double L6 = 27.63;				///> Arm link length between modules 4 and 6
 	static const double L7 = 17.07;				///> Arm link length between modules 6 and 7
-	static const double L8 = 7.1;					///> Dist b/w end of module 7 and start of e-e (black bottom surface)
+	static const double L8 = 15.1;					///> Dist b/w end of module 7 and start of e-e (black bottom surface)
 
 	// ======================================================================
 	// Transformation functions

@@ -11,6 +11,8 @@
 #include <iostream>
 #include "helpers.h"
 
+#define sq(x) ((x) * (x))
+
 using namespace Eigen;
 using namespace std;
 
@@ -32,23 +34,28 @@ void run() {
 	size_t c = 0;
 	while(!somatic_sig_received) {
 
+		// Read the joystick data and send the input velocities to the arms
+		setJoystickInput(daemon_cx, js_chan, llwa, rlwa);
+
 		// Receive the 3-D coordinate of the red dot from vision PC
 		double x [3];
-		getRedMarkerPosition(daemon_cx, chan_transform, &x[0]);
+		bool gotKinect = getRedMarkerPosition(daemon_cx, chan_transform, &x[0]);
+		if(!gotKinect) continue;
 		
 		// Get the right arm joint values and the end-effector value
 		Vector3d pos, dir;
 		somatic_motor_update(&daemon_cx, &llwa);
 		getEEinKinectFrame(llwa.pos, pos, dir);					
-		if(c++ % 1000 == 0) {
+		if(c++ % 10 == 0) {
+			printf("Joint angles: ");
 			for(size_t i = 0; i < 7; i++) 
 				printf("%lf, ", llwa.pos[i]);
 			printf("\n"); 
-			cout << "\tpos: " << pos.transpose() << endl;
+			cout << "Forward kinematics: " << pos.transpose() << endl;
+			cout << "Kinect            :  " << x[0] << " " << x[1] << " " << x[2] << endl;
+			double norm = sqrt(sq(pos[0]-x[0]) + sq(pos[1]-x[1]) + sq(pos[2]-x[2]));
+			cout << "Norm              :  " << norm << "\n" << endl;
 		}
-
-		// Read the joystick data and send the input velocities to the arms
-		setJoystickInput(daemon_cx, js_chan, llwa, rlwa);
 
 		// Free buffers allocated during this cycle
 		aa_mem_region_release(&daemon_cx.memreg);	

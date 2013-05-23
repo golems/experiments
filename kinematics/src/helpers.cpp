@@ -18,7 +18,7 @@ using namespace kinematics;
 void getEEinKinectFrame (double* q, Vector3d& pos, Vector3d& dir) {
 
 	/// Set the constant
-	const double th = 180.0 / 180.0 * M_PI;
+	const double th = 159.5 / 180.0 * M_PI;
 
 	// =============================================================================
 	// Start with the pos/ori of the shoulder bracket in Kinect frame. We first 
@@ -28,7 +28,7 @@ void getEEinKinectFrame (double* q, Vector3d& pos, Vector3d& dir) {
 	// Get the transformations T^b_h and T^h_k
 	MatrixXd Tbh (4,4), Thk (4,4);
 	Tbh << cos(th), -sin(th), 0, 11.13, sin(th), cos(th), 0, 9.84, 0, 0, 1, 0, 0, 0, 0, 1;
-	Thk << 0, 0, 1, 5, 0, 1, 0, -4.25, -1, 0, 0, 1.5, 0, 0, 0, 1;
+	Thk << 0, 0, 1, 5, 0, 1, 0, -4.25, -1, 0, 0, -1.0, 0, 0, 0, 1;
 
 	// Compute the inverses
 	MatrixXd Tkb = (Tbh * Thk).inverse();
@@ -53,8 +53,8 @@ void getEEinKinectFrame (double* q, Vector3d& pos, Vector3d& dir) {
 		Tk10 *= dh(T[i][0], T[i][1], T[i][2], T[i][3]);		
 
 	static size_t co = 0;
-	if(co++ % 1000 == 0) 
-	cout << "\n\t\t" << Tk10(0,3) << ", " << Tk10(1,3) << ", " << Tk10(2,3) << endl;
+	if(false && co++ % 1000 == 0) 
+		cout << "\n\t\t" << Tk10(0,3) << ", " << Tk10(1,3) << ", " << Tk10(2,3) << endl;
 	Tk10 = Tkb * Tk10;
 
 	// Now we have the transformation T^k_10 where 10 is a frame at the end of the
@@ -121,7 +121,7 @@ void init (somatic_d_t& daemon_cx, somatic_motor_t& llwa, somatic_motor_t& rlwa,
 /* ********************************************************************************************* */
 bool getRedMarkerPosition(somatic_d_t& daemon_cx, ach_channel_t& chan_transform, double* x) {
 
-	static const bool debug = false;
+	static const bool debug = 0;
 
 	// Check if there is anything to read
 	int result;

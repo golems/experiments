@@ -1,3 +1,7 @@
 This repo is to contain the code for development experiments that we do for
-Krang. Note that this does not necessarily include research. For instance,
-we will have forward and inverse kinematics experiments here.
+Krang. The following experiments have taken place so far:
+
+1) Kinematics: Testing the Kinect output against the forward kinematics
+2) Balancing
+3) Grippers: Opening and closing grippers fully, ability to squeeze until 
+	 a current limit
