@@ -1,1 +1,0 @@
-/usr/bin/c++   -g    CMakeFiles/01-move.dir/exe/01-move.cpp.o  -o 01-move -rdynamic -lamino -lprotobuf-c -lach -lntcan -lntcanopen -lssdmu -lfilter -lpcio -lsomatic -lreflex -lstdc++ -lschkin 

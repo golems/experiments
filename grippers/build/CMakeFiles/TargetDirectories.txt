@@ -1,2 +1,0 @@
-/home/cerdogan/Documents/Software/project/krang/experiments/grippers/build/CMakeFiles/01-move.dir
-/home/cerdogan/Documents/Software/project/krang/experiments/grippers/build/CMakeFiles/01-move.run.dir

@@ -2,9 +2,7 @@
  * @file 01-move.cpp
  * @author Can Erdogan
  * @date May 23, 2013
- * @brief This demo shows the ability to open/close the grippers to specific
- * space lengths. From observation in PowerCube, we see that the two fingers
- * collide at 9 cm and they can open up to 60 cms.
+ * @brief This demo shows the ability to move the grippers with velocity control.
  */
 
 #include <unistd.h>
@@ -53,10 +51,13 @@ int main () {
 
 	// Command the gripper to move
 	double dq = 0.1;
+/*
 	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, &dq, 1, NULL);
 	usleep(0.1 * 1e6);
 
 	// Command the gripper to stop
+*/
 	dq = 0.0;
 	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, &dq, 1, NULL);
+	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, &dq, 1, NULL);
 }
