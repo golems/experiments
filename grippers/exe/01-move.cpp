@@ -43,21 +43,18 @@ int main () {
 	
 	// Update and reset them
 	somatic_motor_update(&daemon_cx, &lgripper);
-	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 1, NULL);
+	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 1);
 
 	// Get the motor value
 	somatic_motor_update(&daemon_cx, &lgripper);
 	cout << "Gripper value: " << lgripper.pos[0] << endl;
 
 	// Command the gripper to move
-	double dq = 0.1;
-/*
-	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, &dq, 1, NULL);
-	usleep(0.1 * 1e6);
+	double dq = -0.1;
+	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, &dq, 1);
+	usleep(0.05 * 1e6);
 
 	// Command the gripper to stop
-*/
 	dq = 0.0;
-	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, &dq, 1, NULL);
-	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, &dq, 1, NULL);
+	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, &dq, 1);
 }
