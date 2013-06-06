@@ -19,4 +19,37 @@ Q(3,3)=500). The system blew up in the balancing mode even before starting the t
 
 - 00052-57: Ignore
 
-- 00053:
+- 00058: Experiment to find out the breakaway torque that starts the motion of the system. This is
+done by incrementing the reference speed of the wheels in steps. The gains KP_TH and KD_TH are the
+same as before KD_TH is three times smaller than before. Postion control (KP_TH) is off.
+
+- 00063: The same experiment as 00050 with gains of 00058
+
+- 00064: The same experiment as 00063 with krang on the cardboard
+
+- 00065: Same as 00064 but with more inflated tires. Pressure changed from 23 psi to 36 psi.
+
+- 00071: I changed the way the trajectories are being gnerated. Previously, the trajectory was a 
+sine wave for the velocity reference and the corresponding position reference trajectory. Now, the 
+trajectory is a sine wave for position reference with a corresponding velocity reference. This 
+means that the intial velocity is 2*pi*f*amplitude, a non-zero value. This causes the initial
+push for the wheels required to overcome friction. But, due to friction effects, the net 
+displacement over time is positive i.e. the center about which the movement of wheels is taking 
+place is shifting forward. This is a typical behavior resulting from friction as can be seen
+in literature (see Figure 2 in "Adaptive friction compensation with partially known dynamic 
+friction model, Canudas de Wit, 1998").
+
+- 00077: Repetition of the same experiment for recording a video. Also Can started playing
+and kicking the system to check out its response.
+
+- 00078: The above experiment is now repeated with position control turned on. The result shows
+a different behavior. This time, there is a net displacement of the right wheel in positive
+direction and a net displacement of the left wheel in the negative direction. This causes a net
+change in the heading direction towards the left. The center center of oscillations of wheels
+however remains at the initial position.
+
+- 00080: The above experiment was repeated for taking a video of the above turning behavior
+observed. But the turning never happened this time. This time, both the wheels experienced a 
+forward drift in the average displacements causing the heading direction to remain fixed.
+Also, we put a turning disturbance on the robot but the controller tends to get back to
+its initial heading direction over time.

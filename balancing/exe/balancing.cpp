@@ -43,8 +43,8 @@ double K_TH_toSit	= 240;
 double K_DTH_toSit   = 60;
 static const double KP_TH	= 309.0833;
 static const double KD_TH   = 38.6935;
-static const double KP_WH	 = 0;//10;				
-static const double KD_WH	 = 5;				
+static const double KP_WH	 = 5;				
+static const double KD_WH	 = 15.8498;				
 static const double KD_WH_LR = 15.0;
 /* ********************************************************************************************* */
 // Initialize the program
@@ -266,7 +266,7 @@ void readSensors(double dt) {
 
 	// Compute the error terms
 	// making it zero for an experiment
-	error_th = 0;//atan2(com(0), com(1));// + 4*M_PI/180.0;
+	error_th = atan2(com(0), com(1));// + 4*M_PI/180.0;
 	derror_th = state.dq2;
 	if(error_th < -STABLE_TH_RANGE ) { 
 		if(state.mode == KRANG_MODE_BALANCE || state.mode == KRANG_MODE_TRACK_SINE)	
@@ -341,8 +341,8 @@ void readJoystick( double dt ) {
 		// If in TRACK_SINE mode ignore joystick and generate a sinusoidal velocity reference
 		else {
 			double freq=1/6.0; // One cycle in six seconds
-			state.dq1_ref[0] = sin(2*M_PI*freq*t_sine);
-			state.dq1_ref[1] = sin(2*M_PI*freq*t_sine);
+			state.dq1_ref[0] = 2*M_PI*freq*cos(2*M_PI*freq*t_sine);
+			state.dq1_ref[1] = 2*M_PI*freq*cos(2*M_PI*freq*t_sine);
 			t_sine += dt;
 		}
 		// integrate
@@ -437,11 +437,11 @@ void controlWheels(double dt) {
 
 /* ********************************************************************************************* */
 // Dump all the current states to file
-void dumpToFile() {
-	fprintf(dumpFile, "%05.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf "	
-		"%02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf "	
-		"%01.3lf %01.3lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.3lf %02.3lf %02.3lf "
-		"%02.3lf %d\n", 			
+inline void dumpToLog( char * log, int index ) {
+	sprintf(log+index, "%011.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf "	
+		"%09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf "	
+		"%06.3lf %06.3lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %07.3lf %07.3lf %07.3lf "
+		"%07.3lf %d\n", 			
 		t_elapsed, error_th, kf->z[0], kf->z[1], amc.pos[0], amc.vel[0], amc.pos[1], amc.vel[1], 
 		kf->z[6],	kf->z[7],	state.q2, state.dq2, state.q1_0, state.dq1_0, state.q1_1, state.dq1_1, 
 		state.q3,	state.dq3, state.q1, state.dq1, state.js_fb, state.js_lr, state.q1_ref[0], 
@@ -455,6 +455,9 @@ void run() {
 	somatic_d_event( &krang_cx.d_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
 					 SOMATIC__EVENT__CODES__PROC_RUNNING,
 					 NULL, NULL );
+	static char * log= new char[50000000];
+	static int log_index=0;
+  static int log_interleave_count=0;
 	// Set the timestep to update
 	double dt = 0.0;
 	t_elapsed_using_dt=0.0; t_elapsed_using_dt_js=0.0;
@@ -475,13 +478,23 @@ void run() {
 		// Based on the sensor feedback, joystick commands and current state, call the relevant 
 		// controller for controlling the wheels
 		controlWheels(dt);
-		// Dump data to file
-		dumpToFile();
+		// Dump data to file after skipping 10 samples
+	  if(++log_interleave_count>10){ 
+			// Write to the log string
+			dumpToLog(log, log_index);
+			// Increment the index
+			log_index+=310;
+			// If the log string overflows, wrap around
+			if(log_index>50000000){ log_index=0; }
+			log_interleave_count=0;
+		}
 		// Update previous measured time
 		t_prev = t_now;
 		// Release memory
 		aa_mem_region_release( &krang_cx.d_cx.memreg );
 	}
+	// Write the log to the dumpfile
+	fprintf(dumpFile,"%s",log);
 	// Once the main loop returns, the program is done. Send the stopping event message.
 	somatic_d_event( &krang_cx.d_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
 					 SOMATIC__EVENT__CODES__PROC_STOPPING,
@@ -494,6 +507,8 @@ void destroy() {
 	ach_close(&imu_chan);
 	somatic_motor_digital_out(&krang_cx.d_cx, &amc, 19, 0);
 //	somatic_motor_cmd(&krang_cx.d_cx, &amc, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 2, NULL);
+	state.u[0]=0.0; state.u[1]=0.0;
+	somatic_motor_cmd(&krang_cx.d_cx,&amc,SOMATIC__MOTOR_PARAM__MOTOR_CURRENT,state.u,2,NULL);
 	somatic_motor_destroy(&krang_cx.d_cx, &amc);
 	filter_kalman_destroy( kf );
 	delete( kf );
