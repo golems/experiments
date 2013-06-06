@@ -43,7 +43,7 @@ double K_TH_toSit	= 240;
 double K_DTH_toSit   = 60;
 static const double KP_TH	= 309.0833;
 static const double KD_TH   = 38.6935;
-static const double KP_WH	 = 5;				
+static const double KP_WH	 = 10;				
 static const double KD_WH	 = 15.8498;				
 static const double KD_WH_LR = 15.0;
 /* ********************************************************************************************* */
@@ -340,7 +340,7 @@ void readJoystick( double dt ) {
 		}
 		// If in TRACK_SINE mode ignore joystick and generate a sinusoidal velocity reference
 		else {
-			double freq=1/6.0; // One cycle in six seconds
+			double freq=1/12.0; // One cycle in six seconds
 			state.dq1_ref[0] = 2*M_PI*freq*cos(2*M_PI*freq*t_sine);
 			state.dq1_ref[1] = 2*M_PI*freq*cos(2*M_PI*freq*t_sine);
 			t_sine += dt;
