@@ -1,3 +1,22 @@
 The files 'balance-dump-xxxxx.dat' contain results of experiments performen. To plot the data use
 the gnu plot script file 'balance-plots.plg' by typing this on the terminal:
 >> gnuplot -e "filename='balance-dump-00021.dat';xstart=5" balance-plots.plg
+
+Description of plots:
+- 00042: Tried moving base with joystick while using TH gains the same that come out with 
+Q(3,3)=1 and using KD_WH the one which comes out when Q(3,3)=100. The response to joystick
+has improved. Position control not employed.
+
+- 00049: Tried to make the system follow a sinusoidal trajectory with amp=1 and freq=1/6
+the same gains as tried in 00042. The system refuses to move at all. Only the pendulum oscillates.
+
+- 00050: Tried to make the system follow a sinusoidal trajectory with amp=1 and freq=1/20
+the same gains as tried in 00042. The system refuses to move at all. Only the pendulum oscillates
+but with a smaller frequency this time (as expected).
+
+- 00051: Repeated the above experiment with a KD_TH gain double the previous (that comes out when
+Q(3,3)=500). The system blew up in the balancing mode even before starting the track_sine mode.
+
+- 00052-57: Ignore
+
+- 00053:

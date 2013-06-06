@@ -31,8 +31,9 @@ filter_kalman_t *kf;
 DIR * dataFolder;
 struct dirent *dataFolderEntries;
 FILE * dumpFile;
-double t_elapsed, t_elapsed_using_dt, t_elapsed_using_dt_js;	
-double error_th, derror_th;	
+double t_elapsed, t_elapsed_using_dt, t_elapsed_using_dt_js, t_sine;
+double error_th, derror_th;
+double dq1_ref=0.0;	
 #define RAD2DEG(x) (x*180.0/M_PI)
 
 // Gains
@@ -42,8 +43,8 @@ double K_TH_toSit	= 240;
 double K_DTH_toSit   = 60;
 static const double KP_TH	= 309.0833;
 static const double KD_TH   = 38.6935;
-static const double KP_WH	 = 3;				
-static const double KD_WH	 = 9.4593;				
+static const double KP_WH	 = 0;//10;				
+static const double KD_WH	 = 5;				
 static const double KD_WH_LR = 15.0;
 /* ********************************************************************************************* */
 // Initialize the program
@@ -59,29 +60,17 @@ void init() {
 
 	// Initialize the motors with daemon context, channel names and # of motors
 	somatic_motor_init( &krang_cx.d_cx, &amc, 2, "amc-cmd", "amc-state");
-	somatic_motor_init( &krang_cx.d_cx, &waist, 2, "waist-cmd", "waist-state");
 
 	// Set the min and maximum position and velocity valid/limit values for motors
 	double ** limits[] = { 
 		&amc.pos_valid_min, &amc.vel_valid_min, &amc.pos_limit_min, &amc.vel_limit_min, 
-		&waist.vel_valid_max, &waist.pos_limit_max, &waist.vel_limit_max,  &amc.pos_valid_max,
-		&amc.vel_valid_max, &amc.pos_limit_max, &amc.vel_limit_max, &waist.vel_valid_max, 
-		&waist.pos_limit_max, &waist.vel_limit_max};
-	for(size_t i=0; i<7; i++) { aa_fset(*limits[i],-1024.1, 2); }
-	for(size_t i=7; i<14; i++) { aa_fset(*limits[i],1024.1, 2); }
-	aa_fset( waist.pos_valid_min, -5, 2);
-	aa_fset( waist.pos_valid_max, 5, 2);
+	  &amc.pos_valid_max,	&amc.vel_valid_max, &amc.pos_limit_max, &amc.vel_limit_max};
+	for(size_t i=0; i<4; i++) { aa_fset(*limits[i],-1024.1, 2); }
+	for(size_t i=4; i<8; i++) { aa_fset(*limits[i],1024.1, 2); }
 	usleep(1e5);
 
 	// Update and reset motors
-//	somatic_motor_update(&krang_cx.d_cx, &waist);
-//	somatic_motor_cmd(&krang_cx.d_cx, &waist, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 2, NULL);
 	somatic_motor_update(&krang_cx.d_cx, &amc);
-//	somatic_motor_cmd(&krang_cx.d_cx, &amc, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 2, NULL);
-	
-	// Check waist positions
-//	if (fabs(waist.pos[0] + waist.pos[1]) > 2e-2)
-//		fprintf(stderr, "ERROR: Waist position mismatched: (%f, %f)\n", waist.pos[0], -waist.pos[1]);
 
 	// Open the IMU channel
 	int r  = ach_open( &imu_chan, "imu-data" , NULL );
@@ -184,17 +173,14 @@ void readSensors(double dt) {
 	kf->z[5] = amc.vel[1]+kf->z[1]; // = abs. R wheel vel.
 
 	// Read waist position and speed
-	somatic_motor_update(&krang_cx.d_cx, &waist);
-	kf->z[6] = waist.pos[0];
-	kf->z[7] = waist.vel[0];
+	kf->z[6] = 117*M_PI/180.0;;
+	kf->z[7] = 0.0;
 	
 	// If first reading, set motor offsets
 	static bool offsetDone=0;
 	if(offsetDone==0) {
 		double amc_pos_offset[2] = {-kf->z[2], -kf->z[4]};
 		aa_fcpy(amc.pos_offset, amc_pos_offset, 2);
-		double waist_pos_offset[2] = {117*M_PI/180-kf->z[6],-117*M_PI/180+kf->z[6]};
-		aa_fcpy(waist.pos_offset, waist_pos_offset, 2);
 
 		kf->z[2] = 0.0;
 		kf->z[4] = 0.0;
@@ -203,10 +189,6 @@ void readSensors(double dt) {
 		return;
 	}
 	
-	//static int c=0;
-	//if(++c<20) {
-  //		printf("pos0: %.5lf, vel0: %.5lf, pos1: %.5lf, vel1: %.5lf\n", kf->z[2], kf->z[3], kf->z[4], kf->z[5]);
-  //	}
 	// --------------------------------------------------------------------
 	// Filter the read values	
 	static bool firstIteration=1;
@@ -283,10 +265,17 @@ void readSensors(double dt) {
 	Eigen::Vector3d com = dynamics.com(state.q2, state.q3, 0.0, lq, rq);
 
 	// Compute the error terms
-	error_th = atan2(com(0), com(1));// + 4*M_PI/180.0;
+	// making it zero for an experiment
+	error_th = 0;//atan2(com(0), com(1));// + 4*M_PI/180.0;
 	derror_th = state.dq2;
-	if(error_th < -STABLE_TH_RANGE ) { if(state.mode == KRANG_MODE_BALANCE)	state.mode = KRANG_MODE_TOSIT; }
-	if(error_th > STABLE_TH_RANGE ) { if(state.mode == KRANG_MODE_BALANCE)	state.mode = KRANG_MODE_HALT; }
+	if(error_th < -STABLE_TH_RANGE ) { 
+		if(state.mode == KRANG_MODE_BALANCE || state.mode == KRANG_MODE_TRACK_SINE)	
+			state.mode = KRANG_MODE_TOSIT;
+	}
+	if(error_th > STABLE_TH_RANGE ) {
+		if(state.mode == KRANG_MODE_BALANCE || state.mode == KRANG_MODE_TRACK_SINE)	
+			state.mode = KRANG_MODE_HALT;
+	}
 }
 
 /* ********************************************************************************************* */
@@ -294,17 +283,22 @@ void readSensors(double dt) {
 void readJoystick( double dt ) {
 	
 	// Get the values
-	static char b [10];
+	static char b [10], b_prev[10];
 	static double x [6];
-	
+
+	// PRevious button states
+	for(size_t i = 0; i < 10; i++) 
+		b_prev[i] = b[i];
+
 	// Get the message and check output is OK.
 	int r = 0;
 	Somatic__Joystick *js_msg = 
 			SOMATIC_GET_LAST_UNPACK( r, somatic__joystick, &protobuf_c_system_allocator, 4096, &js_chan );
 	if((ACH_OK == r || ACH_MISSED_FRAME == r) && js_msg != NULL )
 	{
-		for(size_t i = 0; i < 10; i++) 
+		for(size_t i = 0; i < 10; i++) {
 			b[i] = js_msg->buttons->data[i] ? 1 : 0;
+		}
 		memcpy(x, js_msg->axes->data, sizeof(x));
 	}	
 	// Set the forward/backward ad left/right joystick axes values to zero
@@ -313,29 +307,44 @@ void readJoystick( double dt ) {
 	t_elapsed_using_dt_js += dt;
 
 	// Check for the start, quit, sit and stand conditions
-	// Start Command
-	if(b[6] && b[7]) { if(state.mode == KRANG_MODE_HALT) { state.mode=KRANG_MODE_SIT; printf("MODE_SIT\n"); }}
-	// Quit Command
+	if(b[6] && b[7]) { if(state.mode == KRANG_MODE_HALT) { state.mode=KRANG_MODE_SIT; printf("MODE_SIT\n"); dq1_ref=0.0; }}
 	else if(b[8]) { state.mode = KRANG_MODE_QUIT; }
-	// Sit Command
-//	else if(b[9] && !b[5]) { if(state.mode == KRANG_MODE_BALANCE) state.mode = KRANG_MODE_TOSIT; } 
-	// Stand Command
-	else if(b[9] && b[5]) { if(state.mode == KRANG_MODE_SIT) state.mode = KRANG_MODE_BALANCE; }
+	//	else if(b[9] && !b[5]) { if(state.mode == KRANG_MODE_BALANCE) state.mode = KRANG_MODE_TOSIT; } 
+	else if(b[9] && b[5]) { if(state.mode == KRANG_MODE_SIT || state.mode == KRANG_MODE_TRACK_SINE) { state.mode = KRANG_MODE_BALANCE; dq1_ref=0.0; } }
+	else if(b[5] && b[0]) { if(state.mode == KRANG_MODE_BALANCE) { state.mode = KRANG_MODE_TRACK_SINE; t_sine=0.0; } }
+	// If button 4 is pressed (indexed 3) in balance-mode increase dq1_ref by 0.01
+	else if(b_prev[3] && !b[3]) { if(state.mode == KRANG_MODE_BALANCE) dq1_ref+=0.01; printf("dq1_ref=%lf\n",dq1_ref); }
+	// If button 2 is pressed (indexed 1) in balance-mode decrease dq1_ref by 0.01
+	else if(b_prev[1] && !b[1]) { if(state.mode == KRANG_MODE_BALANCE) dq1_ref-=0.01; printf("dq1_ref=%lf\n",dq1_ref); }
+	// If button 3 is pressed (indexed 2) in balance-mode make q1_ref=0
+	else if(b_prev[2] && !b[2]) { if(state.mode == KRANG_MODE_BALANCE) dq1_ref=0.0; printf("dq1_ref=%lf\n",dq1_ref); }
 	// Check for the wheel control - no shoulder button should be pressed
 	// None of the shoulder buttons should be pressed
 	else if(!b[4] && !b[5] && !b[6] && !b[7]) {
 		state.js_fb = -x[1];	// range [-1, 1]
 		state.js_lr =  x[2];	// range [-1, 1]
 		
-		// Velocity control when sitting
-		state.dq1_ref[0] = MAX_LIN_VEL*state.js_fb;
-		state.dq1_ref[1] = state.dq1_ref[0];
+		// Generate velocity reference based on the mode
+		// If we are not in the TRACK_SINE mode, use the joystick to generate velocity reference
+		if( state.mode != KRANG_MODE_TRACK_SINE )	{
+			// Velocity control when sitting
+			state.dq1_ref[0] = MAX_LIN_VEL*state.js_fb;
+			state.dq1_ref[1] = state.dq1_ref[0];
 
-		// Moving left/right: Velocity control for heading
-		double max_ang_vel = 2.0;
-		state.dq1_ref[0] += max_ang_vel*state.js_lr;
-		state.dq1_ref[1] -= max_ang_vel*state.js_lr;
-
+			// Moving left/right: Velocity control for heading
+			double max_ang_vel = 2.0;
+			state.dq1_ref[0] += max_ang_vel*state.js_lr;
+			state.dq1_ref[1] -= max_ang_vel*state.js_lr;
+			/*state.dq1_ref[0] = dq1_ref;
+			state.dq1_ref[1] = dq1_ref;*/
+		}
+		// If in TRACK_SINE mode ignore joystick and generate a sinusoidal velocity reference
+		else {
+			double freq=1/6.0; // One cycle in six seconds
+			state.dq1_ref[0] = sin(2*M_PI*freq*t_sine);
+			state.dq1_ref[1] = sin(2*M_PI*freq*t_sine);
+			t_sine += dt;
+		}
 		// integrate
 		state.q1_ref[0] += dt * state.dq1_ref[0];
 		state.q1_ref[1] += dt * state.dq1_ref[1];
@@ -389,7 +398,8 @@ void controlWheels(double dt) {
 		// --------------------------------------------------------------------------------------------
 		// Balance Mode: Control imu angle to bring COM right above the wheel axisand control wheels
 		// based on on joystick commands
-		case KRANG_MODE_BALANCE: {
+		case KRANG_MODE_BALANCE:
+		case KRANG_MODE_TRACK_SINE: {
 			static bool override=0;
 			if(!override) { 
 				printf("Setting the override mode!\n");
@@ -484,9 +494,7 @@ void destroy() {
 	ach_close(&imu_chan);
 	somatic_motor_digital_out(&krang_cx.d_cx, &amc, 19, 0);
 //	somatic_motor_cmd(&krang_cx.d_cx, &amc, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 2, NULL);
-//	somatic_motor_cmd(&krang_cx.d_cx, &waist, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 2, NULL);
 	somatic_motor_destroy(&krang_cx.d_cx, &amc);
-	somatic_motor_destroy(&krang_cx.d_cx, &waist);
 	filter_kalman_destroy( kf );
 	delete( kf );
 	somatic_d_destroy( &krang_cx.d_cx );

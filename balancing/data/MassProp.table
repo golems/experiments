@@ -20,6 +20,9 @@ RSTP    0    1    0.295   -0.250    0.000    2.060  -14.670    0.000   -3.150
 FMAT    0    1    0.300    0.000    0.000    0.000    8.570    0.000    0.000
 RMAT    0    1    0.300    0.000    0.000    0.000   -8.570    0.000    0.000
 COMP    0    1    6.370    8.500   10.830   11.550   -7.720    6.880    9.010
+# Note the COM of vision computer is assumed tobe at the center while it is 
+# off by a bit (see pictures)
+VISN		0		 1    1.640    0.000    0.000    0.000    9.000    3.000   23.500
 # PRT_X,Y,Z come from the COM text file in /doc/krang/Photos and Scans/Base -
 # COM - 3-6-2013/ and  SEC_X,Y,Z are the co-ordinates of the front, right,
 # bottom corner of the wheel tube
