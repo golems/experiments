@@ -73,4 +73,14 @@ of the two wheels started drifting slowly in opposite directions the error profi
 changing.
 
 - 00086: KP_WH is now 20. Overshoot in the positive direction of position is high while
-overshoot in the negative direction of velocity is high.
+overshoot in the negative direction of velocity is high
+
+- 00087: Spin Angle and spin speed control added and repeated the above experiment, and now,
+there is no spin at all. The robot keeps moving in a straight line. The graph plots
+now plot the spin angle and speed too. We see that the robot has been trying to spin left
+but was constantly readjusted to stay straight. This explains the drift that was taking
+place in the earlier experiments. Now why does this drift take place? This is because
+the center of gravity of krang is shifted more towards the left as compared to the right
+and so the left wheel's response to the torque on the wheel is slower as compared to the 
+right wheel.
+

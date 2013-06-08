@@ -45,7 +45,13 @@ static const double KP_TH	= 309.0833;
 static const double KD_TH   = 38.6935;
 static const double KP_WH	 = 20;				
 static const double KD_WH	 = 15.8498;				
+static const double KP_WH_LR = 15.0;
 static const double KD_WH_LR = 15.0;
+
+// Parameters
+double wheelRadius = 10.5; // inches
+double distanceBetweenWheels = 27.375; // inches
+
 /* ********************************************************************************************* */
 // Initialize the program
 void init() {
@@ -119,13 +125,14 @@ void init() {
 	fprintf(dumpFile, "motor current (control input) alon with time stamps for ease of plotting\n");
 	fprintf(dumpFile, "# Sit mode gains: Kp_sit=%lf, Kv_sit=%lf\n", Kp_sit, Kv_sit);
 	fprintf(dumpFile, "# To-Sit mode gains: K_TH_toSit=%lf, K_DTH_toSit=%lf\n", K_TH_toSit, K_DTH_toSit);
-	fprintf(dumpFile, "# Balance mode gains: KP_TH=%lf, KD_TH=%lf, KP_WH=%lf, KD_WH=%lf, KP_LR=%lf\n",
-		KP_TH, KD_TH, KP_WH, KD_WH, KD_WH_LR);
+	fprintf(dumpFile, "# Balance mode gains: KP_TH=%lf, KD_TH=%lf, KP_WH=%lf, KD_WH=%lf, KP_LR=%lf, "
+		"KD_LR=%lf\n", KP_TH, KD_TH, KP_WH, KD_WH, KP_WH_LR, KD_WH_LR);
 	fprintf(dumpFile, "# 1.time 2.error_th 3.rawImuPos 4.rawImuVel 5.rawLWhPos 6.rawLWhVel "
 		"7.rawRWhPos 8.rawRWhVel 9.rawWaistPos 10.rawWaistVel	11.filtImuPos 12.filtImuVel "
 		"13.filtLWhPos 14.filtLWhVel 15.filtRWhPos 16.filtRWhVel 17.filtWaistPos 18.filtWaistVel "
 		"19.avgWhPos 20.avgWhVel 21.jsFB 22.jsLR 23.refLWhPos 24.refLWhVel 25.refRWhPos 26.refRWhVel"
-		"27.avgRefWhPos 28.avgRefWhVel 29.cmdLWhCur 30.cmdRWhCur 31.rawLWhCur 32.rawRWhCur 33.mode\n");
+		"27.avgRefWhPos 28.avgRefWhVel 29.cmdLWhCur 30.cmdRWhCur 31.rawLWhCur 32.rawRWhCur 33.mode "
+		"34.spin 35.spinSpeed\n");
 }
 
 /* ********************************************************************************************* */
@@ -254,6 +261,11 @@ void readSensors(double dt) {
 	// Set the wheel position by taking the mean of the two wheel encoders 
 	state.q1 = (state.q1_0 + state.q1_1)/2.0;
 	state.dq1 = (state.dq1_0 + state.dq1_1)/2.0;
+	
+	// Determine the spin and spin rate of the robot
+	state.spin = wheelRadius * (state.q1_1 - state.q1_0) / distanceBetweenWheels;
+	state.dspin = wheelRadius * (state.dq1_1 - state.dq1_0) / distanceBetweenWheels;
+	
 	// --------------------------------------------------------------------
 	// If IMU angle is below the sitting angle and if current mode is TOSIT, change mode toSIT
 	double imu = state.q2, epsilon=.001;
@@ -355,6 +367,10 @@ void readJoystick( double dt ) {
 		// avg ref wheel pos/vel for forward/backward control
 		state.pref = (state.q1_ref[0] + state.q1_ref[1]) / 2.0;
 		state.vref = (state.dq1_ref[0] + state.dq1_ref[1]) / 2.0;
+
+		// Reference Values for robot spin and spin rate
+		state.spin_ref = 0.0;
+		state.dspin_ref = 0.0;
 	} 
 }
 
@@ -412,8 +428,14 @@ void controlWheels(double dt) {
 			double derror_wh = state.dq1 - state.vref;
 
 			// Control Law
+			double offset;
 			double u = ((KP_TH * error_th) + (KD_TH * derror_th)) + ((KD_WH *derror_wh) + (KP_WH * error_wh));
-			double offset = KD_WH_LR * state.js_lr;
+			if(state.mode == KRANG_MODE_BALANCE) { 
+				offset = KD_WH_LR * state.js_lr;
+			} else {
+				offset = KP_WH_LR*(state.spin-state.spin_ref) + KD_WH_LR*(state.dspin-state.dspin_ref);
+			}
+			
 			state.u[0] = u + offset;
 			state.u[1] = u - offset;
 			bool debug=1; static int debug_cnt=0;
@@ -441,12 +463,13 @@ inline void dumpToLog( char * log, int index ) {
 	sprintf(log+index, "%011.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf "	
 		"%09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf "	
 		"%06.3lf %06.3lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %07.3lf %07.3lf %07.3lf "
-		"%07.3lf %d\n", 			
+		"%07.3lf %d %09.5lf %09.5lf %9.5lf %9.5lf\n", 			
 		t_elapsed, error_th, kf->z[0], kf->z[1], amc.pos[0], amc.vel[0], amc.pos[1], amc.vel[1], 
 		kf->z[6],	kf->z[7],	state.q2, state.dq2, state.q1_0, state.dq1_0, state.q1_1, state.dq1_1, 
 		state.q3,	state.dq3, state.q1, state.dq1, state.js_fb, state.js_lr, state.q1_ref[0], 
 		state.dq1_ref[0],	state.q1_ref[1], state.dq1_ref[1], state.pref, state.vref, state.u[0], 
-		state.u[1], amc.cur[0],	amc.cur[1], state.mode);
+		state.u[1], amc.cur[0],	amc.cur[1], state.mode, state.spin, state.dspin, state.spin_ref,
+		state.dspin_ref);
 }
 /* ********************************************************************************************* */
 // This is the main loop that interfaces with the I/O from the joystick.
@@ -483,7 +506,7 @@ void run() {
 			// Write to the log string
 			dumpToLog(log, log_index);
 			// Increment the index
-			log_index+=310;
+			log_index+=350;
 			// If the log string overflows, wrap around
 			if(log_index>50000000){ log_index=0; }
 			log_interleave_count=0;
