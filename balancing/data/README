@@ -65,3 +65,5 @@ trajectory is doubled. We see the center is only slightly shifted, while trackin
 reduced significantly. NOTE: During the eight and ninth positive cycles, a brick had 
 obstructed the left wheel. Also, after the track-sine mode was changed to the balcning node,
 then joystick was used to bring the robot back to its position.
+
+- 00084: The same experiment is repeated is a clean fashion. Results are not different. 
