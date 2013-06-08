@@ -340,9 +340,9 @@ void readJoystick( double dt ) {
 		}
 		// If in TRACK_SINE mode ignore joystick and generate a sinusoidal velocity reference
 		else {
-			double freq=1/12.0; // One cycle in six seconds
-			state.dq1_ref[0] = 2*M_PI*freq*cos(2*M_PI*freq*t_sine);
-			state.dq1_ref[1] = 2*M_PI*freq*cos(2*M_PI*freq*t_sine);
+			double freq=1/12.0; double Amplitude=2.0; // One cycle in six seconds
+			state.dq1_ref[0] = Amplitude*2*M_PI*freq*cos(2*M_PI*freq*t_sine);
+			state.dq1_ref[1] = Amplitude*2*M_PI*freq*cos(2*M_PI*freq*t_sine);
 			t_sine += dt;
 		}
 		// integrate
