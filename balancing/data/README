@@ -60,4 +60,8 @@ its initial heading direction over time.
 has changed. This indicates that the results are not repeatable. More observations are needed
 to determine the cause of this non-repeatability.
 
-
+- 00083: Keeping the same gains as above the amplitude of the sinusodial reference 
+trajectory is doubled. We see the center is only slightly shifted, while tracking error is
+reduced significantly. NOTE: During the eight and ninth positive cycles, a brick had 
+obstructed the left wheel. Also, after the track-sine mode was changed to the balcning node,
+then joystick was used to bring the robot back to its position.
