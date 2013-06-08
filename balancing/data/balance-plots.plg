@@ -47,8 +47,8 @@ set ytics font ",10"
 set xrange [xstart:]
 set size 0.5,0.5
 set xlabel 'seconds'; set ylabel 'rad or rad/sec'
-set origin 0,0.5; plot filename using 1:2 title 'thetaErr' with lines, filename using 1:($23-$13) title 'L Wh Pos Err' with lines, filename using 1:($24-$14) title 'R Wh Pos Err' with lines, \
-	 filename using 1:($25-$15) title 'L Wh Vel Err' with lines, filename using 1:($26-$16) title 'R Wh Vel Err' with lines, filename using 1:($27-$19) title 'Avg Wh Pos Err' with lines, \
+set origin 0,0.5; plot filename using 1:2 title 'thetaErr' with lines, filename using 1:($23-$13) title 'L Wh Pos Err' with lines, filename using 1:($24-$14) title 'L Wh Vel Err' with lines, \
+	 filename using 1:($25-$15) title 'R Wh Pos Err' with lines, filename using 1:($26-$16) title 'R Wh Vel Err' with lines, filename using 1:($27-$19) title 'Avg Wh Pos Err' with lines, \
  	 filename using 1:($28-$20) title 'Avg Wh Vel Err' with lines
 set xlabel 'seconds';
 set origin 0.5,0.5; plot filename using 1:21 title 'JS FB' with lines,  filename using 1:22 title 'JS LR' with lines, filename using 1:($33-3)/3 title 'Mode' with lines
