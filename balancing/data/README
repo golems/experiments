@@ -66,4 +66,11 @@ reduced significantly. NOTE: During the eight and ninth positive cycles, a brick
 obstructed the left wheel. Also, after the track-sine mode was changed to the balcning node,
 then joystick was used to bring the robot back to its position.
 
-- 00084: The same experiment is repeated is a clean fashion. Results are not different. 
+- 00084: The same experiment is repeated is a clean fashion. Results are not different.
+
+- 00085: Changed KP_WH from 10 to 15. Initially the errors were reduced. But as the centers
+of the two wheels started drifting slowly in opposite directions the error profile is 
+changing.
+
+- 00086: KP_WH is now 20. Overshoot in the positive direction of position is high while
+overshoot in the negative direction of velocity is high.

@@ -43,7 +43,7 @@ double K_TH_toSit	= 240;
 double K_DTH_toSit   = 60;
 static const double KP_TH	= 309.0833;
 static const double KD_TH   = 38.6935;
-static const double KP_WH	 = 15;				
+static const double KP_WH	 = 20;				
 static const double KD_WH	 = 15.8498;				
 static const double KD_WH_LR = 15.0;
 /* ********************************************************************************************* */
