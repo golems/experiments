@@ -84,3 +84,8 @@ the center of gravity of krang is shifted more towards the left as compared to t
 and so the left wheel's response to the torque on the wheel is slower as compared to the 
 right wheel.
 
+- 00088: Sinusoidal reference trajectory for spin angle. Didn't reach full 90 degrees.
+And the center of the robot had a net motion towards it's exact right side. This is 
+because we see that the x value kept going non-zero from zero and so the robot's center
+was steered in the heading direction (that was continuously changing). A video was 
+made of this experiment.
