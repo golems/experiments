@@ -53,3 +53,11 @@ observed. But the turning never happened this time. This time, both the wheels e
 forward drift in the average displacements causing the heading direction to remain fixed.
 Also, we put a turning disturbance on the robot but the controller tends to get back to
 its initial heading direction over time.
+
+- 00081: The gain for KP_WH in the last experiment was 5.0. I changed it to 10.0. 
+
+- 00082: Same experiment repeated on after 37 hours. The response of wheel pos/vel controller
+has changed. This indicates that the results are not repeatable. More observations are needed
+to determine the cause of this non-repeatability.
+
+
