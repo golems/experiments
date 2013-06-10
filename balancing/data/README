@@ -89,3 +89,27 @@ And the center of the robot had a net motion towards it's exact right side. This
 because we see that the x value kept going non-zero from zero and so the robot's center
 was steered in the heading direction (that was continuously changing). A video was 
 made of this experiment.
+
+- 00089: Cicular trajectory code tried for the first time. Radius of the circle was assumed
+to be 60 inches. Time period for one round was assumed to 10 seconds. Trajectories for 
+the wheel velocities and positions and robot spin velocity and position were derived. During
+the experiment, the robot was started from the center of the room. Using the joystick in 
+the balance mode, it was commanded to go to a corner so that we have space for the circular
+trajectory. Then as the mode was changed to tracking mode, the robot didn't follow
+a neat circle. It rather followed somthing like this:
+							 __
+					  	|  \
+								  \
+									|
+As in a sharp right turn and then not a very sharp trajectory. Since, it was then about to
+hit a table, I braught it back to the balance mode using the joystick. I then
+repositioned it back to the corner and stated the program. This time it turned left. This 
+was very weird. So before it could hit the wall I stopped the program.
+Looking at the diagnostics, it seems that the original errors in the wheel positions caused
+by joystick control play a role. The initial values of the position references are taken 
+from the previous mode in the program (i.e. the balance mode). If in this mode, the joystick
+is used to move the robot around, the values of references and the actual position values
+are not the same (look at balance-plot-00089-b). This causes uncertain reference values
+of the wheel positions leading to unpredicted behavior.
+
+

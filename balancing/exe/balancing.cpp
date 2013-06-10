@@ -367,8 +367,8 @@ void readJoystick( double dt ) {
 			//state.dq1_ref[1] = (state.vref + distanceBetweenWheels*state.dspin_ref)/(2*wheelRadius);
 			
 			// Used only for following a circle trajectory
-			double circleRadius = 60.0; // inches 
-			double timePerRound = 30.0; // seconds
+			double circleRadius = 30.0; // inches 
+			double timePerRound = 10.0; // seconds
 			state.dq1_ref[0]=M_PI*(2*circleRadius+distanceBetweenWheels)/(wheelRadius*timePerRound);
 			state.dq1_ref[1]=M_PI*(2*circleRadius-distanceBetweenWheels)/(wheelRadius*timePerRound);
 			state.dspin_ref=-2*M_PI/timePerRound;
