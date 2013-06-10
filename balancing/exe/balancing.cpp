@@ -352,16 +352,26 @@ void readJoystick( double dt ) {
 		}
 		// If in TRACK_SINE mode ignore joystick and generate a sinusoidal velocity reference
 		else {
+			// Following three line should be used only for forward backward only
 			//double freq=1/12.0; double Amplitude=2.0; // One cycle in six seconds
 			//state.dq1_ref[0] = Amplitude*2*M_PI*freq*cos(2*M_PI*freq*t_sine);
 			//state.dq1_ref[1] = Amplitude*2*M_PI*freq*cos(2*M_PI*freq*t_sine);
 
-			state.pref=0.0; state.vref=0.0;
-			double freq=1/12.0; double Amplitude=M_PI/2; // One cycle in six seconds
-			state.dspin_ref= Amplitude*2*M_PI*freq*cos(2*M_PI*freq*t_sine);
-
-			state.dq1_ref[0] = (state.vref - distanceBetweenWheels*state.dspin_ref)/(2*wheelRadius);
-			state.dq1_ref[1] = (state.vref + distanceBetweenWheels*state.dspin_ref)/(2*wheelRadius);
+			// Following five (or six if including the gap line) lines should be used only for left/right
+			// turning
+			//state.pref=0.0; state.vref=0.0;
+			//double freq=1/12.0; double Amplitude=M_PI/2; // One cycle in six seconds
+			//state.dspin_ref= Amplitude*2*M_PI*freq*cos(2*M_PI*freq*t_sine);
+			//
+			//state.dq1_ref[0] = (state.vref - distanceBetweenWheels*state.dspin_ref)/(2*wheelRadius);
+			//state.dq1_ref[1] = (state.vref + distanceBetweenWheels*state.dspin_ref)/(2*wheelRadius);
+			
+			// Used only for following a circle trajectory
+			double circleRadius = 60.0; // inches 
+			double timePerRound = 30.0; // seconds
+			state.dq1_ref[0]=M_PI*(2*circleRadius+distanceBetweenWheels)/(wheelRadius*timePerRound);
+			state.dq1_ref[1]=M_PI*(2*circleRadius-distanceBetweenWheels)/(wheelRadius*timePerRound);
+			state.dspin_ref=-2*M_PI/timePerRound;
 			
 			t_sine += dt;
 		}
@@ -369,16 +379,15 @@ void readJoystick( double dt ) {
 		state.q1_ref[0] += dt * state.dq1_ref[0];
 		state.q1_ref[1] += dt * state.dq1_ref[1];
 
-		//printf("t_elapsed=%lf, t_elapsed_using_dt=%lf, t_elapsed_using_dt_js=%lf dq1_ref=%lf, q1_ref=%lf\n", 
-		//	t_elapsed, t_elapsed_using_dt, t_elapsed_using_dt_js, state.dq1_ref[0], state.q1_ref[0] );
-
 		// avg ref wheel pos/vel for forward/backward control
 		state.pref = (state.q1_ref[0] + state.q1_ref[1]) / 2.0;
 		state.vref = (state.dq1_ref[0] + state.dq1_ref[1]) / 2.0;
 
 		// Reference Values for robot spin and spin rate
+		// Following 2 lines should only be used for fwd/back
 		//state.spin_ref = 0.0;
 		//state.dspin_ref = 0.0;
+		// The following line should only be used for left/right and circle trajectory
 		state.spin_ref = wheelRadius * (state.q1_ref[1]-state.q1_ref[0]) / distanceBetweenWheels;
 	} 
 }
