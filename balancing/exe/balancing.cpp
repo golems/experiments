@@ -323,7 +323,15 @@ void readJoystick( double dt ) {
 	else if(b[8]) { state.mode = KRANG_MODE_QUIT; }
 	//	else if(b[9] && !b[5]) { if(state.mode == KRANG_MODE_BALANCE) state.mode = KRANG_MODE_TOSIT; } 
 	else if(b[9] && b[5]) { if(state.mode == KRANG_MODE_SIT || state.mode == KRANG_MODE_TRACK_SINE) { state.mode = KRANG_MODE_BALANCE; dq1_ref=0.0; } }
-	else if(b[5] && b[0]) { if(state.mode == KRANG_MODE_BALANCE) { state.mode = KRANG_MODE_TRACK_SINE; t_sine=0.0; } }
+	else if(b[5] && b[0]) { if(state.mode == KRANG_MODE_BALANCE) { 
+			state.q1_ref[0]=state.q1_0;
+			state.q1_ref[1]=state.q1_1;
+			state.spin_ref = wheelRadius * (state.q1_ref[1]-state.q1_ref[0]) / distanceBetweenWheels;
+			state.pref = (state.q1_ref[0] + state.q1_ref[1]) / 2.0;
+			state.mode = KRANG_MODE_TRACK_SINE; 
+			t_sine=0.0; 
+		} 
+	}
 	// If button 4 is pressed (indexed 3) in balance-mode increase dq1_ref by 0.01
 	else if(b_prev[3] && !b[3]) { if(state.mode == KRANG_MODE_BALANCE) dq1_ref+=0.01; printf("dq1_ref=%lf\n",dq1_ref); }
 	// If button 2 is pressed (indexed 1) in balance-mode decrease dq1_ref by 0.01

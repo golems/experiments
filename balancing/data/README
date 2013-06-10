@@ -112,4 +112,7 @@ is used to move the robot around, the values of references and the actual positi
 are not the same (look at balance-plot-00089-b). This causes uncertain reference values
 of the wheel positions leading to unpredicted behavior.
 
-
+- 00090: Code changed to make the wheel position references equal to zero as soon as the 
+mode is changed to TRACK_SINE mode. Beautiful cirle following took place. Did tracking
+twice. The first time over, had to stop it in the middle as the safety rope stretched
+a bit too far. The second time over though, full two rounds were done very neatly.
