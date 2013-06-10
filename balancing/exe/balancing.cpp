@@ -265,6 +265,12 @@ void readSensors(double dt) {
 	// Determine the spin and spin rate of the robot
 	state.spin = wheelRadius * (state.q1_1 - state.q1_0) / distanceBetweenWheels;
 	state.dspin = wheelRadius * (state.dq1_1 - state.dq1_0) / distanceBetweenWheels;
+
+	// Determine the x and y values of the robot by integrating the x and y components of the heading speed
+	// x-axis is assumed to be the initial position of wheel axis from left to right
+	// y-axis is assumed to be the initial forward direction
+	state.x+=-wheelRadius*0.0254*state.dq1*sin(state.spin)*dt;
+	state.y+= wheelRadius*0.0254*state.dq1*cos(state.spin)*dt;
 	
 	// --------------------------------------------------------------------
 	// If IMU angle is below the sitting angle and if current mode is TOSIT, change mode toSIT
