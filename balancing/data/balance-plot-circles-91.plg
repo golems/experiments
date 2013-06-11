@@ -1,0 +1,15 @@
+# Note: To use this file type this on command line:
+# >> gnuplot -e "filename='balance-dump-00021.dat';out1='balance-dump-00021-a.png';out2='balance-dump-00021-b.png';out3='balance-dump-00021-c.png';out4='balance-sump-00021-d.png';xstart=5;" balance-spin-xy-plots.plg
+
+
+
+set term pngcairo size 960,960 
+set output 'circles.png' 
+set key font ",10"
+set xtics font ",10"
+set ytics font ",10" 
+set xlabel 'x'; set ylabel 'y'
+set xrange [-2:2]; set yrange [-2:2]
+set origin 0,0
+set size 1,1
+plot 'balance-dump-00091.dat' using 38:39 every ::14242::15149 title 'first circle', 'balance-dump-00091.dat' using 38:39 every ::15149::16056 title 'second circle','balance-dump-00091.dat' using 38:39 every ::16056::16963 title 'third circle','balance-dump-00091.dat' using 38:39 every ::16963::17870 title 'fourth circle','balance-dump-00091.dat' using 38:39 every ::17870::18777 title 'fifth circle'

@@ -116,3 +116,8 @@ of the wheel positions leading to unpredicted behavior.
 mode is changed to TRACK_SINE mode. Beautiful cirle following took place. Did tracking
 twice. The first time over, had to stop it in the middle as the safety rope stretched
 a bit too far. The second time over though, full two rounds were done very neatly.
+
+- 00091: Code for generating x-y values online implemented and tried for following
+five rounds of circular trajectory. It worked fine.
+
+- 00092: Another run of the above experiment for making a video.
