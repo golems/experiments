@@ -91,6 +91,11 @@ void init (somatic_d_t& daemon_cx, somatic_motor_t& llwa, somatic_motor_t& rlwa,
 	initArm(daemon_cx, llwa, "llwa");
 	initArm(daemon_cx, rlwa, "rlwa");
 
+	// Initialize the joystick channel
+	int r = ach_open(&js_chan, "joystick-data", NULL);
+	aa_hard_assert(r == ACH_OK, "Ach failure '%s' on opening Joystick channel (%s, line %d)\n", 
+		ach_result_to_string(static_cast<ach_status_t>(r)), __FILE__, __LINE__);
+	
 	// Open the state and transform channels 
 	somatic_d_channel_open(&daemon_cx, &state_chan, "krang-state", NULL);
 	somatic_d_channel_open(&daemon_cx, &chan_transform, "chan_transform", NULL);	
@@ -161,8 +166,8 @@ void setJoystickInput (somatic_d_t& daemon_cx, ach_channel_t& js_chan, somatic_m
 	if(debug) {
 		cout << "\nx: ";
 		for(size_t i = 0; i < 6; i++) cout << x[i] << ", ";
-		cout << "\nb: " << endl;
-		for(size_t i = 0; i < 10; i++) cout << b[i] << ", ";
+		cout << "\nb: ";
+		for(size_t i = 0; i < 10; i++) cout << "'" << (b[i] ? '1' : '0') << "', ";
 	}
 
 	// Check the buttons for each arm and apply velocities accordingly
@@ -179,7 +184,7 @@ void setJoystickInput (somatic_d_t& daemon_cx, ach_channel_t& js_chan, somatic_m
 		else if(!b[lowerButton] && b[higherButton]) memcpy(dq, x, 4*sizeof(double));
 
 		// Set the input for this arm
-		somatic_motor_cmd(&daemon_cx, arm[arm_idx], SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7);
+		somatic_motor_cmd(&daemon_cx, arm[arm_idx], SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7, NULL);
 	}
 	
 	// Free the joystick message

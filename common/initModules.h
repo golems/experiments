@@ -49,7 +49,7 @@ void initGripper (somatic_d_t& daemon_cx, somatic_motor_t& gripper, const char* 
 
 	// Update and reset them
 	somatic_motor_update(&daemon_cx, &gripper);
-	somatic_motor_cmd(&daemon_cx, &gripper, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 1);
+	somatic_motor_cmd(&daemon_cx, &gripper, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 1, NULL);
 	usleep(1e5);
 }
 
@@ -77,6 +77,6 @@ void initArm (somatic_d_t& daemon_cx, somatic_motor_t& arm, const char* armName)
 	
 	// Update and reset them
 	somatic_motor_update(&daemon_cx, &arm);
-	somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 7);
+	somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 7, NULL);
 }
 /* ********************************************************************************************** */
