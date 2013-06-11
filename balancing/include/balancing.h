@@ -59,6 +59,7 @@ typedef struct {
 	double u[2]; // control motor input to wheel motors
 	
 	double pref, vref;
+	double x,y;
 } krang_state_t;
 
 typedef struct {
