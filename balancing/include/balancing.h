@@ -21,6 +21,7 @@ typedef enum {
 	KRANG_MODE_TOSIT,
 	KRANG_MODE_SIT,
 	KRANG_MODE_BALANCE,
+	KRANG_MODE_TRACK_SINE,
 	KRANG_MODE_SIZE
 } krang_mode_t;
 
@@ -42,6 +43,9 @@ typedef struct {
 	double q1_1;		// Right wheel
 	double dq1_1;
 
+	double spin;		// Heading direction (+ve when rotation is counter-clockwise from top view)
+	double dspin;		// Speed of change of heading direction
+
 	// reference
 	double js_lr, js_fb;  // joystick axes
 	double imu_ref;	   // imu reference axis
@@ -49,9 +53,13 @@ typedef struct {
 	double q1_ref[2];  // wheel reference pos.
 	double dq1_ref[2]; // wheel reference vel.
 	
+	double spin_ref;
+	double dspin_ref;
+	
 	double u[2]; // control motor input to wheel motors
 	
 	double pref, vref;
+	double x,y;
 } krang_state_t;
 
 typedef struct {

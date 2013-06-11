@@ -31,8 +31,9 @@ filter_kalman_t *kf;
 DIR * dataFolder;
 struct dirent *dataFolderEntries;
 FILE * dumpFile;
-double t_elapsed, t_elapsed_using_dt, t_elapsed_using_dt_js;	
-double error_th, derror_th;	
+double t_elapsed, t_elapsed_using_dt, t_elapsed_using_dt_js, t_sine;
+double error_th, derror_th;
+double dq1_ref=0.0;	
 #define RAD2DEG(x) (x*180.0/M_PI)
 
 // Gains
@@ -42,9 +43,15 @@ double K_TH_toSit	= 240;
 double K_DTH_toSit   = 60;
 static const double KP_TH	= 309.0833;
 static const double KD_TH   = 38.6935;
-static const double KP_WH	 = 3;				
-static const double KD_WH	 = 9.4593;				
+static const double KP_WH	 = 17.5;				
+static const double KD_WH	 = 15.8498;				
+static const double KP_WH_LR = 15.0;
 static const double KD_WH_LR = 15.0;
+
+// Parameters
+double wheelRadius = 10.5; // inches
+double distanceBetweenWheels = 27.375; // inches
+
 /* ********************************************************************************************* */
 // Initialize the program
 void init() {
@@ -59,29 +66,17 @@ void init() {
 
 	// Initialize the motors with daemon context, channel names and # of motors
 	somatic_motor_init( &krang_cx.d_cx, &amc, 2, "amc-cmd", "amc-state");
-	somatic_motor_init( &krang_cx.d_cx, &waist, 2, "waist-cmd", "waist-state");
 
 	// Set the min and maximum position and velocity valid/limit values for motors
 	double ** limits[] = { 
 		&amc.pos_valid_min, &amc.vel_valid_min, &amc.pos_limit_min, &amc.vel_limit_min, 
-		&waist.vel_valid_max, &waist.pos_limit_max, &waist.vel_limit_max,  &amc.pos_valid_max,
-		&amc.vel_valid_max, &amc.pos_limit_max, &amc.vel_limit_max, &waist.vel_valid_max, 
-		&waist.pos_limit_max, &waist.vel_limit_max};
-	for(size_t i=0; i<7; i++) { aa_fset(*limits[i],-1024.1, 2); }
-	for(size_t i=7; i<14; i++) { aa_fset(*limits[i],1024.1, 2); }
-	aa_fset( waist.pos_valid_min, -5, 2);
-	aa_fset( waist.pos_valid_max, 5, 2);
+	  &amc.pos_valid_max,	&amc.vel_valid_max, &amc.pos_limit_max, &amc.vel_limit_max};
+	for(size_t i=0; i<4; i++) { aa_fset(*limits[i],-1024.1, 2); }
+	for(size_t i=4; i<8; i++) { aa_fset(*limits[i],1024.1, 2); }
 	usleep(1e5);
 
 	// Update and reset motors
-//	somatic_motor_update(&krang_cx.d_cx, &waist);
-//	somatic_motor_cmd(&krang_cx.d_cx, &waist, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 2, NULL);
 	somatic_motor_update(&krang_cx.d_cx, &amc);
-//	somatic_motor_cmd(&krang_cx.d_cx, &amc, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 2, NULL);
-	
-	// Check waist positions
-//	if (fabs(waist.pos[0] + waist.pos[1]) > 2e-2)
-//		fprintf(stderr, "ERROR: Waist position mismatched: (%f, %f)\n", waist.pos[0], -waist.pos[1]);
 
 	// Open the IMU channel
 	int r  = ach_open( &imu_chan, "imu-data" , NULL );
@@ -130,13 +125,14 @@ void init() {
 	fprintf(dumpFile, "motor current (control input) alon with time stamps for ease of plotting\n");
 	fprintf(dumpFile, "# Sit mode gains: Kp_sit=%lf, Kv_sit=%lf\n", Kp_sit, Kv_sit);
 	fprintf(dumpFile, "# To-Sit mode gains: K_TH_toSit=%lf, K_DTH_toSit=%lf\n", K_TH_toSit, K_DTH_toSit);
-	fprintf(dumpFile, "# Balance mode gains: KP_TH=%lf, KD_TH=%lf, KP_WH=%lf, KD_WH=%lf, KP_LR=%lf\n",
-		KP_TH, KD_TH, KP_WH, KD_WH, KD_WH_LR);
+	fprintf(dumpFile, "# Balance mode gains: KP_TH=%lf, KD_TH=%lf, KP_WH=%lf, KD_WH=%lf, KP_LR=%lf, "
+		"KD_LR=%lf\n", KP_TH, KD_TH, KP_WH, KD_WH, KP_WH_LR, KD_WH_LR);
 	fprintf(dumpFile, "# 1.time 2.error_th 3.rawImuPos 4.rawImuVel 5.rawLWhPos 6.rawLWhVel "
 		"7.rawRWhPos 8.rawRWhVel 9.rawWaistPos 10.rawWaistVel	11.filtImuPos 12.filtImuVel "
 		"13.filtLWhPos 14.filtLWhVel 15.filtRWhPos 16.filtRWhVel 17.filtWaistPos 18.filtWaistVel "
 		"19.avgWhPos 20.avgWhVel 21.jsFB 22.jsLR 23.refLWhPos 24.refLWhVel 25.refRWhPos 26.refRWhVel"
-		"27.avgRefWhPos 28.avgRefWhVel 29.cmdLWhCur 30.cmdRWhCur 31.rawLWhCur 32.rawRWhCur 33.mode\n");
+		"27.avgRefWhPos 28.avgRefWhVel 29.cmdLWhCur 30.cmdRWhCur 31.rawLWhCur 32.rawRWhCur 33.mode "
+		"34.spin 35.spinSpeed\n");
 }
 
 /* ********************************************************************************************* */
@@ -184,17 +180,14 @@ void readSensors(double dt) {
 	kf->z[5] = amc.vel[1]+kf->z[1]; // = abs. R wheel vel.
 
 	// Read waist position and speed
-	somatic_motor_update(&krang_cx.d_cx, &waist);
-	kf->z[6] = waist.pos[0];
-	kf->z[7] = waist.vel[0];
+	kf->z[6] = 117*M_PI/180.0;;
+	kf->z[7] = 0.0;
 	
 	// If first reading, set motor offsets
 	static bool offsetDone=0;
 	if(offsetDone==0) {
 		double amc_pos_offset[2] = {-kf->z[2], -kf->z[4]};
 		aa_fcpy(amc.pos_offset, amc_pos_offset, 2);
-		double waist_pos_offset[2] = {117*M_PI/180-kf->z[6],-117*M_PI/180+kf->z[6]};
-		aa_fcpy(waist.pos_offset, waist_pos_offset, 2);
 
 		kf->z[2] = 0.0;
 		kf->z[4] = 0.0;
@@ -203,10 +196,6 @@ void readSensors(double dt) {
 		return;
 	}
 	
-	//static int c=0;
-	//if(++c<20) {
-  //		printf("pos0: %.5lf, vel0: %.5lf, pos1: %.5lf, vel1: %.5lf\n", kf->z[2], kf->z[3], kf->z[4], kf->z[5]);
-  //	}
 	// --------------------------------------------------------------------
 	// Filter the read values	
 	static bool firstIteration=1;
@@ -272,6 +261,17 @@ void readSensors(double dt) {
 	// Set the wheel position by taking the mean of the two wheel encoders 
 	state.q1 = (state.q1_0 + state.q1_1)/2.0;
 	state.dq1 = (state.dq1_0 + state.dq1_1)/2.0;
+	
+	// Determine the spin and spin rate of the robot
+	state.spin = wheelRadius * (state.q1_1 - state.q1_0) / distanceBetweenWheels;
+	state.dspin = wheelRadius * (state.dq1_1 - state.dq1_0) / distanceBetweenWheels;
+
+	// Determine the x and y values of the robot by integrating the x and y components of the heading speed
+	// x-axis is assumed to be the initial position of wheel axis from left to right
+	// y-axis is assumed to be the initial forward direction
+	state.x+=-wheelRadius*0.0254*state.dq1*sin(state.spin)*dt;
+	state.y+= wheelRadius*0.0254*state.dq1*cos(state.spin)*dt;
+	
 	// --------------------------------------------------------------------
 	// If IMU angle is below the sitting angle and if current mode is TOSIT, change mode toSIT
 	double imu = state.q2, epsilon=.001;
@@ -283,10 +283,17 @@ void readSensors(double dt) {
 	Eigen::Vector3d com = dynamics.com(state.q2, state.q3, 0.0, lq, rq);
 
 	// Compute the error terms
+	// making it zero for an experiment
 	error_th = atan2(com(0), com(1));// + 4*M_PI/180.0;
 	derror_th = state.dq2;
-	if(error_th < -STABLE_TH_RANGE ) { if(state.mode == KRANG_MODE_BALANCE)	state.mode = KRANG_MODE_TOSIT; }
-	if(error_th > STABLE_TH_RANGE ) { if(state.mode == KRANG_MODE_BALANCE)	state.mode = KRANG_MODE_HALT; }
+	if(error_th < -STABLE_TH_RANGE ) { 
+		if(state.mode == KRANG_MODE_BALANCE || state.mode == KRANG_MODE_TRACK_SINE)	
+			state.mode = KRANG_MODE_TOSIT;
+	}
+	if(error_th > STABLE_TH_RANGE ) {
+		if(state.mode == KRANG_MODE_BALANCE || state.mode == KRANG_MODE_TRACK_SINE)	
+			state.mode = KRANG_MODE_HALT;
+	}
 }
 
 /* ********************************************************************************************* */
@@ -294,17 +301,22 @@ void readSensors(double dt) {
 void readJoystick( double dt ) {
 	
 	// Get the values
-	static char b [10];
+	static char b [10], b_prev[10];
 	static double x [6];
-	
+
+	// PRevious button states
+	for(size_t i = 0; i < 10; i++) 
+		b_prev[i] = b[i];
+
 	// Get the message and check output is OK.
 	int r = 0;
 	Somatic__Joystick *js_msg = 
 			SOMATIC_GET_LAST_UNPACK( r, somatic__joystick, &protobuf_c_system_allocator, 4096, &js_chan );
 	if((ACH_OK == r || ACH_MISSED_FRAME == r) && js_msg != NULL )
 	{
-		for(size_t i = 0; i < 10; i++) 
+		for(size_t i = 0; i < 10; i++) {
 			b[i] = js_msg->buttons->data[i] ? 1 : 0;
+		}
 		memcpy(x, js_msg->axes->data, sizeof(x));
 	}	
 	// Set the forward/backward ad left/right joystick axes values to zero
@@ -313,39 +325,84 @@ void readJoystick( double dt ) {
 	t_elapsed_using_dt_js += dt;
 
 	// Check for the start, quit, sit and stand conditions
-	// Start Command
-	if(b[6] && b[7]) { if(state.mode == KRANG_MODE_HALT) { state.mode=KRANG_MODE_SIT; printf("MODE_SIT\n"); }}
-	// Quit Command
+	if(b[6] && b[7]) { if(state.mode == KRANG_MODE_HALT) { state.mode=KRANG_MODE_SIT; printf("MODE_SIT\n"); dq1_ref=0.0; }}
 	else if(b[8]) { state.mode = KRANG_MODE_QUIT; }
-	// Sit Command
-//	else if(b[9] && !b[5]) { if(state.mode == KRANG_MODE_BALANCE) state.mode = KRANG_MODE_TOSIT; } 
-	// Stand Command
-	else if(b[9] && b[5]) { if(state.mode == KRANG_MODE_SIT) state.mode = KRANG_MODE_BALANCE; }
+	//	else if(b[9] && !b[5]) { if(state.mode == KRANG_MODE_BALANCE) state.mode = KRANG_MODE_TOSIT; } 
+	else if(b[9] && b[5]) { if(state.mode == KRANG_MODE_SIT || state.mode == KRANG_MODE_TRACK_SINE) { state.mode = KRANG_MODE_BALANCE; dq1_ref=0.0; } }
+	else if(b[5] && b[0]) { if(state.mode == KRANG_MODE_BALANCE) { 
+			state.q1_ref[0]=state.q1_0;
+			state.q1_ref[1]=state.q1_1;
+			state.spin_ref = wheelRadius * (state.q1_ref[1]-state.q1_ref[0]) / distanceBetweenWheels;
+			state.pref = (state.q1_ref[0] + state.q1_ref[1]) / 2.0;
+			state.mode = KRANG_MODE_TRACK_SINE; 
+			t_sine=0.0; 
+		} 
+	}
+	// If button 4 is pressed (indexed 3) in balance-mode increase dq1_ref by 0.01
+	else if(b_prev[3] && !b[3]) { if(state.mode == KRANG_MODE_BALANCE) dq1_ref+=0.01; printf("dq1_ref=%lf\n",dq1_ref); }
+	// If button 2 is pressed (indexed 1) in balance-mode decrease dq1_ref by 0.01
+	else if(b_prev[1] && !b[1]) { if(state.mode == KRANG_MODE_BALANCE) dq1_ref-=0.01; printf("dq1_ref=%lf\n",dq1_ref); }
+	// If button 3 is pressed (indexed 2) in balance-mode make q1_ref=0
+	else if(b_prev[2] && !b[2]) { if(state.mode == KRANG_MODE_BALANCE) dq1_ref=0.0; printf("dq1_ref=%lf\n",dq1_ref); }
 	// Check for the wheel control - no shoulder button should be pressed
 	// None of the shoulder buttons should be pressed
 	else if(!b[4] && !b[5] && !b[6] && !b[7]) {
 		state.js_fb = -x[1];	// range [-1, 1]
 		state.js_lr =  x[2];	// range [-1, 1]
 		
-		// Velocity control when sitting
-		state.dq1_ref[0] = MAX_LIN_VEL*state.js_fb;
-		state.dq1_ref[1] = state.dq1_ref[0];
+		// Generate velocity reference based on the mode
+		// If we are not in the TRACK_SINE mode, use the joystick to generate velocity reference
+		if( state.mode != KRANG_MODE_TRACK_SINE )	{
+			// Velocity control when sitting
+			state.dq1_ref[0] = MAX_LIN_VEL*state.js_fb;
+			state.dq1_ref[1] = state.dq1_ref[0];
 
-		// Moving left/right: Velocity control for heading
-		double max_ang_vel = 2.0;
-		state.dq1_ref[0] += max_ang_vel*state.js_lr;
-		state.dq1_ref[1] -= max_ang_vel*state.js_lr;
+			// Moving left/right: Velocity control for heading
+			double max_ang_vel = 2.0;
+			state.dq1_ref[0] += max_ang_vel*state.js_lr;
+			state.dq1_ref[1] -= max_ang_vel*state.js_lr;
+			/*state.dq1_ref[0] = dq1_ref;
+			state.dq1_ref[1] = dq1_ref;*/
+		}
+		// If in TRACK_SINE mode ignore joystick and generate a sinusoidal velocity reference
+		else {
+			// Following three line should be used only for forward backward only
+			//double freq=1/12.0; double Amplitude=2.0; // One cycle in six seconds
+			//state.dq1_ref[0] = Amplitude*2*M_PI*freq*cos(2*M_PI*freq*t_sine);
+			//state.dq1_ref[1] = Amplitude*2*M_PI*freq*cos(2*M_PI*freq*t_sine);
 
+			// Following five (or six if including the gap line) lines should be used only for left/right
+			// turning
+			//state.pref=0.0; state.vref=0.0;
+			//double freq=1/12.0; double Amplitude=M_PI/2; // One cycle in six seconds
+			//state.dspin_ref= Amplitude*2*M_PI*freq*cos(2*M_PI*freq*t_sine);
+			//
+			//state.dq1_ref[0] = (state.vref - distanceBetweenWheels*state.dspin_ref)/(2*wheelRadius);
+			//state.dq1_ref[1] = (state.vref + distanceBetweenWheels*state.dspin_ref)/(2*wheelRadius);
+			
+			// Used only for following a circle trajectory
+			double circleRadius = 30.0; // inches 
+			double timePerRound = 10.0; // seconds
+			state.dq1_ref[0]=M_PI*(2*circleRadius+distanceBetweenWheels)/(wheelRadius*timePerRound);
+			state.dq1_ref[1]=M_PI*(2*circleRadius-distanceBetweenWheels)/(wheelRadius*timePerRound);
+			state.dspin_ref=-2*M_PI/timePerRound;
+			
+			t_sine += dt;
+		}
 		// integrate
 		state.q1_ref[0] += dt * state.dq1_ref[0];
 		state.q1_ref[1] += dt * state.dq1_ref[1];
 
-		//printf("t_elapsed=%lf, t_elapsed_using_dt=%lf, t_elapsed_using_dt_js=%lf dq1_ref=%lf, q1_ref=%lf\n", 
-		//	t_elapsed, t_elapsed_using_dt, t_elapsed_using_dt_js, state.dq1_ref[0], state.q1_ref[0] );
-
 		// avg ref wheel pos/vel for forward/backward control
 		state.pref = (state.q1_ref[0] + state.q1_ref[1]) / 2.0;
 		state.vref = (state.dq1_ref[0] + state.dq1_ref[1]) / 2.0;
+
+		// Reference Values for robot spin and spin rate
+		// Following 2 lines should only be used for fwd/back
+		//state.spin_ref = 0.0;
+		//state.dspin_ref = 0.0;
+		// The following line should only be used for left/right and circle trajectory
+		state.spin_ref = wheelRadius * (state.q1_ref[1]-state.q1_ref[0]) / distanceBetweenWheels;
 	} 
 }
 
@@ -389,7 +446,8 @@ void controlWheels(double dt) {
 		// --------------------------------------------------------------------------------------------
 		// Balance Mode: Control imu angle to bring COM right above the wheel axisand control wheels
 		// based on on joystick commands
-		case KRANG_MODE_BALANCE: {
+		case KRANG_MODE_BALANCE:
+		case KRANG_MODE_TRACK_SINE: {
 			static bool override=0;
 			if(!override) { 
 				printf("Setting the override mode!\n");
@@ -402,8 +460,14 @@ void controlWheels(double dt) {
 			double derror_wh = state.dq1 - state.vref;
 
 			// Control Law
+			double offset;
 			double u = ((KP_TH * error_th) + (KD_TH * derror_th)) + ((KD_WH *derror_wh) + (KP_WH * error_wh));
-			double offset = KD_WH_LR * state.js_lr;
+			if(state.mode == KRANG_MODE_BALANCE) { 
+				offset = KD_WH_LR * state.js_lr;
+			} else {
+				offset = KP_WH_LR*(state.spin-state.spin_ref) + KD_WH_LR*(state.dspin-state.dspin_ref);
+			}
+			
 			state.u[0] = u + offset;
 			state.u[1] = u - offset;
 			bool debug=1; static int debug_cnt=0;
@@ -427,16 +491,17 @@ void controlWheels(double dt) {
 
 /* ********************************************************************************************* */
 // Dump all the current states to file
-void dumpToFile() {
-	fprintf(dumpFile, "%05.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf "	
-		"%02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf "	
-		"%01.3lf %01.3lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.5lf %02.3lf %02.3lf %02.3lf "
-		"%02.3lf %d\n", 			
+inline void dumpToLog( char * log, int index ) {
+	sprintf(log+index, "%011.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf "	
+		"%09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf "	
+		"%06.3lf %06.3lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %07.3lf %07.3lf %07.3lf "
+		"%07.3lf %d %09.5lf %09.5lf %9.5lf %9.5lf\n", 			
 		t_elapsed, error_th, kf->z[0], kf->z[1], amc.pos[0], amc.vel[0], amc.pos[1], amc.vel[1], 
 		kf->z[6],	kf->z[7],	state.q2, state.dq2, state.q1_0, state.dq1_0, state.q1_1, state.dq1_1, 
 		state.q3,	state.dq3, state.q1, state.dq1, state.js_fb, state.js_lr, state.q1_ref[0], 
 		state.dq1_ref[0],	state.q1_ref[1], state.dq1_ref[1], state.pref, state.vref, state.u[0], 
-		state.u[1], amc.cur[0],	amc.cur[1], state.mode);
+		state.u[1], amc.cur[0],	amc.cur[1], state.mode, state.spin, state.dspin, state.spin_ref,
+		state.dspin_ref);
 }
 /* ********************************************************************************************* */
 // This is the main loop that interfaces with the I/O from the joystick.
@@ -445,6 +510,9 @@ void run() {
 	somatic_d_event( &krang_cx.d_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
 					 SOMATIC__EVENT__CODES__PROC_RUNNING,
 					 NULL, NULL );
+	static char * log= new char[50000000];
+	static int log_index=0;
+  static int log_interleave_count=0;
 	// Set the timestep to update
 	double dt = 0.0;
 	t_elapsed_using_dt=0.0; t_elapsed_using_dt_js=0.0;
@@ -465,13 +533,23 @@ void run() {
 		// Based on the sensor feedback, joystick commands and current state, call the relevant 
 		// controller for controlling the wheels
 		controlWheels(dt);
-		// Dump data to file
-		dumpToFile();
+		// Dump data to file after skipping 10 samples
+	  if(++log_interleave_count>10){ 
+			// Write to the log string
+			dumpToLog(log, log_index);
+			// Increment the index
+			log_index+=350;
+			// If the log string overflows, wrap around
+			if(log_index>50000000){ log_index=0; }
+			log_interleave_count=0;
+		}
 		// Update previous measured time
 		t_prev = t_now;
 		// Release memory
 		aa_mem_region_release( &krang_cx.d_cx.memreg );
 	}
+	// Write the log to the dumpfile
+	fprintf(dumpFile,"%s",log);
 	// Once the main loop returns, the program is done. Send the stopping event message.
 	somatic_d_event( &krang_cx.d_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
 					 SOMATIC__EVENT__CODES__PROC_STOPPING,
@@ -484,9 +562,9 @@ void destroy() {
 	ach_close(&imu_chan);
 	somatic_motor_digital_out(&krang_cx.d_cx, &amc, 19, 0);
 //	somatic_motor_cmd(&krang_cx.d_cx, &amc, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 2, NULL);
-//	somatic_motor_cmd(&krang_cx.d_cx, &waist, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 2, NULL);
+	state.u[0]=0.0; state.u[1]=0.0;
+	somatic_motor_cmd(&krang_cx.d_cx,&amc,SOMATIC__MOTOR_PARAM__MOTOR_CURRENT,state.u,2,NULL);
 	somatic_motor_destroy(&krang_cx.d_cx, &amc);
-	somatic_motor_destroy(&krang_cx.d_cx, &waist);
 	filter_kalman_destroy( kf );
 	delete( kf );
 	somatic_d_destroy( &krang_cx.d_cx );

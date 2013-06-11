@@ -138,6 +138,8 @@ bool getRedMarkerPosition(somatic_d_t& daemon_cx, ach_channel_t& chan_transform,
 void setJoystickInput (somatic_d_t& daemon_cx, ach_channel_t& js_chan, somatic_motor_t& llwa, 
 		somatic_motor_t& rlwa) {
 
+	bool debug = 1;
+
 	// Get the message and check output is OK.
 	int r = 0;
 	Somatic__Joystick *js_msg = 
@@ -151,6 +153,18 @@ void setJoystickInput (somatic_d_t& daemon_cx, ach_channel_t& js_chan, somatic_m
 		b[i] = js_msg->buttons->data[i] ? 1 : 0;
 	memcpy(x, js_msg->axes->data, sizeof(x));
 	
+	// Scale down the x values
+	double scaleDownFactor = 0.5;
+	for(size_t i = 0; i < 6; i++) x[i] *= scaleDownFactor;
+
+	// Print the data for debugging purposes
+	if(debug) {
+		cout << "\nx: ";
+		for(size_t i = 0; i < 6; i++) cout << x[i] << ", ";
+		cout << "\nb: " << endl;
+		for(size_t i = 0; i < 10; i++) cout << b[i] << ", ";
+	}
+
 	// Check the buttons for each arm and apply velocities accordingly
 	// For left: 4 or 6, for right: 5 or 7, lower arm button is smaller (4 or 5)
 	somatic_motor_t* arm [] = {&llwa, &rlwa};
