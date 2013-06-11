@@ -15,11 +15,8 @@
 #include <unistd.h>
 #include <iostream>
 
-#include <somatic.h>
-#include <somatic/daemon.h>
-#include <somatic.pb-c.h>
-#include <somatic/motor.h>
-#include <ach.h>
+
+#include "initModules.h"
 
 using namespace std;
 
@@ -76,24 +73,8 @@ void init () {
 	dopt.ident = "position";
 	somatic_d_init(&daemon_cx, &dopt);
 
-	// Create the motor reference for the left gripper
-	somatic_motor_init(&daemon_cx, &lgripper, 1, "lgripper-cmd", "lgripper-state");
-	usleep(1e5);
-
-	// Set the min/max values for valid and limits values
-	aa_fset(lgripper.pos_valid_min, 0.009, 1);
-	aa_fset(lgripper.pos_limit_min, 0.009, 1);
-	aa_fset(lgripper.pos_valid_max, 0.068, 1);
-	aa_fset(lgripper.pos_limit_max, 0.068, 1);
-	aa_fset(lgripper.vel_valid_min, -0.008, 1);
-	aa_fset(lgripper.vel_limit_min, -0.008, 1);
-	aa_fset(lgripper.vel_valid_max, 0.008, 1);
-	aa_fset(lgripper.vel_limit_max, 0.008, 1);
-
-	// Update and reset them
-	somatic_motor_update(&daemon_cx, &lgripper);
-	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 1);
-	usleep(1e5);
+	// Initialize the gripper
+	initGripper(daemon_cx, lgripper, "lgripper");
 
 	// Open the state channel
 	somatic_d_channel_open(&daemon_cx, &state_chan, "position-state", NULL);

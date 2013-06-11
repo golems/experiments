@@ -7,6 +7,7 @@
  */
 
 #include "helpers.h"
+#include "initModules.h"
 #include "kinematics.h"
 #include <iostream>
 
@@ -86,32 +87,9 @@ void init (somatic_d_t& daemon_cx, somatic_motor_t& llwa, somatic_motor_t& rlwa,
 	dopt.ident = "bal-hack";
 	somatic_d_init( &daemon_cx, &dopt );
 
-	// Initialize the motors with the daemon context, channel names and # of motors
-	somatic_motor_init(&daemon_cx, &llwa, 7, "llwa-cmd", "llwa-state");
-	somatic_motor_init(&daemon_cx, &rlwa, 7, "rlwa-cmd", "rlwa-state");
-	usleep(1e5);
-
-	// Set the min/max values for valid and limits values
-	double** limits [] = {
-		&llwa.pos_valid_min, &rlwa.pos_valid_min, &llwa.vel_valid_min, &rlwa.vel_valid_min, 
-		&llwa.pos_limit_min, &rlwa.pos_limit_min, &llwa.pos_limit_min, &rlwa.pos_limit_min, 
-		&llwa.pos_valid_max, &rlwa.pos_valid_max, &llwa.vel_valid_max, &rlwa.vel_valid_max, 
-		&llwa.pos_limit_max, &rlwa.pos_limit_max, &llwa.pos_limit_max, &rlwa.pos_limit_max};
-	for(size_t i = 0; i < 8; i++) aa_fset(*limits[i], -1024.1, 7);
-	for(size_t i = 8; i < 16; i++) aa_fset(*limits[i], 1024.1, 7);
-	
-	// Update and reset them
-	somatic_motor_update(&daemon_cx, &llwa);
-	somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 7, NULL);
-	somatic_motor_update(&daemon_cx, &rlwa);
-	somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 7, NULL);
-
-	// Open joystick channel
-	int r  = ach_open(&js_chan, "joystick-data", NULL);
-	aa_hard_assert(r == ACH_OK,
-				   "Ach failure %s on opening Joystick channel (%s, line %d)\n",
-				   ach_result_to_string(static_cast<ach_status_t>(r)), __FILE__, __LINE__);
-	usleep(10000);
+	// Initialize the arms
+	initArm(daemon_cx, llwa, "llwa");
+	initArm(daemon_cx, rlwa, "rlwa");
 
 	// Open the state and transform channels 
 	somatic_d_channel_open(&daemon_cx, &state_chan, "krang-state", NULL);
@@ -160,6 +138,8 @@ bool getRedMarkerPosition(somatic_d_t& daemon_cx, ach_channel_t& chan_transform,
 void setJoystickInput (somatic_d_t& daemon_cx, ach_channel_t& js_chan, somatic_motor_t& llwa, 
 		somatic_motor_t& rlwa) {
 
+	bool debug = 1;
+
 	// Get the message and check output is OK.
 	int r = 0;
 	Somatic__Joystick *js_msg = 
@@ -173,6 +153,18 @@ void setJoystickInput (somatic_d_t& daemon_cx, ach_channel_t& js_chan, somatic_m
 		b[i] = js_msg->buttons->data[i] ? 1 : 0;
 	memcpy(x, js_msg->axes->data, sizeof(x));
 	
+	// Scale down the x values
+	double scaleDownFactor = 0.5;
+	for(size_t i = 0; i < 6; i++) x[i] *= scaleDownFactor;
+
+	// Print the data for debugging purposes
+	if(debug) {
+		cout << "\nx: ";
+		for(size_t i = 0; i < 6; i++) cout << x[i] << ", ";
+		cout << "\nb: " << endl;
+		for(size_t i = 0; i < 10; i++) cout << b[i] << ", ";
+	}
+
 	// Check the buttons for each arm and apply velocities accordingly
 	// For left: 4 or 6, for right: 5 or 7, lower arm button is smaller (4 or 5)
 	somatic_motor_t* arm [] = {&llwa, &rlwa};
@@ -187,7 +179,7 @@ void setJoystickInput (somatic_d_t& daemon_cx, ach_channel_t& js_chan, somatic_m
 		else if(!b[lowerButton] && b[higherButton]) memcpy(dq, x, 4*sizeof(double));
 
 		// Set the input for this arm
-		somatic_motor_cmd(&daemon_cx, arm[arm_idx], SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7, NULL);
+		somatic_motor_cmd(&daemon_cx, arm[arm_idx], SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7);
 	}
 	
 	// Free the joystick message

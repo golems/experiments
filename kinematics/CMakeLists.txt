@@ -31,13 +31,15 @@ endif()
 # Link to somatic, amino and ach
 # NOTE: Ideally we would like to 'find' these packages but for now, we assume they are either 
 # in /usr/lib or /usr/local/lib
-link_libraries(amino protobuf-c ach ntcan ntcanopen ssdmu filter pcio somatic reflex stdc++ schkin)
+link_libraries(amino protobuf-c ach ntcan ntcanopen filter pcio somatic stdc++)
 
 # Include Eigen
+include_directories(/usr/include/eigen3)
 include_directories(/usr/local/include/eigen3)
 
-# Include the project files
+# Include the project files and the common helpers for all the experiments
 include_directories(src)
+include_directories(../common)
 
 # Collect the source, script and fortran files
 file(GLOB main_source "src/*.cpp" "src/*.c")
