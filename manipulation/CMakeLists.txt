@@ -1,21 +1,8 @@
 # @author Can Erdogan
-# @date May 23, 2013
+# @date Jan 15, 2012
 
 cmake_minimum_required(VERSION 2.6)
-project(grippers)
-
-# ================================================================================================
-# Macro to check if a set has a particular value
-
-MACRO(LIST_CONTAINS var value)
-  SET(${var})
-  FOREACH (value2 ${ARGN})
-    IF (${value} STREQUAL ${value2})
-      SET(${var} TRUE)
-    ENDIF (${value} STREQUAL ${value2})
-  ENDFOREACH (value2)
-ENDMACRO(LIST_CONTAINS)
-# ================================================================================================
+project(manipulation)
 
 # Set the top level directory for use in the code
 add_definitions(-DTOP_LEVEL_PATH="${CMAKE_SOURCE_DIR}")
@@ -35,9 +22,6 @@ link_libraries(amino protobuf-c ach ntcan ntcanopen ssdmu filter pcio somatic re
 
 # Include Eigen
 include_directories(/usr/local/include/eigen3)
-
-# Include the common directory of the experiments
-include_directories(../common/)
 
 # Collect the source, script and fortran files
 file(GLOB scripts_source "exe/*.cpp")

@@ -52,7 +52,7 @@ int main () {
 	// Command the gripper to move
 	double dq = -0.1;
 	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, &dq, 1);
-	usleep(0.05 * 1e6);
+	usleep(0.1 * 1e6);
 
 	// Command the gripper to stop
 	dq = 0.0;

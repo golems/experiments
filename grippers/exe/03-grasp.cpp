@@ -38,7 +38,7 @@ void run() {
 
 		// Set the velocity mode
 		static int i = 0;
-		double dq = grasped ? 0.0 : 0.005;
+		double dq = grasped ? 0.0 : -0.005;
 		somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, &dq, 1);
 
 		// Get the gripper position
