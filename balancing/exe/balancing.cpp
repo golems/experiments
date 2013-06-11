@@ -132,7 +132,10 @@ void init() {
 		"13.filtLWhPos 14.filtLWhVel 15.filtRWhPos 16.filtRWhVel 17.filtWaistPos 18.filtWaistVel "
 		"19.avgWhPos 20.avgWhVel 21.jsFB 22.jsLR 23.refLWhPos 24.refLWhVel 25.refRWhPos 26.refRWhVel"
 		"27.avgRefWhPos 28.avgRefWhVel 29.cmdLWhCur 30.cmdRWhCur 31.rawLWhCur 32.rawRWhCur 33.mode "
-		"34.spin 35.spinSpeed\n");
+		"34.spin 35.spinSpeed 36.spinRef 37.spinSpeedRef 38.X 39.Y\n");
+
+	state.x=0.0;
+	state.y=0.0;
 }
 
 /* ********************************************************************************************* */
@@ -495,13 +498,13 @@ inline void dumpToLog( char * log, int index ) {
 	sprintf(log+index, "%011.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf "	
 		"%09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf "	
 		"%06.3lf %06.3lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %09.5lf %07.3lf %07.3lf %07.3lf "
-		"%07.3lf %d %09.5lf %09.5lf %9.5lf %9.5lf\n", 			
+		"%07.3lf %d %09.5lf %09.5lf %9.5lf %9.5lf %7.3lf %7.3lf\n", 			
 		t_elapsed, error_th, kf->z[0], kf->z[1], amc.pos[0], amc.vel[0], amc.pos[1], amc.vel[1], 
 		kf->z[6],	kf->z[7],	state.q2, state.dq2, state.q1_0, state.dq1_0, state.q1_1, state.dq1_1, 
 		state.q3,	state.dq3, state.q1, state.dq1, state.js_fb, state.js_lr, state.q1_ref[0], 
 		state.dq1_ref[0],	state.q1_ref[1], state.dq1_ref[1], state.pref, state.vref, state.u[0], 
 		state.u[1], amc.cur[0],	amc.cur[1], state.mode, state.spin, state.dspin, state.spin_ref,
-		state.dspin_ref);
+		state.dspin_ref, state.x, state.y);
 }
 /* ********************************************************************************************* */
 // This is the main loop that interfaces with the I/O from the joystick.
@@ -538,7 +541,7 @@ void run() {
 			// Write to the log string
 			dumpToLog(log, log_index);
 			// Increment the index
-			log_index+=350;
+			log_index+=366;
 			// If the log string overflows, wrap around
 			if(log_index>50000000){ log_index=0; }
 			log_interleave_count=0;
