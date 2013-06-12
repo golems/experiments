@@ -19,7 +19,7 @@
 void setJoystickInput (somatic_d_t& daemon_cx, ach_channel_t& js_chan, somatic_motor_t& llwa, 
 		somatic_motor_t& rlwa) {
 
-	bool debug = 1;
+	static const bool debug = 0;
 
 	// Get the message and check output is OK.
 	int r = 0;
@@ -55,12 +55,16 @@ void setJoystickInput (somatic_d_t& daemon_cx, ach_channel_t& js_chan, somatic_m
 		double dq [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 
 		// Change the input based on the lower or higher button input
+		bool inputSet = true;
 		size_t lowerButton = 4 + arm_idx, higherButton = 6 + arm_idx;
 		if(b[lowerButton] && !b[higherButton]) memcpy(&dq[4], x, 3*sizeof(double));
 		else if(!b[lowerButton] && b[higherButton]) memcpy(dq, x, 4*sizeof(double));
+		else inputSet = false;
 
 		// Set the input for this arm
-		somatic_motor_cmd(&daemon_cx, arm[arm_idx], SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7, NULL);
+		if(inputSet)
+			somatic_motor_cmd(&daemon_cx, arm[arm_idx], SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7, 
+				NULL);
 	}
 	
 	// Free the joystick message
