@@ -10,6 +10,7 @@
 
 #include <iostream>
 #include "helpers.h"
+#include "motion.h"
 
 #define sq(x) ((x) * (x))
 

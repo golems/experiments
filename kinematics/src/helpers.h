@@ -30,9 +30,5 @@ void init(somatic_d_t& daemon_cx, somatic_motor_t& llwa, somatic_motor_t& rlwa,
 /// Sets the red markers position (x,y,z) if perceived
 bool getRedMarkerPosition(somatic_d_t& daemon_cx, ach_channel_t& chan_transform, double* x);
 
-/// Set motor values with joystick input
-void setJoystickInput (somatic_d_t& daemon_cx, ach_channel_t& js_chan, somatic_motor_t& llwa, 
-	somatic_motor_t& rlwa);
-
 /// Returns the position/direction of the end-effector in the Kinect frame, T^k_e
 void getEEinKinectFrame (double* q, Eigen::Vector3d& pos, Eigen::Vector3d& dir);
