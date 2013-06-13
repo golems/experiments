@@ -41,12 +41,12 @@ double Kp_sit = 0;
 double Kv_sit = 20;
 double K_TH_toSit	= 240;
 double K_DTH_toSit   = 60;
-static const double KP_TH	= 309.0833;
+static const double KP_TH	= 270.0833;
 static const double KD_TH   = 38.6935;
-static const double KP_WH	 = 17.5;				
-static const double KD_WH	 = 15.8498;				
+static const double KP_WH	 = 0.0;//17.5;				
+static const double KD_WH	 = 10.0;//5.8498;				
 static const double KP_WH_LR = 15.0;
-static const double KD_WH_LR = 15.0;
+static const double KD_WH_LR = 10;//15.0;
 
 // Parameters
 double wheelRadius = 10.5; // inches
@@ -317,10 +317,12 @@ void readJoystick( double dt ) {
 			SOMATIC_GET_LAST_UNPACK( r, somatic__joystick, &protobuf_c_system_allocator, 4096, &js_chan );
 	if((ACH_OK == r || ACH_MISSED_FRAME == r) && js_msg != NULL )
 	{
-		for(size_t i = 0; i < 10; i++) {
-			b[i] = js_msg->buttons->data[i] ? 1 : 0;
-		}
-		memcpy(x, js_msg->axes->data, sizeof(x));
+			memcpy(x, js_msg->axes->data, sizeof(x)); 
+			for(size_t i = 0; i < 10; i++) {
+				if(i>3 && i<6) x[i]/=2;
+				b[i] = js_msg->buttons->data[i] ? 1 : 0;
+			}
+
 	}	
 	// Set the forward/backward ad left/right joystick axes values to zero
 	state.js_fb = 0;	state.js_lr = 0;
