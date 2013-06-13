@@ -121,3 +121,10 @@ a bit too far. The second time over though, full two rounds were done very neatl
 five rounds of circular trajectory. It worked fine.
 
 - 00092: Another run of the above experiment for making a video.
+
+- 00097: Using joystick to go about a trajectory around bricks and boxes. Video has been
+made. There are a few things I don't like in the performance. Motors chatter when stopping.
+Also, the turning gain is very high.
+
+- 00098: Changed the KP_WH from 315 to 270 and multiplied the js_fb and js_lr by 0.75
+and 0.5 respectively to make the robot less sensitive to these controls. 
