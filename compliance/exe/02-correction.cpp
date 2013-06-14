@@ -56,6 +56,13 @@ void computeOffset () {
 	pTcom_sensor.bottomLeftCorner<3,3>() << 0.0, -s2com(2), s2com(1), s2com(2), 0.0, -s2com(0), 
 		-s2com(1), s2com(0), 0.0;
 
+	// Get the rotation between the bracket frame and the sensor frame. We assume that the end-effector
+	MatrixXd Tbee;
+	forwardKinematics(Tbee);
+	Matrix3d R = Tbee.topLeftBracket<3,3>();
+	
+	
+	
 }
 
 /* ********************************************************************************************* */
@@ -64,7 +71,7 @@ void init (){
 	/// Restart the netcanft daemon. Need to sleep to let OS kill the program first.
 	system("killall -s 9 netcanftd");
 	usleep(20000);
-	system("netcanftd -v -d -I lft -b 2 -B 1000 -c llwa_ft -r");
+	system("netcanftd -v -d -I lft -b 2 -B 1000 -c llwa_ft");
 
 	// Initialize this daemon (program!)
 	somatic_d_opts_t dopt;
@@ -105,6 +112,7 @@ void run() {
 		setJoystickInput(daemon_cx, js_chan, llwa, llwa);
 		somatic_motor_update(&daemon_cx, &llwa);
 	
+/*
 		// Perform forward kinematics and print the values
 		MatrixXd T;
 		forwardKinematics(T);
@@ -114,6 +122,7 @@ void run() {
 			cout << "\nT: \n" << T << endl;
 		}
 		continue;
+*/
 
 		// Get the f/t sensor data 
 		bool result = (c++ % 1000000 == 0) && getFT(daemon_cx, ft_chan, ft_data);
