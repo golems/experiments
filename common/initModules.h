@@ -15,7 +15,7 @@
 #include <somatic/motor.h>
 #include <ach.h>
 
-/* ********************************************************************************************** */
+/* ********************************************************************************************* */
 /// Initializes a daemon with the given name
 void initDaemon (somatic_d_t& daemon_cx, char* name) {
 	somatic_d_opts_t dopt;
@@ -24,7 +24,7 @@ void initDaemon (somatic_d_t& daemon_cx, char* name) {
 	somatic_d_init( &daemon_cx, &dopt );
 }
 
-/* ********************************************************************************************** */
+/* ********************************************************************************************* */
 /// Initializes the gripper with the given name: either "lgripper" or "rgripper"
 void initGripper (somatic_d_t& daemon_cx, somatic_motor_t& gripper, const char* name) {	
 
@@ -53,7 +53,7 @@ void initGripper (somatic_d_t& daemon_cx, somatic_motor_t& gripper, const char* 
 	usleep(1e5);
 }
 
-/* ********************************************************************************************** */
+/* ********************************************************************************************* */
 /// Initializes the arm with the given name: either "llwa" or "rlwa".
 void initArm (somatic_d_t& daemon_cx, somatic_motor_t& arm, const char* armName) {	
 
@@ -78,5 +78,6 @@ void initArm (somatic_d_t& daemon_cx, somatic_motor_t& arm, const char* armName)
 	// Update and reset them
 	somatic_motor_update(&daemon_cx, &arm);
 	somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 7, NULL);
+	usleep(1e5);
 }
-/* ********************************************************************************************** */
+/* ********************************************************************************************* */

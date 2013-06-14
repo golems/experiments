@@ -22,6 +22,7 @@
 using namespace Eigen;
 
 typedef Matrix<double, 6, 1> Vector6d;			///< A typedef for convenience to contain f/t values
+typedef Matrix<double, 6, 6> Matrix6d;			///< A typedef for convenience to contain wrenches
 
 /// Returns the f/t data if available at that instance
 bool getFT (somatic_d_t& daemon_cx, ach_channel_t& ft_chan, Vector6d& data);
