@@ -6,6 +6,8 @@
  * manipulating the grippers and etc.
  */
 
+#pragma once
+
 #include <iostream>
 
 #include <somatic.h>

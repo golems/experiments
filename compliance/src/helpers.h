@@ -5,6 +5,8 @@
  * @brief This file contains some helper functions such as reading force/torque data if available.
  */
 
+#pragma once
+
 #include <stdlib.h>
 #include <unistd.h>
 #include <iostream>
@@ -19,10 +21,27 @@
 #include <somatic/motor.h>
 #include <ach.h>
 
+#include "kinematics.h"
+#include "initModules.h"
+#include "motion.h"
+#include <iostream>
+
 using namespace Eigen;
+
+#define pv(x) std::cout << #x << ": " << (x).transpose() << std::endl;
 
 typedef Matrix<double, 6, 1> Vector6d;			///< A typedef for convenience to contain f/t values
 typedef Matrix<double, 6, 6> Matrix6d;			///< A typedef for convenience to contain wrenches
+
+/// Returns the representation of the end-effector frame in the base frame
+void forwardKinematics (const somatic_motor_t& llwa, MatrixXd& Tbee);
+
+/// Computes the initial offset from the given first raw value
+void computeOffset (const somatic_motor_t& llwa, const Vector6d& raw, Vector6d& offset);
+
+/// Initializes the daemon, joystick/ft channels, left arm and computes the initial offset for ft
+void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& ft_chan, 
+		somatic_motor_t& llwa, Vector6d& offset);
 
 /// Returns the f/t data if available at that instance
 bool getFT (somatic_d_t& daemon_cx, ach_channel_t& ft_chan, Vector6d& data);
