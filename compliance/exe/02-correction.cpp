@@ -5,6 +5,7 @@
  * @brief This file demonstrates how to compute the estimate what the raw force/torque reading 
  * should be when there are no external forces (only the gripper weight) and the offset that
  * needs to be decreased from future raw values.
+ * The output is that as we move the arm around, we should see no change in the idealized values.
  * See the FTEstimation report at @thebrain:/home/git/krang/Reports.
  * Note that the F/T readings are in Nm's (Newton-meters).
  */
@@ -16,6 +17,8 @@
 
 using namespace std;
 using namespace kinematics;
+
+#define pv(x) cout << #x << ": " << (x).transpose() << endl;
 
 /* ********************************************************************************************* */
 somatic_d_t daemon_cx;
@@ -45,7 +48,7 @@ void forwardKinematics (MatrixXd& Tbee) {
 }
 
 /* ******************************************************************************************** */
-void computeOffset () {
+void computeOffset (const Vector6d& raw) {
 
 	// Set the vector from the sensor origin to the gripper center of mass
 	static const Vector3d s2com (0.0, 0.0, 0.02);
@@ -56,7 +59,7 @@ void computeOffset () {
 	pTcom_sensor.bottomLeftCorner<3,3>() << 0.0, -s2com(2), s2com(1), s2com(2), 0.0, -s2com(0), 
 		-s2com(1), s2com(0), 0.0;
 
-	// Get the rotation between the bracket frame and the sensor frame. We assume that the end-effector
+	// Get the rotation between the bracket frame and the sensor frame. We assume that the ee
 	// frame is 180 rotation around y and 90 rotation around x away from the 7th module;
 	MatrixXd Tbee;
 	forwardKinematics(Tbee);
@@ -74,10 +77,12 @@ void computeOffset () {
 	Vector6d weightVector_in_bracket;
 	weightVector_in_bracket << 0.0, -eeMass * 9.81, 0.0, 0.0, 0.0, 0.0;
 	
-	// Compute the offset by multiplying the position and rotation transforms with the expected
-  // effect of the gravity 
-	offset = pTcom_sensor * pSsensor_bracket * weightVector_in_bracket;
-	cout << "\noffset: " << offset.transpose() << endl;
+	// Compute what the force and torque should be without any external values by multiplying the 
+	// position and rotation transforms with the expected effect of the gravity 
+	Vector6d expectedFT = pTcom_sensor * pSsensor_bracket * weightVector_in_bracket;
+
+	// Compute the difference between the actual and expected f/t values
+	offset = expectedFT - raw;
 }
 
 /* ********************************************************************************************* */
@@ -86,7 +91,7 @@ void init (){
 	/// Restart the netcanft daemon. Need to sleep to let OS kill the program first.
 	system("killall -s 9 netcanftd");
 	usleep(20000);
-	system("netcanftd -v -d -I lft -b 2 -B 1000 -c llwa_ft");
+	system("netcanftd -v -d -I lft -b 2 -B 1000 -c llwa_ft -r");
 
 	// Initialize this daemon (program!)
 	somatic_d_opts_t dopt;
@@ -106,8 +111,12 @@ void init (){
 	// Open the state and ft channels 
 	somatic_d_channel_open(&daemon_cx, &ft_chan, "llwa_ft", NULL);
 
-	// Compute the offset
-	computeOffset();
+	// Get the first force-torque reading and compute the offset with it
+	Vector6d ft_data;
+	bool gotReading = false;
+	while(!gotReading) 
+		gotReading = getFT(daemon_cx, ft_chan, ft_data);
+	computeOffset(ft_data);
 }
 
 /* ******************************************************************************************** */
@@ -120,7 +129,7 @@ void run() {
 
 	// Unless an interrupt or terminate message is received, process the new message
 	size_t c = 0;
-	Vector6d ft_data;
+	Vector6d raw, ideal;
 	while(!somatic_sig_received) {
 		
 		c++;
@@ -129,23 +138,18 @@ void run() {
 		setJoystickInput(daemon_cx, js_chan, llwa, llwa);
 		somatic_motor_update(&daemon_cx, &llwa);
 	
-/*
-		// Perform forward kinematics and print the values
-		MatrixXd T;
-		forwardKinematics(T);
-*/
+		// Print joint values
 		if(c % 1000000 == 0) {
 			cout << "\nq: ";
 			for(size_t i = 0; i < 7; i++) cout << llwa.pos[i] << ", ";
-			computeOffset();
-//			cout << "\nT: \n" << T << endl;
 		}
-		continue;
 
-		// Get the f/t sensor data 
-		bool result = (c % 1000000 == 0) && getFT(daemon_cx, ft_chan, ft_data);
+		// Get the f/t sensor data and compute the ideal value
+		bool result = (c % 1000000 == 0) && getFT(daemon_cx, ft_chan, raw);
 		if(!result) continue;
-		cout << "\nft: " << ft_data.transpose() << " " << llwa.pos[6] <<endl;
+		ideal = raw + offset;
+		cout << "\nft raw: " << raw.transpose() << " " << llwa.pos[6] <<endl;
+		cout << "ft ideal: " << ideal.transpose() << " " << llwa.pos[6] <<endl;
 	}
 
 	// Send the stoppig event
