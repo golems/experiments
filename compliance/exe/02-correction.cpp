@@ -48,7 +48,7 @@ void forwardKinematics (MatrixXd& Tbee) {
 void computeOffset () {
 
 	// Set the vector from the sensor origin to the gripper center of mass
-	Vector3d s2com (0.0, 0.0, 0.02);
+	static const Vector3d s2com (0.0, 0.0, 0.02);
 
 	// Get the point transform wrench due to moving the affected position from com to sensor origin
 	// The transform is an identity with the bottom left a skew symmetric of the point translation
@@ -57,12 +57,27 @@ void computeOffset () {
 		-s2com(1), s2com(0), 0.0;
 
 	// Get the rotation between the bracket frame and the sensor frame. We assume that the end-effector
+	// frame is 180 rotation around y and 90 rotation around x away from the 7th module;
 	MatrixXd Tbee;
 	forwardKinematics(Tbee);
-	Matrix3d R = Tbee.topLeftBracket<3,3>();
+	Matrix3d Rees = (AngleAxis <double> (M_PI, Vector3d(0.0, 1.0, 0.0)) * 
+                  AngleAxis <double> (M_PI_2, Vector3d(0.0, 0.0, 1.0))).matrix();
+	Matrix3d R = Rees.transpose() * Tbee.topLeftCorner<3,3>().transpose();
+
+	// Create the wrench with the computed rotation to change the frame from the bracket to the sensor
+	Matrix6d pSsensor_bracket = MatrixXd::Identity(6,6); 
+	pSsensor_bracket.topLeftCorner<3,3>() = R;
+	pSsensor_bracket.bottomRightCorner<3,3>() = R;
 	
+	// Get the weight vector (note that we use the bracket frame for gravity so towards -y)
+	static const double eeMass = 0.169;	// kg - ft extension
+	Vector6d weightVector_in_bracket;
+	weightVector_in_bracket << 0.0, -eeMass * 9.81, 0.0, 0.0, 0.0, 0.0;
 	
-	
+	// Compute the offset by multiplying the position and rotation transforms with the expected
+  // effect of the gravity 
+	offset = pTcom_sensor * pSsensor_bracket * weightVector_in_bracket;
+	cout << "\noffset: " << offset.transpose() << endl;
 }
 
 /* ********************************************************************************************* */
@@ -108,6 +123,8 @@ void run() {
 	Vector6d ft_data;
 	while(!somatic_sig_received) {
 		
+		c++;
+
 		// Move the arm to any position with the joystick
 		setJoystickInput(daemon_cx, js_chan, llwa, llwa);
 		somatic_motor_update(&daemon_cx, &llwa);
@@ -116,18 +133,19 @@ void run() {
 		// Perform forward kinematics and print the values
 		MatrixXd T;
 		forwardKinematics(T);
-		if(c++ % 10000 == 0) {
+*/
+		if(c % 1000000 == 0) {
 			cout << "\nq: ";
 			for(size_t i = 0; i < 7; i++) cout << llwa.pos[i] << ", ";
-			cout << "\nT: \n" << T << endl;
+			computeOffset();
+//			cout << "\nT: \n" << T << endl;
 		}
 		continue;
-*/
 
 		// Get the f/t sensor data 
-		bool result = (c++ % 1000000 == 0) && getFT(daemon_cx, ft_chan, ft_data);
+		bool result = (c % 1000000 == 0) && getFT(daemon_cx, ft_chan, ft_data);
 		if(!result) continue;
-		cout << "ft: " << ft_data.transpose() << " " << llwa.pos[6] <<endl;
+		cout << "\nft: " << ft_data.transpose() << " " << llwa.pos[6] <<endl;
 	}
 
 	// Send the stoppig event
