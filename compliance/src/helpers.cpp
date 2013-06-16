@@ -33,7 +33,7 @@ void forwardKinematics (const somatic_motor_t& arm, MatrixXd& Tbee) {
 void computeOffset (const somatic_motor_t& arm, const Vector6d& raw, Vector6d& offset) {
 
 	// Set the vector from the sensor origin to the gripper center of mass
-	static const Vector3d s2com (0.0, 0.0, 0.02);
+	static const Vector3d s2com (0.0, 0.0, 0.01);
 
 	// Get the point transform wrench due to moving the affected position from com to sensor origin
 	// The transform is an identity with the bottom left a skew symmetric of the point translation

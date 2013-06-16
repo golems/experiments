@@ -54,6 +54,8 @@ void computeExternal (const Vector6d& input) {
 	// Compute what the force and torque should be without any external values by multiplying the 
 	// position and rotation transforms with the expected effect of the gravity 
 	Vector6d wrenchWeight = pTcom_sensor * pSsensor_bracket * weightVector_in_bracket;
+	printf("wrench weight (%lf): ", wrenchWeight.norm());
+	cout << wrenchWeight.transpose() << endl;
 
 	// Remove the effect from the sensor value
 	external = input - wrenchWeight;
@@ -78,17 +80,11 @@ void run() {
 		setJoystickInput(daemon_cx, js_chan, llwa, llwa);
 		somatic_motor_update(&daemon_cx, &llwa);
 	
-		// Print joint values
-		if(c % 1000000 == 0) {
-//			cout << "\nq: ";
-//			for(size_t i = 0; i < 7; i++) cout << llwa.pos[i] << ", ";
-		}
-
 		// Get the f/t sensor data and compute the ideal value
 		bool result = (c % 1000000 == 0) && getFT(daemon_cx, ft_chan, raw);
 		if(!result) continue;
 		ideal = raw + offset;
-		cout << ideal.transpose() << " 0.0, 0.0" << endl;
+		// cout << ideal.transpose() << " 0.0, 0.0" << endl;
 
 		// Compute the external forces from ideal readings
 		computeExternal(ideal);
