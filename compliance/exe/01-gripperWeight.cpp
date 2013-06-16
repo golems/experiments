@@ -37,7 +37,7 @@ void init (){
 	/// Restart the netcanft daemon. Need to sleep to let OS kill the program first.
 	system("killall -s 9 netcanftd");
 	usleep(20000);
-	system("/home/cerdogan/Documents/Software/drivers/netcanft/build/netcanftd -v -d -I lft -b 2 -B 1000 -c llwa_ft -r");
+	system("/home/cerdogan/Documents/Software/drivers/netcanft/build/netcanftd -v -v -d -I lft -b 2 -B 1000 -c llwa_ft");
 
 	// Initialize this daemon (program!)
 	somatic_d_opts_t dopt;

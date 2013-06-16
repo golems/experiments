@@ -44,10 +44,11 @@ void run() {
 		// Get the f/t sensor data and compute the ideal value
 		bool result = (c % 1000000 == 0) && getFT(daemon_cx, ft_chan, raw);
 		if(!result) continue;
+		computeOffset(llwa, raw, offset);
 		ideal = raw + offset;
 		if(c % 1000000 == 0) {
-			cout << ideal.transpose() << " " << llwa.pos[6] << " ";
-			cout << sqrt(ideal(0)*ideal(0) + ideal(1)*ideal(1)) << endl;
+		//	cout << ideal.transpose() << " " << llwa.pos[6] << " ";
+		//	cout << sqrt(ideal(0)*ideal(0) + ideal(1)*ideal(1)) << endl;
 		}
 	}
 

@@ -65,6 +65,7 @@ void computeOffset (const somatic_motor_t& arm, const Vector6d& raw, Vector6d& o
 
 	// Compute the difference between the actual and expected f/t values
 	offset = expectedFT - raw;
+	pv(offset);
 }
 
 /* ********************************************************************************************* */
@@ -74,7 +75,7 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& ft_cha
 	/// Restart the netcanft daemon. Need to sleep to let OS kill the program first.
 	system("killall -s 9 netcanftd");
 	usleep(20000);
-	system("netcanftd -v -d -I lft -b 2 -B 1000 -c llwa_ft -r");
+	system("netcanftd -v -d -I lft -b 2 -B 1000 -c llwa_ft -k -r");
 
 	// Initialize this daemon (program!)
 	somatic_d_opts_t dopt;
