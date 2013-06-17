@@ -15,6 +15,9 @@
 
 using namespace std;
 
+#define parm (cout << llwa.pos[0] << ", " << llwa.pos[1] << ", " << llwa.pos[2] << ", " << \
+	llwa.pos[3] << ", " << llwa.pos[4] << ", " << llwa.pos[5] << ", " << llwa.pos[6] << endl;)
+
 /* ********************************************************************************************* */
 somatic_d_t daemon_cx;
 ach_channel_t js_chan;				
@@ -42,14 +45,17 @@ void run() {
 		somatic_motor_update(&daemon_cx, &llwa);
 	
 		// Get the f/t sensor data and compute the ideal value
-		bool result = (c % 1000000 == 0) && getFT(daemon_cx, ft_chan, raw);
+		Vector6d raw;
+		size_t k = 1e4;
+		bool result = (c % k == 0) && getFT(daemon_cx, ft_chan, raw);
 		if(!result) continue;
-		computeOffset(llwa, raw, offset);
-		ideal = raw + offset;
-		if(c % 1000000 == 0) {
-		//	cout << ideal.transpose() << " " << llwa.pos[6] << " ";
-		//	cout << sqrt(ideal(0)*ideal(0) + ideal(1)*ideal(1)) << endl;
-		}
+
+		// Compute the ideal value
+		Vector6d ideal = raw + offset;
+
+		// Print the results
+		cout << ideal.transpose() << " " << llwa.pos[6] << " ";
+		cout << sqrt(ideal(0)*ideal(0) + ideal(1)*ideal(1)) << endl;
 	}
 
 	// Send the stoppig event

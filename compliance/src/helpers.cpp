@@ -55,13 +55,16 @@ void computeOffset (const somatic_motor_t& arm, const Vector6d& raw, Vector6d& o
 	pSsensor_bracket.bottomRightCorner<3,3>() = R;
 	
 	// Get the weight vector (note that we use the bracket frame for gravity so towards -y)
-	static const double eeMass = 0.169;	// kg - ft extension
+	// static const double eeMass = 0.169;	// kg - ft extension
+	static const double eeMass = 0.30;	// kg - ft extension
 	Vector6d weightVector_in_bracket;
 	weightVector_in_bracket << 0.0, -eeMass * 9.81, 0.0, 0.0, 0.0, 0.0;
 	
 	// Compute what the force and torque should be without any external values by multiplying the 
 	// position and rotation transforms with the expected effect of the gravity 
 	Vector6d expectedFT = pTcom_sensor * pSsensor_bracket * weightVector_in_bracket;
+	pv(raw);
+	pv(expectedFT);
 
 	// Compute the difference between the actual and expected f/t values
 	offset = expectedFT - raw;

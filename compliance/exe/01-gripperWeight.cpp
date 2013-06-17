@@ -25,6 +25,9 @@
 
 using namespace std;
 
+#define parm (cout << llwa.pos[0] << ", " << llwa.pos[1] << ", " << llwa.pos[2] << ", " << \
+	llwa.pos[3] << ", " << llwa.pos[4] << ", " << llwa.pos[5] << ", " << llwa.pos[6] << endl);
+
 /* ********************************************************************************************* */
 somatic_d_t daemon_cx;
 ach_channel_t js_chan;				
@@ -71,12 +74,15 @@ void run() {
 	while(!somatic_sig_received) {
 		
 		// Move the arm to any position with the joystick
-		setJoystickInput(daemon_cx, js_chan, llwa, llwa);
+		// setJoystickInput(daemon_cx, js_chan, llwa, llwa);
+		double q [] = {0.0, -M_PI_2, 0.0, 0.0, 0.0, 0.0, 2.0*M_PI};
+		somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_POSITION, q, 7, NULL);
 		somatic_motor_update(&daemon_cx, &llwa);
 	
 		// Get the f/t sensor data 
 		bool result = (c++ % 1000000 == 0) && getFT(daemon_cx, ft_chan, ft_data);
 		if(!result) continue;
+		parm;
 		cout << "ft: " << ft_data.transpose() << " " << llwa.pos[6] <<endl;
 	}
 
