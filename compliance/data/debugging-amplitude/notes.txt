@@ -1,0 +1,21 @@
+Experiments 1-3 show that the amplitude difference between fy and fx is independent of the 
+initial alignment of the sensor.
+
+---------------------------------------------------------------------------------------------------
+
+Experiment 4 shows a ~2 unit difference between the bias=0 fx and fy values under a ~30 kg load. 
+
+The mean value for fx before load is -11.26 and after load is -46.73. The mean values for fy 
+before and after load are -9.41 and -44.89.  
+The difference between the respective values are: -1.85 and -1.84.
+
+Note that these were for bias=0 value. When we look at the readings with bias=initial, we see
+that fx = -35.40 and fy = -35.41, which means that the aligned axis measure the same values. 
+
+---------------------------------------------------------------------------------------------------
+
+Experiment 5 was done the same way with experiment 4 but with two important differences. First,
+the motors were moved with somatic commands as opposed to joystick to get more accuracy. Second,
+4 trials were done as opposed to two. Same weight was used.
+
+  
