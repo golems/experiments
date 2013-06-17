@@ -56,7 +56,7 @@ void computeOffset (const somatic_motor_t& arm, const Vector6d& raw, Vector6d& o
 	
 	// Get the weight vector (note that we use the bracket frame for gravity so towards -y)
 	// static const double eeMass = 0.169;	// kg - ft extension
-	static const double eeMass = 0.30;	// kg - ft extension
+	static const double eeMass = 1.6 + 0.169 + 0.000;	
 	Vector6d weightVector_in_bracket;
 	weightVector_in_bracket << 0.0, -eeMass * 9.81, 0.0, 0.0, 0.0, 0.0;
 	
