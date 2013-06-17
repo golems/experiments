@@ -18,4 +18,20 @@ Experiment 5 was done the same way with experiment 4 but with two important diff
 the motors were moved with somatic commands as opposed to joystick to get more accuracy. Second,
 4 trials were done as opposed to two. Same weight was used.
 
+The before/after (and the measured weights) values are for bias=0 case (averaged over ~2*1e5):
+
+fy1:  -9.38/-44.85 => -35.47
+fx1:  -3.95/31.78  => 35.73
+fy2:  -0.25/35.11  => 35.36
+fx2: -11.48/-46.99 => -35.51
+
+Note that the difference between fx1 and fy2, 0.37, can be seen in the bias=initial case as well
+with 0.52 value (sligh offset due to the noise in the initial reading):
+
+fy1: -35.53
+fx1: 35.72
+fy2: 35.20
+fx2: -35.50
+
+
   
