@@ -47,15 +47,15 @@ void computeExternal (const Vector6d& input) {
 	pSsensor_bracket.bottomRightCorner<3,3>() = R;
 	
 	// Get the weight vector (note that we use the bracket frame for gravity so towards -y)
-	static const double eeMass = 0.169;	// kg - ft extension
+	// static const double eeMass = 0.169;	// kg - ft extension
 	Vector6d weightVector_in_bracket;
 	weightVector_in_bracket << 0.0, -eeMass * 9.81, 0.0, 0.0, 0.0, 0.0;
 	
 	// Compute what the force and torque should be without any external values by multiplying the 
 	// position and rotation transforms with the expected effect of the gravity 
 	Vector6d wrenchWeight = pTcom_sensor * pSsensor_bracket * weightVector_in_bracket;
-	printf("wrench weight (%lf): ", wrenchWeight.norm());
-	cout << wrenchWeight.transpose() << endl;
+//	printf("wrench weight (%lf): ", wrenchWeight.norm());
+//	cout << wrenchWeight.transpose() << endl;
 
 	// Remove the effect from the sensor value
 	external = input - wrenchWeight;
@@ -71,7 +71,7 @@ void run() {
 
 	// Unless an interrupt or terminate message is received, process the new message
 	size_t c = 0;
-	Vector6d raw, ideal;
+	Vector6d raw;
 	while(!somatic_sig_received) {
 		
 		c++;
@@ -81,17 +81,17 @@ void run() {
 		somatic_motor_update(&daemon_cx, &llwa);
 	
 		// Get the f/t sensor data and compute the ideal value
-		bool result = (c % 1000000 == 0) && getFT(daemon_cx, ft_chan, raw);
+		size_t k = 1e4;
+		bool result = (c % k == 0) && getFT(daemon_cx, ft_chan, raw);
 		if(!result) continue;
-		ideal = raw + offset;
-		// cout << ideal.transpose() << " 0.0, 0.0" << endl;
+
+		// Compute the ideal value
+		Vector6d ideal = raw + offset;
 
 		// Compute the external forces from ideal readings
 		computeExternal(ideal);
-		if(c % 1000000 == 0) {
-			cout << external.transpose() << " " << llwa.pos[6] << " ";
-			cout << sqrt(external(0)*external(0) + external(1)*external(1)) << endl;
-		}
+		cout << external.transpose() << " " << llwa.pos[6] << " ";
+		cout << external.topLeftCorner<3,1>().norm() << endl;
 
 		usleep(1e4);
 	}

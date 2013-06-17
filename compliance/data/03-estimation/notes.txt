@@ -1,0 +1,9 @@
+Experiment 1 shows two things: (1) the external force that should be felt as the 7th motor rotates
+(which is 0) and (2) the effect of a finger pushing the end-effector first when it is at 0 degrees
+and second at 45 degrees.
+
+The interesting observation is that the observed signal from the first part of the experiment
+is "very" similar to the signal from the experiment with nothing on the f/t sensor (see experiment
+6 in debugging-amplitude folder). 
+
+---------------------------------------------------------------------------------------------------

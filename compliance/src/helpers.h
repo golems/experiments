@@ -33,6 +33,8 @@ using namespace Eigen;
 typedef Matrix<double, 6, 1> Vector6d;			///< A typedef for convenience to contain f/t values
 typedef Matrix<double, 6, 6> Matrix6d;			///< A typedef for convenience to contain wrenches
 
+static const double eeMass = 1.6 + 0.169 + 0.000;			///< The mass of the end-effector
+
 /// Returns the representation of the end-effector frame in the base frame
 void forwardKinematics (const somatic_motor_t& llwa, MatrixXd& Tbee);
 
