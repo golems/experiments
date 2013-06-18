@@ -1,6 +1,6 @@
 % This script is to plot the simple 8-dof data which the first 6 values for f/t, 7th for the 
 % moving angle.
-subject = 'Moving the 6th joint while 5th at 90 - estimation graph - ';
+subject = 'Joystick (slow) - correction graph - ';
 colors = {'k', 'b', 'r', 'g', 'c', 'm'}; 
 subplot(2,1,1); 
 for i = 1 : 3, plot(1:size(bla,1), bla(1:end,i), colors{i}); hold on; end                        
