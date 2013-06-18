@@ -16,7 +16,7 @@
 using namespace std;
 
 #define parm (cout << llwa.pos[0] << ", " << llwa.pos[1] << ", " << llwa.pos[2] << ", " << \
-	llwa.pos[3] << ", " << llwa.pos[4] << ", " << llwa.pos[5] << ", " << llwa.pos[6] << endl;)
+	llwa.pos[3] << ", " << llwa.pos[4] << ", " << llwa.pos[5] << ", " << llwa.pos[6] << endl);
 
 /* ********************************************************************************************* */
 somatic_d_t daemon_cx;
@@ -41,7 +41,12 @@ void run() {
 		c++;
 
 		// Move the arm to any position with the joystick
-		setJoystickInput(daemon_cx, js_chan, llwa, llwa);
+		bool setPos = 0;
+		double q [] = {0.0, -M_PI_2, 0.0, 0.0, M_PI_2, -M_PI_2, 2*M_PI};	
+		if(setPos) 
+			somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_POSITION, q, 7, NULL);
+		else 
+			setJoystickInput(daemon_cx, js_chan, llwa, llwa);
 		somatic_motor_update(&daemon_cx, &llwa);
 	
 		// Get the f/t sensor data and compute the ideal value
@@ -54,8 +59,7 @@ void run() {
 		Vector6d ideal = raw + offset;
 
 		// Print the results
-		cout << ideal.transpose() << " " << llwa.pos[6] << " ";
-		cout << sqrt(ideal(0)*ideal(0) + ideal(1)*ideal(1)) << endl;
+		cout << ideal.transpose() << " " << llwa.pos[5] << endl;
 	}
 
 	// Send the stoppig event
