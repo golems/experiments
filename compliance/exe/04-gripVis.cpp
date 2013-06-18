@@ -62,7 +62,8 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 
   sizerFull = new wxBoxSizer(wxHORIZONTAL);
 	wxBoxSizer* sizerFull = new wxBoxSizer (wxHORIZONTAL);
-	viewer->camRadius = 1.0;
+	viewer->camRadius = 3.0;
+	viewer->worldV += Vector3d(0.0, 0.0, -0.7);
 	viewer->UpdateCamera();
 	SetSizer(sizerFull);
 	frame->DoLoad("../scenes/04-World-Collision.urdf");

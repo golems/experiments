@@ -9,9 +9,6 @@
 	
 	<!-- Include the models by including either the complete urdf or referencing the file name -->
 	<include filename="KrangBlocks.urdf" model_name="krang"/>
-	<include filename="obstacle.urdf" model_name="obstacle"/>
 
 	<entity model="krang" name="Krang"> <origin xyz="0.0 0.0 0.27" rpy="1.5708 0 -1.5708"/> </entity>  
-	<entity model="obstacle" name="Obstacle"> <origin xyz="-1.32 -0.33 0.45" rpy="1.5708 0 1.5708 "/> </entity>
-	<entity model="obstacle" name="Obstacle2"> <origin xyz="-1.32 1 0.45" rpy="1.5708 0 1.5708 "/> </entity>
 </world> 
