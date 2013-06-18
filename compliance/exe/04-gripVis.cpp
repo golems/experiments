@@ -41,7 +41,15 @@ void Timer::Notify() {
 	setJoystickInput(daemon_cx, js_chan, llwa, llwa);
 	somatic_motor_update(&daemon_cx, &llwa);
 
+	// Update the arm position in gui with the real arm positions
+	VectorXd vals (7);
+	for(size_t i = 0; i < 7; i++) vals(i) = llwa.pos[i];
+	vector <int> arm_ids;
+	for(size_t i = 4; i < 17; i+=2) arm_ids.push_back(i + 6);  
+	world->getSkeleton(2)->setConfig(arm_ids, vals);
+
 	// Restart the timer for the next start
+	viewer->DrawGLScene();
 	Start(0.005 * 1e4);	
 }
 
