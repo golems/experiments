@@ -26,7 +26,7 @@
 krang_cx_t krang_cx;									
 krang_state_t state;
 somatic_motor_t amc, waist; 
-ach_channel_t imu_chan, js_chan;
+ach_channel_t imu_chan, js_chan, waistd_chan;
 filter_kalman_t *kf;
 DIR * dataFolder;
 struct dirent *dataFolderEntries;
@@ -95,6 +95,12 @@ void init() {
 	r  = ach_open(&js_chan, "joystick-data" , NULL);
 	aa_hard_assert(r == ACH_OK,
 				   "Ach failure %s on opening Joystick channel (%s, line %d)\n",
+				   ach_result_to_string(static_cast<ach_status_t>(r)), __FILE__, __LINE__);
+	
+	// Open waist daemon command channel
+	r  = ach_open(&waistd_chan, "waistd-cmd" , NULL);
+	aa_hard_assert(r == ACH_OK,
+				   "Ach failure %s on opening Waist Daemon Command channel (%s, line %d)\n",
 				   ach_result_to_string(static_cast<ach_status_t>(r)), __FILE__, __LINE__);
 	
 	// Open the state channel
@@ -191,8 +197,13 @@ void readSensors(double dt) {
 	kf->z[5] = amc.vel[1]+kf->z[1]; // = abs. R wheel vel.
 
 	// Read waist position and speed
-	kf->z[6] = 117*M_PI/180.0;;
-	kf->z[7] = 0.0;
+	somatic_motor_update(&krang_cx.d_cx, &waist);
+	if(waist.pos[0]+waist.pos[1]>0.087) {
+		printf("ERROR: Waist modules are sensed to be misaligned!"); 
+		printf("[%lf, %lf]", waist.pos[0], waist.pos[1]);
+	}
+	kf->z[6] = (waist.pos[0]-waist.pos[1])/2;
+	kf->z[7] = (waist.vel[0]-waist.vel[1])/2;;
 	
 	// If first reading, set motor offsets
 	static bool offsetDone=0;
@@ -202,7 +213,6 @@ void readSensors(double dt) {
 
 		kf->z[2] = 0.0;
 		kf->z[4] = 0.0;
-		kf->z[6] = 117*M_PI/180.0;
 		offsetDone = 1;
 		return;
 	}
@@ -265,9 +275,8 @@ void readSensors(double dt) {
 	state.dq1_0	   = kf->x[3] - state.dq2;
 	state.q1_1		= kf->x[4] - state.q2;
 	state.dq1_1	   = kf->x[5] - state.dq2;
-	state.q3		  = 117*M_PI/180.0; //FIXME: This is a hack and works for a fixed waist angle. It should have been kf->x[6];
-																	// But for some reason it is behaving strange. Value is slowwwly rising to 117 from 0.
-	state.dq3		 = 0.0;//kf->x[7];
+	state.q3		  = kf->x[6];
+	state.dq3		 = kf->x[7];
 
 	// Set the wheel position by taking the mean of the two wheel encoders 
 	state.q1 = (state.q1_0 + state.q1_1)/2.0;
@@ -307,6 +316,29 @@ void readSensors(double dt) {
 	}
 }
 
+/************************************************************************************************/
+// Control the waist motors based on joystick input. This is done by communicating to the 
+// krang-waist daemon via the waistd-cmd ach channel.
+
+void waistCtrl( const double jsInput ) { 
+	// Decide what mode to choose for the waist motor control
+	static Somatic__WaistMode waistMode;
+	if(jsInput < -0.9) waistMode = SOMATIC__WAIST_MODE__MOVE_FWD;
+	else if(jsInput > 0.9) waistMode = SOMATIC__WAIST_MODE__MOVE_REV;
+	else waistMode = SOMATIC__WAIST_MODE__STOP;
+
+	// Send message to the krang-waist daemon
+	static Somatic__WaistCmd *waistDaemonCmd=somatic_waist_cmd_alloc();
+	somatic_waist_cmd_set(waistDaemonCmd, waistMode);
+	somatic_metadata_set_time_now(waistDaemonCmd->meta);
+	somatic_metadata_set_until_duration(waistDaemonCmd->meta, .1);
+	int r = SOMATIC_PACK_SEND( &waistd_chan, somatic__waist_cmd, waistDaemonCmd );
+	if( ACH_OK != r ) {
+			fprintf(stderr, "Couldn't send message: %s\n",
+							ach_result_to_string(static_cast<ach_status_t>(r)));
+	}
+}
+
 /* ********************************************************************************************* */
 // Read and process the commands from the joystick
 void readJoystick( double dt ) {
@@ -330,7 +362,10 @@ void readJoystick( double dt ) {
 				b[i] = js_msg->buttons->data[i] ? 1 : 0;
 			}
 
-	}	
+	}
+	// Waist Control based on joystick data
+	waistCtrl( js_msg->axes->data[5] );
+
 	// Set the forward/backward ad left/right joystick axes values to zero
 	state.js_fb = 0;	state.js_lr = 0;
 
