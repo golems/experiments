@@ -197,10 +197,12 @@ void readSensors(double dt) {
 	kf->z[5] = amc.vel[1]+kf->z[1]; // = abs. R wheel vel.
 
 	// Read waist position and speed
+	static bool waistErrorPrinted=0;
 	somatic_motor_update(&krang_cx.d_cx, &waist);
-	if(waist.pos[0]+waist.pos[1]>0.087) {
-		printf("ERROR: Waist modules are sensed to be misaligned!"); 
+	if(waist.pos[0]+waist.pos[1]>0.087 && !waistErrorPrinted) {
+		printf("ERROR: Waist modules are sensed to be misaligned!\n"); 
 		printf("[%lf, %lf]", waist.pos[0], waist.pos[1]);
+		waistErrorPrinted=1;
 	}
 	kf->z[6] = (waist.pos[0]-waist.pos[1])/2;
 	kf->z[7] = (waist.vel[0]-waist.vel[1])/2;;
@@ -364,7 +366,7 @@ void readJoystick( double dt ) {
 
 	}
 	// Waist Control based on joystick data
-	waistCtrl( js_msg->axes->data[5] );
+	waistCtrl( x[5] );
 
 	// Set the forward/backward ad left/right joystick axes values to zero
 	state.js_fb = 0;	state.js_lr = 0;
