@@ -21,14 +21,22 @@ typedef enum {
 	KRANG_MODE_TOSIT,
 	KRANG_MODE_SIT,
 	KRANG_MODE_BALANCE,
-	KRANG_MODE_TRACK_SINE,
+	KRANG_MODE_TRACK,
 	KRANG_MODE_SIZE
 } krang_mode_t;
+
+// In KRANG_MODE_TRACK mode, krang will be in one of the following track-modes
+typedef enum {
+	TRACK_FWD_REV = 0,
+	TRACK_LEFT_RIGHT,
+	TRACK_CIRCLE
+} track_mode_t;
 
 typedef struct {
 	// discrete
 	krang_mode_t mode;
-	
+	track_mode_t track_mode;	
+
 	// continuous
 	// filtered states of Krang
 	double q1;		  // wheel position [rad]

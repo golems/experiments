@@ -66,17 +66,25 @@ void init() {
 
 	// Initialize the motors with daemon context, channel names and # of motors
 	somatic_motor_init( &krang_cx.d_cx, &amc, 2, "amc-cmd", "amc-state");
+	somatic_motor_init( &krang_cx.d_cx, &waist, 2, "waist-cmd", "waist-state" );
 
 	// Set the min and maximum position and velocity valid/limit values for motors
 	double ** limits[] = { 
 		&amc.pos_valid_min, &amc.vel_valid_min, &amc.pos_limit_min, &amc.vel_limit_min, 
-	  &amc.pos_valid_max,	&amc.vel_valid_max, &amc.pos_limit_max, &amc.vel_limit_max};
-	for(size_t i=0; i<4; i++) { aa_fset(*limits[i],-1024.1, 2); }
-	for(size_t i=4; i<8; i++) { aa_fset(*limits[i],1024.1, 2); }
-	usleep(1e5);
-
+	  &waist.pos_valid_min, &waist.vel_valid_min, &waist.pos_limit_min, &waist.vel_limit_min,	
+		&amc.pos_valid_max,	&amc.vel_valid_max, &amc.pos_limit_max, &amc.vel_limit_max,	
+		&waist.pos_valid_max, &waist.vel_valid_max, &waist.pos_limit_max, &waist.vel_limit_max};
+	for(size_t i=0; i<8; i++)  { aa_fset(*limits[i],-1024.1, 2); }
+	for(size_t i=8; i<16; i++) { aa_fset(*limits[i],1024.1, 2); }
+	aa_fset( waist.pos_valid_min, -5, 2); 
+	aa_fset( waist.pos_valid_max, 5, 2); 
+	
 	// Update and reset motors
 	somatic_motor_update(&krang_cx.d_cx, &amc);
+	somatic_motor_update(&krang_cx.d_cx, &waist);
+	double vals[] = {0.0,0.0};
+  somatic_motor_cmd(&krang_cx.d_cx, &waist, SOMATIC__MOTOR_PARAM__MOTOR_RESET, vals, 2, NULL);
+	usleep(1e5);
 
 	// Open the IMU channel
 	int r  = ach_open( &imu_chan, "imu-data" , NULL );
@@ -290,11 +298,11 @@ void readSensors(double dt) {
 	error_th = atan2(com(0), com(1));// + 4*M_PI/180.0;
 	derror_th = state.dq2;
 	if(error_th < -STABLE_TH_RANGE ) { 
-		if(state.mode == KRANG_MODE_BALANCE || state.mode == KRANG_MODE_TRACK_SINE)	
+		if(state.mode == KRANG_MODE_BALANCE || state.mode == KRANG_MODE_TRACK)	
 			state.mode = KRANG_MODE_TOSIT;
 	}
 	if(error_th > STABLE_TH_RANGE ) {
-		if(state.mode == KRANG_MODE_BALANCE || state.mode == KRANG_MODE_TRACK_SINE)	
+		if(state.mode == KRANG_MODE_BALANCE || state.mode == KRANG_MODE_TRACK)	
 			state.mode = KRANG_MODE_HALT;
 	}
 }
@@ -332,14 +340,17 @@ void readJoystick( double dt ) {
 	if(b[6] && b[7]) { if(state.mode == KRANG_MODE_HALT) { state.mode=KRANG_MODE_SIT; printf("MODE_SIT\n"); dq1_ref=0.0; }}
 	else if(b[8]) { state.mode = KRANG_MODE_QUIT; }
 	//	else if(b[9] && !b[5]) { if(state.mode == KRANG_MODE_BALANCE) state.mode = KRANG_MODE_TOSIT; } 
-	else if(b[9] && b[5]) { if(state.mode == KRANG_MODE_SIT || state.mode == KRANG_MODE_TRACK_SINE) { state.mode = KRANG_MODE_BALANCE; dq1_ref=0.0; } }
-	else if(b[5] && b[0]) { if(state.mode == KRANG_MODE_BALANCE) { 
+	else if(b[9] && b[5]) { if(state.mode == KRANG_MODE_SIT || state.mode == KRANG_MODE_TRACK) { state.mode = KRANG_MODE_BALANCE; dq1_ref=0.0; } }
+	else if(b[5] && (b[0] || b[1] || b[2])) { if(state.mode == KRANG_MODE_BALANCE) { 
 			state.q1_ref[0]=state.q1_0;
 			state.q1_ref[1]=state.q1_1;
 			state.spin_ref = wheelRadius * (state.q1_ref[1]-state.q1_ref[0]) / distanceBetweenWheels;
 			state.pref = (state.q1_ref[0] + state.q1_ref[1]) / 2.0;
-			state.mode = KRANG_MODE_TRACK_SINE; 
+			state.mode = KRANG_MODE_TRACK;
 			t_sine=0.0; 
+			if(b[0]) state.track_mode=TRACK_FWD_REV; 
+			else if(b[1]) state.track_mode=TRACK_LEFT_RIGHT;
+			else if(b[2]) state.track_mode=TRACK_CIRCLE;
 		} 
 	}
 	// If button 4 is pressed (indexed 3) in balance-mode increase dq1_ref by 0.01
@@ -355,8 +366,8 @@ void readJoystick( double dt ) {
 		state.js_lr =  x[2]*0.5;	// range [-1, 1]
 		
 		// Generate velocity reference based on the mode
-		// If we are not in the TRACK_SINE mode, use the joystick to generate velocity reference
-		if( state.mode != KRANG_MODE_TRACK_SINE )	{
+		// If we are not in the TRACK mode, use the joystick to generate velocity reference
+		if( state.mode != KRANG_MODE_TRACK )	{
 			// Velocity control when sitting
 			state.dq1_ref[0] = MAX_LIN_VEL*state.js_fb;
 			state.dq1_ref[1] = state.dq1_ref[0];
@@ -368,31 +379,37 @@ void readJoystick( double dt ) {
 			/*state.dq1_ref[0] = dq1_ref;
 			state.dq1_ref[1] = dq1_ref;*/
 		}
-		// If in TRACK_SINE mode ignore joystick and generate a sinusoidal velocity reference
+		// If in TRACK mode ignore joystick and generate a reference of the trajectory to be followed
 		else {
-			// Following three line should be used only for forward backward only
-			//double freq=1/12.0; double Amplitude=2.0; // One cycle in six seconds
-			//state.dq1_ref[0] = Amplitude*2*M_PI*freq*cos(2*M_PI*freq*t_sine);
-			//state.dq1_ref[1] = Amplitude*2*M_PI*freq*cos(2*M_PI*freq*t_sine);
-
-			// Following five (or six if including the gap line) lines should be used only for left/right
-			// turning
-			//state.pref=0.0; state.vref=0.0;
-			//double freq=1/12.0; double Amplitude=M_PI/2; // One cycle in six seconds
-			//state.dspin_ref= Amplitude*2*M_PI*freq*cos(2*M_PI*freq*t_sine);
-			//
-			//state.dq1_ref[0] = (state.vref - distanceBetweenWheels*state.dspin_ref)/(2*wheelRadius);
-			//state.dq1_ref[1] = (state.vref + distanceBetweenWheels*state.dspin_ref)/(2*wheelRadius);
-			
-			// Used only for following a circle trajectory
-			double circleRadius = 30.0; // inches 
-			double timePerRound = 10.0; // seconds
-			state.dq1_ref[0]=M_PI*(2*circleRadius+distanceBetweenWheels)/(wheelRadius*timePerRound);
-			state.dq1_ref[1]=M_PI*(2*circleRadius-distanceBetweenWheels)/(wheelRadius*timePerRound);
-			state.dspin_ref=-2*M_PI/timePerRound;
-			
+			switch(state.track_mode) {
+				case TRACK_FWD_REV: {
+					double freq=1/12.0; double Amplitude=2.0; // One cycle in six seconds
+					state.dspin_ref = 0.0;
+					state.dq1_ref[0] = Amplitude*2*M_PI*freq*cos(2*M_PI*freq*t_sine);
+					state.dq1_ref[1] = Amplitude*2*M_PI*freq*cos(2*M_PI*freq*t_sine);
+					break;
+				}
+				case TRACK_LEFT_RIGHT: {
+					double freq=1/12.0; double Amplitude=M_PI/2; // One cycle in six seconds
+					state.dspin_ref= Amplitude*2*M_PI*freq*cos(2*M_PI*freq*t_sine);
+					state.dq1_ref[0] = -distanceBetweenWheels*state.dspin_ref/(2*wheelRadius);
+					state.dq1_ref[1] =  distanceBetweenWheels*state.dspin_ref/(2*wheelRadius);
+					break;
+				}
+				case TRACK_CIRCLE: {
+					double circleRadius = 30.0; // inches 
+					double timePerRound = 10.0; // seconds
+					state.dspin_ref=-2*M_PI/timePerRound;
+					state.dq1_ref[0]=M_PI*(2*circleRadius+distanceBetweenWheels)/(wheelRadius*timePerRound);
+					state.dq1_ref[1]=M_PI*(2*circleRadius-distanceBetweenWheels)/(wheelRadius*timePerRound);
+				break;	
+				}
+			}
 			t_sine += dt;
 		}
+		// The following line should only be used for left/right and circle trajectory
+		state.spin_ref = wheelRadius * (state.q1_ref[1]-state.q1_ref[0]) / distanceBetweenWheels;
+		
 		// integrate
 		state.q1_ref[0] += dt * state.dq1_ref[0];
 		state.q1_ref[1] += dt * state.dq1_ref[1];
@@ -400,13 +417,6 @@ void readJoystick( double dt ) {
 		// avg ref wheel pos/vel for forward/backward control
 		state.pref = (state.q1_ref[0] + state.q1_ref[1]) / 2.0;
 		state.vref = (state.dq1_ref[0] + state.dq1_ref[1]) / 2.0;
-
-		// Reference Values for robot spin and spin rate
-		// Following 2 lines should only be used for fwd/back
-		//state.spin_ref = 0.0;
-		//state.dspin_ref = 0.0;
-		// The following line should only be used for left/right and circle trajectory
-		state.spin_ref = wheelRadius * (state.q1_ref[1]-state.q1_ref[0]) / distanceBetweenWheels;
 	} 
 }
 
@@ -451,7 +461,7 @@ void controlWheels(double dt) {
 		// Balance Mode: Control imu angle to bring COM right above the wheel axisand control wheels
 		// based on on joystick commands
 		case KRANG_MODE_BALANCE:
-		case KRANG_MODE_TRACK_SINE: {
+		case KRANG_MODE_TRACK: {
 			static bool override=0;
 			if(!override) { 
 				printf("Setting the override mode!\n");
