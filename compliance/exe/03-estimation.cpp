@@ -24,9 +24,6 @@ Vector6d external;
 /* ******************************************************************************************** */
 void computeExternal (const Vector6d& input) {
 
-	// Set the vector from the sensor origin to the gripper center of mass
-	static const Vector3d s2com (0.0, 0.0, 0.02);
-
 	// Get the point transform wrench due to moving the affected position from com to sensor origin
 	// The transform is an identity with the bottom left a skew symmetric of the point translation
 	Matrix6d pTcom_sensor = MatrixXd::Identity(6,6); 

@@ -35,6 +35,9 @@ typedef Matrix<double, 6, 6> Matrix6d;			///< A typedef for convenience to conta
 
 static const double eeMass = 1.6 + 0.169 + 0.000;			///< The mass of the end-effector
 
+/// Set the vector from the sensor origin to the gripper center of mass (m)
+static const Vector3d s2com (0.0, 0.0, 0.09); // 0.0683 schunk itself, 0.026 length of ext + 2nd
+
 /// Returns the representation of the end-effector frame in the base frame
 void forwardKinematics (const somatic_motor_t& llwa, MatrixXd& Tbee);
 

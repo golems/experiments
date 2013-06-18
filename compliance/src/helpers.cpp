@@ -32,9 +32,6 @@ void forwardKinematics (const somatic_motor_t& arm, MatrixXd& Tbee) {
 /* ******************************************************************************************** */
 void computeOffset (const somatic_motor_t& arm, const Vector6d& raw, Vector6d& offset) {
 
-	// Set the vector from the sensor origin to the gripper center of mass
-	static const Vector3d s2com (0.0, 0.0, 0.01);
-
 	// Get the point transform wrench due to moving the affected position from com to sensor origin
 	// The transform is an identity with the bottom left a skew symmetric of the point translation
 	Matrix6d pTcom_sensor = MatrixXd::Identity(6,6); 
@@ -56,7 +53,6 @@ void computeOffset (const somatic_motor_t& arm, const Vector6d& raw, Vector6d& o
 	
 	// Get the weight vector (note that we use the bracket frame for gravity so towards -y)
 	// static const double eeMass = 0.169;	// kg - ft extension
-	static const double eeMass = 1.6 + 0.169 + 0.000;	
 	Vector6d weightVector_in_bracket;
 	weightVector_in_bracket << 0.0, -eeMass * 9.81, 0.0, 0.0, 0.0, 0.0;
 	
