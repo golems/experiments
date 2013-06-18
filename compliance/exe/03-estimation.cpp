@@ -87,8 +87,7 @@ void run() {
 
 		// Compute the external forces from ideal readings
 		computeExternal(ideal);
-		cout << external.transpose() << " " << llwa.pos[6] << " ";
-		cout << external.topLeftCorner<3,1>().norm() << endl;
+		cout << external.transpose() << " " << llwa.pos[5] << endl;
 
 		usleep(1e4);
 	}
