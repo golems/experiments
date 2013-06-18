@@ -1,0 +1,17 @@
+<?xml version="1.0" ?>
+<!-- @file 04-World-Collision.urdf -->
+<!-- @author Can Erdogan -->
+<!-- @date May 14, 2013 -->
+<!-- @brief Contains the definition for the world setup where the red objects are the obstacles -->
+<!-- we want the program to detect collisions with (as well as the ones with the robot. -->
+ 
+<world name="schunk_with_desktop">
+	
+	<!-- Include the models by including either the complete urdf or referencing the file name -->
+	<include filename="KrangBlocks.urdf" model_name="krang"/>
+	<include filename="obstacle.urdf" model_name="obstacle"/>
+
+	<entity model="krang" name="Krang"> <origin xyz="0.0 0.0 0.27" rpy="1.5708 0 -1.5708"/> </entity>  
+	<entity model="obstacle" name="Obstacle"> <origin xyz="-1.32 -0.33 0.45" rpy="1.5708 0 1.5708 "/> </entity>
+	<entity model="obstacle" name="Obstacle2"> <origin xyz="-1.32 1 0.45" rpy="1.5708 0 1.5708 "/> </entity>
+</world> 

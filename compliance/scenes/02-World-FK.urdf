@@ -1,0 +1,11 @@
+<world name="schunk_with_desktop">
+	
+	<!-- Include the models by including either the complete urdf or referencing the file name -->
+	<include filename="Krang.urdf" model_name="krang"/>
+	<include filename="bluePoint.urdf" model_name="blueCube"/>
+	<include filename="redPoint.urdf" model_name="redCube"/>
+
+	<entity model="krang" name="Krang"> <origin xyz="0.0 0.0 0.27" rpy="1.5708 0 -1.5708"/> </entity>  
+	<entity model="blueCube" name="BlueCube"> <origin xyz="-0.32 -0.33 0.45" rpy="1.5708 0 1.5708 "/> </entity>
+	<entity model="redCube" name="RedCube"> <origin xyz="-0.32 -0.33 0.45" rpy="1.5708 0 1.5708 "/> </entity>
+</world> 

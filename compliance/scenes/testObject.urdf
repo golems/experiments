@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<robot name="cylinder">
+  <link name="base_link">
+		<visual> <geometry> <mesh filename="Schunk/schunkGripperPlate.3ds" /> </geometry> </visual>
+  </link>
+</robot>

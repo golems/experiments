@@ -1,0 +1,22 @@
+<?xml version="1.0" ?>
+<!-- @file 05-World-JInv.urdf -->
+<!-- @author Can Erdogan -->
+<!-- @date May 19, 2013 -->
+<!-- @brief The world where Krang follows a task-space trajectory. -->
+ 
+<world name="schunk_with_desktop">
+
+	<include filename="KrangBlocks.urdf" model_name="krang"/>
+	<include filename="greenArrow.urdf" model_name="greenArrow"/>
+
+	<entity model="krang" name="Krang"> <origin xyz="0.0 0.0 0.27" rpy="1.5708 0 -1.5708"/> </entity> 
+	<!-- -19.19, 100.8, 180.0 -->
+	<entity model="greenArrow" name="g1"> <origin xyz="0.44 0.40 1.52" rpy="-0.3351 1.7593 3.1416"/> </entity>
+	<!-- -84, 0, 90 -->
+	<entity model="greenArrow" name="g2"> <origin xyz="0.51 0.35 1.60" rpy="-1.4661 0.0 1.5708"/> </entity>
+	<!-- 180, -90, -156 --> 
+	<entity model="greenArrow" name="g3"> <origin xyz="0.59 0.27 1.52" rpy="3.1416 -1.5708 -2.723"/> </entity>
+	<!-- 90, 0, -90 -->
+	<entity model="greenArrow" name="g4"> <origin xyz="0.67 0.35 1.44" rpy="1.5708 0 -1.5708"/> </entity>
+
+</world> 
