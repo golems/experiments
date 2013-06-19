@@ -48,7 +48,8 @@ void computeOffset (const somatic_motor_t& llwa, const Vector6d& raw, Vector6d& 
 /// Computes the external force and torque from the values assuming that the input is already
 /// corrected for the effect of gravity. That is the arm readings should reflect the weight
 /// of the end-effector when there are no external inputs.
-void computeExternal (const somatic_motor_t& llwa, const Vector6d& input, Vector6d& external);
+void computeExternal (const somatic_motor_t& llwa, const Vector6d& input, Vector6d& external,
+		Matrix3d& Rsb);
 
 /// Initializes the daemon, joystick/ft channels, left arm and computes the initial offset for ft
 void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& ft_chan, 

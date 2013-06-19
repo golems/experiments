@@ -31,6 +31,7 @@ void run() {
 	// Unless an interrupt or terminate message is received, process the new message
 	size_t c = 0;
 	Vector6d raw, external;
+	Matrix3d Rsb;	//< The sensor frame in bracket frame (only rotation)
 	while(!somatic_sig_received) {
 		
 		c++;
@@ -48,8 +49,11 @@ void run() {
 		Vector6d ideal = raw + offset;
 
 		// Compute the external forces from ideal readings
-		computeExternal(llwa, ideal, external);
-		cout << external.transpose() << " " << llwa.pos[5] << endl;
+		computeExternal(llwa, ideal, external, Rsb);
+		external.topLeftCorner<3,1>() = Rsb.transpose() * external.topLeftCorner<3,1>();
+		external.bottomLeftCorner<3,1>() = Rsb.transpose() * external.bottomLeftCorner<3,1>();
+		pv(external);
+//		cout << "Rsb:\n" << Rsb << endl;
 
 		usleep(1e4);
 	}

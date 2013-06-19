@@ -4,8 +4,12 @@
  * @date June 19, 2013
  * @brief This file demonstrates the full compliance motion where the correct input f/t readings,
  * estimate the external f/t values, threshold them to not deal with the modeling error of the
- * sensor and move towards the opposite direction using inverse Jacobians.
+ * sensor, get them in the world frame and move towards the opposite direction using inverse 
+ * Jacobians.
+ * TODO Limit acceleration to avoid jerk, also frame rate
+ * TODO Change nominal acceleration based on average force
  */
+
 #include <Eigen/Dense>
 #include <iostream>
 #include <stdio.h>
@@ -76,6 +80,7 @@ void run() {
 	vector <int> arm_ids;
 	for(size_t i = 4; i < 17; i+=2) arm_ids.push_back(i + 6);  
 	double dqZero [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+	Matrix3d Rbs;
 	while(!somatic_sig_received) {
 		
 		c++;
@@ -97,8 +102,9 @@ void run() {
 		// Compute the ideal value
 		Vector6d ideal = raw + offset;
 
-		// Compute the external forces from ideal readings
-		computeExternal(llwa, ideal, external);
+		// Compute the external forces from ideal readings and move it to bracket frame
+		computeExternal(llwa, ideal, external, Rbs);
+		external = Rbs * external;
 
 		// Threshold the values - 4N for forces, 0.4Nm for torques
 		if((external.topLeftCorner<3,1>().norm() < 4) && 
