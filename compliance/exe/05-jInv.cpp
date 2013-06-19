@@ -23,15 +23,24 @@
 using namespace std;
 using namespace Eigen;
 using namespace dynamics;
+using namespace simulation;
+
+#define pq(a) std::cout << #a << ": " << (a) << std::endl
+#define pmr(a) std::cout << #a << ":\n " << ((a)) << "\n" << std::endl
 
 #define parm (cout << llwa.pos[0] << ", " << llwa.pos[1] << ", " << llwa.pos[2] << ", " << \
 	llwa.pos[3] << ", " << llwa.pos[4] << ", " << llwa.pos[5] << ", " << llwa.pos[6] << endl);
+
+#define NUM_GOALS 0
+
+const size_t r_id = 1;
 
 /* ********************************************************************************************* */
 somatic_d_t daemon_cx;
 ach_channel_t js_chan;				
 ach_channel_t ft_chan;
 somatic_motor_t llwa;
+World* mWorld = NULL;
 
 /* ********************************************************************************************* */
 /// Given a workspace velocity, returns the joint space velocity
@@ -64,10 +73,11 @@ bool workVelocity (World* mWorld, kinematics::BodyNode* eeNode, size_t currGoal,
 
 	// Get the current end-effector location and orientation (as a quaternion);
 	Matrix4d axisChange;
-	axisChange << 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0;
-	MatrixXd eeTransform = eeNode->getWorldTransform() * axisChange;
+//	axisChange << 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0;
+	MatrixXd eeTransform = eeNode->getWorldTransform(); // * axisChange;
 	VectorXd eePos = eeTransform.topRightCorner<3,1>();
 	Quaternion <double> eeOri (eeTransform.topLeftCorner<3,3>());
+	pmr(eeTransform);	
 
 	// Find the position error
 	VectorXd errPos = goalPos - eePos;
@@ -85,7 +95,7 @@ bool workVelocity (World* mWorld, kinematics::BodyNode* eeNode, size_t currGoal,
 	if((errPos.norm() < posLimit) && (errOri.norm() < oriLimit)) return true;
 
 	// Get the workspace velocity
-	static const double kSpeed = 0.01;
+	static const double kSpeed = 0.05;
 	xdot = VectorXd (6);
 	xdot << errPos, errOri;
 	xdot = kSpeed * xdot.normalized();
@@ -94,7 +104,7 @@ bool workVelocity (World* mWorld, kinematics::BodyNode* eeNode, size_t currGoal,
 
 /* ********************************************************************************************* */
 /// Detects collisions with the environment and within robot
-void Timer::Notify() {
+void run() {
 
 	static size_t currGoal = 0;
 	static size_t reachWaitIters = 0;
@@ -115,12 +125,13 @@ void Timer::Notify() {
 		for(size_t i = 0; i < 7; i++) vals(i) = llwa.pos[i];
 		vector <int> arm_ids;
 		for(size_t i = 4; i < 17; i+=2) arm_ids.push_back(i + 6);  
-		world->getSkeleton(2)->setConfig(arm_ids, vals);
+		mWorld->getSkeleton(r_id)->setConfig(arm_ids, vals);
 		
 		// Get the workspace velocity
-		kinematics::BodyNode* eeNode = mWorld->getSkeleton(4)->getNode("lgPlate1");
+		kinematics::BodyNode* eeNode = mWorld->getSkeleton(r_id)->getNode("lgPlate1");
 		VectorXd xdot;
 		bool reached = workVelocity(mWorld, eeNode, currGoal, xdot);
+		pv(xdot);
 		if(reached) {
 
 			// If we are within the proximity of a goal for 30 frames, we decide that we've reached it
@@ -128,19 +139,27 @@ void Timer::Notify() {
 			if(reachWaitIters < 30) reachWaitIters++;
 			else {
 				reachWaitIters = 0;
-				currGoal = min((size_t) 3, currGoal+1);
+				currGoal = min((size_t) NUM_GOALS, currGoal+1);
 			}
 
 			// Rerun to increment the timer and/or to set the next goal
+			double dq [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+			somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7, NULL);
 			continue;
 		}
 
 		// Get the joint-space velocities by multiplying inverse Jacobian with x.
 		VectorXd qdot = workToJointVelocity(eeNode, xdot);
-		pv(qdot);
 
+		// Limit the joint values to +- 0.2 
+		for(size_t i = 0; i < 7; i++) {
+			if(qdot(i) > 0.1) qdot(i) = 0.2;
+			else if(qdot(i) < -0.1) qdot(i) = -0.2;
+		}
+		pv(qdot);
+				
 		// Apply the joint space velocities to the robot
-		bool run = 0;
+		bool run = 1;
 		double dq [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 		for(size_t i = 0; i < 7; i++) dq[i] = qdot(i);
 		if(run)
@@ -148,6 +167,10 @@ void Timer::Notify() {
 
 		usleep(1e4);
 	}
+
+	// Send the stoppig event
+	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
+					 SOMATIC__EVENT__CODES__PROC_STOPPING, NULL, NULL);
 }
 
 /* ********************************************************************************************* */
@@ -158,14 +181,8 @@ void init() {
 
 	// Load the world
 	DartLoader dl;
-	World* mWorld = NULL;
 	mWorld = dl.parseWorld("../scenes/02-World-JInv.urdf");
 	assert((mWorld != NULL) && "Could not find the world");
-
-	// Create the timer to notify the function that draws the robot at multiple configurations
-	timer = new Timer();
-	timer->world = mWorld;
-	timer->Start(1);	
 
 	// ============================================================================
 	// Initialize robot stuff

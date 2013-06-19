@@ -46,7 +46,7 @@ void Timer::Notify() {
 	for(size_t i = 0; i < 7; i++) vals(i) = llwa.pos[i];
 	vector <int> arm_ids;
 	for(size_t i = 4; i < 17; i+=2) arm_ids.push_back(i + 6);  
-	world->getSkeleton(2)->setConfig(arm_ids, vals);
+	world->getSkeleton(1)->setConfig(arm_ids, vals);
 
 	// Restart the timer for the next start
 	viewer->DrawGLScene();
@@ -66,7 +66,7 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	viewer->worldV += Vector3d(0.0, 0.0, -0.7);
 	viewer->UpdateCamera();
 	SetSizer(sizerFull);
-	frame->DoLoad("../scenes/04-World-Collision.urdf");
+	frame->DoLoad("../scenes/02-World-JInv.urdf");
 
 	// Create the timer to notify the function that draws the robot at multiple configurations
 	timer = new Timer();
