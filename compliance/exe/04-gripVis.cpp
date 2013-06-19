@@ -46,7 +46,7 @@ void Timer::Notify() {
 	for(size_t i = 0; i < 7; i++) vals(i) = llwa.pos[i];
 	vector <int> arm_ids;
 	for(size_t i = 4; i < 17; i+=2) arm_ids.push_back(i + 6);  
-	world->getSkeleton(1)->setConfig(arm_ids, vals);
+	world->getSkeleton(4)->setConfig(arm_ids, vals);
 
 	// Restart the timer for the next start
 	viewer->DrawGLScene();

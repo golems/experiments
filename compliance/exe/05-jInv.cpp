@@ -31,9 +31,8 @@ using namespace simulation;
 #define parm (cout << llwa.pos[0] << ", " << llwa.pos[1] << ", " << llwa.pos[2] << ", " << \
 	llwa.pos[3] << ", " << llwa.pos[4] << ", " << llwa.pos[5] << ", " << llwa.pos[6] << endl);
 
-#define NUM_GOALS 0
-
-const size_t r_id = 1;
+#define NUM_GOALS 3
+const size_t r_id = 4;
 
 /* ********************************************************************************************* */
 somatic_d_t daemon_cx;
@@ -77,7 +76,6 @@ bool workVelocity (World* mWorld, kinematics::BodyNode* eeNode, size_t currGoal,
 	MatrixXd eeTransform = eeNode->getWorldTransform(); // * axisChange;
 	VectorXd eePos = eeTransform.topRightCorner<3,1>();
 	Quaternion <double> eeOri (eeTransform.topLeftCorner<3,3>());
-	pmr(eeTransform);	
 
 	// Find the position error
 	VectorXd errPos = goalPos - eePos;
@@ -95,7 +93,7 @@ bool workVelocity (World* mWorld, kinematics::BodyNode* eeNode, size_t currGoal,
 	if((errPos.norm() < posLimit) && (errOri.norm() < oriLimit)) return true;
 
 	// Get the workspace velocity
-	static const double kSpeed = 0.05;
+	static const double kSpeed = 0.07;
 	xdot = VectorXd (6);
 	xdot << errPos, errOri;
 	xdot = kSpeed * xdot.normalized();
@@ -119,6 +117,7 @@ void run() {
 	while(!somatic_sig_received) {
 		
 		c++;
+		cout << "goal: " << currGoal << endl;
 
 		// Update the arm position in dart with the real arm positions
 		somatic_motor_update(&daemon_cx, &llwa);
@@ -131,7 +130,6 @@ void run() {
 		kinematics::BodyNode* eeNode = mWorld->getSkeleton(r_id)->getNode("lgPlate1");
 		VectorXd xdot;
 		bool reached = workVelocity(mWorld, eeNode, currGoal, xdot);
-		pv(xdot);
 		if(reached) {
 
 			// If we are within the proximity of a goal for 30 frames, we decide that we've reached it
@@ -156,7 +154,6 @@ void run() {
 			if(qdot(i) > 0.1) qdot(i) = 0.2;
 			else if(qdot(i) < -0.1) qdot(i) = -0.2;
 		}
-		pv(qdot);
 				
 		// Apply the joint space velocities to the robot
 		bool run = 1;
@@ -190,7 +187,7 @@ void init() {
 	// Initialize this daemon (program!)
 	somatic_d_opts_t dopt;
 	memset(&dopt, 0, sizeof(dopt)); // zero initialize
-	dopt.ident = "01-gripperWeight";
+	dopt.ident = "04-gripperWeight";
 	somatic_d_init( &daemon_cx, &dopt );
 
 	// Initialize the left arm

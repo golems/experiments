@@ -32,6 +32,7 @@ include_directories(../common)
 # Collect the source, script and fortran files
 file(GLOB main_source "src/*.cpp" "src/*.c")
 file(GLOB scripts_source "exe/*.cpp")
+LIST(SORT scripts_source)
 
 # Build the library and set the executables that use it (have to hardcode for now)
 add_library(Main SHARED ${main_source})

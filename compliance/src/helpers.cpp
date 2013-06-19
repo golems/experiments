@@ -11,6 +11,41 @@ using namespace kinematics;
 using namespace std;
 
 /* ******************************************************************************************** */
+void computeExternal (const somatic_motor_t& llwa, const Vector6d& input, Vector6d& external) {
+
+	// Get the point transform wrench due to moving the affected position from com to sensor origin
+	// The transform is an identity with the bottom left a skew symmetric of the point translation
+	Matrix6d pTcom_sensor = MatrixXd::Identity(6,6); 
+	pTcom_sensor.bottomLeftCorner<3,3>() << 0.0, -s2com(2), s2com(1), s2com(2), 0.0, -s2com(0), 
+		-s2com(1), s2com(0), 0.0;
+
+	// Get the rotation between the bracket frame and the sensor frame. We assume that the ee
+	// frame is 180 rotation around y and 90 rotation around x away from the 7th module;
+	MatrixXd Tbee;
+	forwardKinematics(llwa, Tbee);
+	Matrix3d Rees = (AngleAxis <double> (M_PI, Vector3d(0.0, 1.0, 0.0)) * 
+                  AngleAxis <double> (M_PI_2, Vector3d(0.0, 0.0, 1.0))).matrix();
+	Matrix3d R = Rees.transpose() * Tbee.topLeftCorner<3,3>().transpose();
+
+	// Create the wrench with computed rotation to change the frame from the bracket to the sensor
+	Matrix6d pSsensor_bracket = MatrixXd::Identity(6,6); 
+	pSsensor_bracket.topLeftCorner<3,3>() = R;
+	pSsensor_bracket.bottomRightCorner<3,3>() = R;
+	
+	// Get the weight vector (note that we use the bracket frame for gravity so towards -y)
+	// static const double eeMass = 0.169;	// kg - ft extension
+	Vector6d weightVector_in_bracket;
+	weightVector_in_bracket << 0.0, -eeMass * 9.81, 0.0, 0.0, 0.0, 0.0;
+	
+	// Compute what the force and torque should be without any external values by multiplying the 
+	// position and rotation transforms with the expected effect of the gravity 
+	Vector6d wrenchWeight = pTcom_sensor * pSsensor_bracket * weightVector_in_bracket;
+
+	// Remove the effect from the sensor value
+	external = input - wrenchWeight;
+}
+
+/* ******************************************************************************************** */
 void forwardKinematics (const somatic_motor_t& arm, MatrixXd& Tbee) {
 
 	// Create the DH table for the arm
