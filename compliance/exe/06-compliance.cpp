@@ -55,8 +55,8 @@ void wrenchToJointVels (const Vector6d& wrench, Vector7d& dq) {
 	Eigen::MatrixXd Jinv = Jt * (J * Jt).inverse();
 
 	// Get the joint-space velocities by multiplying inverse Jacobian with the opposite wrench.
-	dq = Jinv * -wrench / 300.0;
-	pv(dq);
+	dq = Jinv * wrench / 300.0;
+	//pv(dq);
 
 	// Threshold the velocities
 	for(size_t i = 0; i < 7; i++) {
@@ -80,7 +80,6 @@ void run() {
 	vector <int> arm_ids;
 	for(size_t i = 4; i < 17; i+=2) arm_ids.push_back(i + 6);  
 	double dqZero [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-	Matrix3d Rbs;
 	while(!somatic_sig_received) {
 		
 		c++;
@@ -103,16 +102,24 @@ void run() {
 		Vector6d ideal = raw + offset;
 
 		// Compute the external forces from ideal readings and move it to bracket frame
-		computeExternal(llwa, ideal, external, Rbs);
-		external = Rbs * external;
+		computeExternal(llwa, ideal, *(mWorld->getSkeleton(r_id)), external);
 
 		// Threshold the values - 4N for forces, 0.4Nm for torques
-		if((external.topLeftCorner<3,1>().norm() < 4) && 
+		if((external.topLeftCorner<3,1>().norm() < 7) && 
        (external.bottomLeftCorner<3,1>().norm() < 0.4)) {
 			somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dqZero, 7, NULL);
-			cout << ".";
+			//cout << ".";
 			continue;
 		}
+//		cout << endl;
+/*
+		external(0) = 0;
+		external(1) = 0;
+		external(2) = 0;
+*/
+		external(3) *= 20;
+		external(4) *= 20;
+		external(5) *= 40;
 		pv(external);
 
 		// Compute the necessary motion in the joint space by multiply the -external with Jacobian inv
