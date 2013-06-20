@@ -74,9 +74,9 @@ void run() {
 	while(!somatic_sig_received) {
 		
 		// Move the arm to any position with the joystick
-	//	setJoystickInput(daemon_cx, js_chan, llwa, llwa);
+  	setJoystickInput(daemon_cx, js_chan, llwa, llwa);
 		double q [] = {0.0, -M_PI_2, 0.0, 0.0, 0.0, 0.0, 2.0*M_PI};
-		somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_POSITION, q, 7, NULL);
+//		somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_POSITION, q, 7, NULL);
 		somatic_motor_update(&daemon_cx, &llwa);
 	
 		// Get the f/t sensor data 

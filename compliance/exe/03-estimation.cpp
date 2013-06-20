@@ -12,6 +12,8 @@
 #include "helpers.h"
 
 using namespace std;
+using namespace dynamics;
+using namespace simulation;
 
 /* ********************************************************************************************* */
 somatic_d_t daemon_cx;
@@ -19,6 +21,7 @@ ach_channel_t js_chan;
 ach_channel_t ft_chan;
 somatic_motor_t llwa;
 Vector6d offset;							///< the offset we are going to decrease from raw readings
+World* mWorld = NULL;
 
 /* ******************************************************************************************** */
 /// The continuous loop
@@ -49,11 +52,8 @@ void run() {
 		Vector6d ideal = raw + offset;
 
 		// Compute the external forces from ideal readings
-		computeExternal(llwa, ideal, external, Rsb);
-		external.topLeftCorner<3,1>() = Rsb.transpose() * external.topLeftCorner<3,1>();
-		external.bottomLeftCorner<3,1>() = Rsb.transpose() * external.bottomLeftCorner<3,1>();
+		computeExternal(llwa, ideal, *(mWorld->getSkeleton(0)), external);
 		pv(external);
-//		cout << "Rsb:\n" << Rsb << endl;
 
 		usleep(1e4);
 	}
@@ -73,6 +73,9 @@ void destroy() {
 /* ******************************************************************************************** */
 /// The main thread
 int main() {
+	DartLoader dl;
+	mWorld = dl.parseWorld("../scenes/01-World-Robot.urdf");
+	assert((mWorld != NULL) && "Could not find the world");
 	init(daemon_cx, js_chan, ft_chan, llwa, offset);
 	run();
 	destroy();
