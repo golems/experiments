@@ -26,6 +26,11 @@
 #include "motion.h"
 #include <iostream>
 
+#include <kinematics/BodyNode.h>
+#include <math/UtilsRotation.h>
+#include <robotics/parser/dart_parser/DartLoader.h>
+#include <simulation/World.h>
+
 using namespace Eigen;
 
 #define pv(x) std::cout << #x << ": " << (x).transpose() << std::endl;
@@ -43,7 +48,7 @@ static const Vector3d s2com (0.0, 0.0, 0.09); // 0.0683 schunk itself, 0.026 len
 void forwardKinematics (const somatic_motor_t& llwa, MatrixXd& Tbee);
 
 /// Computes the initial offset from the given first raw value
-void computeOffset (const somatic_motor_t& llwa, const Vector6d& raw, Vector6d& offset);
+void computeOffset (const somatic_motor_t& llwa, const Vector6d& raw, dynamics::SkeletonDynamics& robot, Vector6d& offset);
 
 /// Computes the external force and torque from the values assuming that the input is already
 /// corrected for the effect of gravity. That is the arm readings should reflect the weight

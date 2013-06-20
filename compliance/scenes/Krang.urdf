@@ -167,20 +167,15 @@
 		</collision> 
 	</link>
 
-	<link name = "LFT"> 
+	<link name = "lGripper"> 
     <inertial>
       <mass value="1.206"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
       <origin xyz="0 0 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L7.dae" /> </geometry> </visual> 
-		<collision> <origin xyz="0.0 -0.027 0.0"/> <geometry> <box size="0.077 0.0962 0.077"/> </geometry> </collision> 
+		<collision> <origin xyz="0.0 -0.0 0.02615" rpy="0.0 0.0 0.4712"/> <geometry> <box size="0.08 0.112 0.2025"/> </geometry> </collision> 
 	</link>
-
-	<link name = "lGripper">
-		<visual> <geometry> <mesh filename="Schunk/gripper.dae" /> </geometry> </visual>
-		<collision> <origin xyz="-0.00 0.0545 0.0"/> <geometry> <box size="0.1120 0.093 0.0800"/> </geometry> </collision> 
-	</link> 	
 
 	<link name = "lgPlate1">
 		<visual> <geometry> <mesh filename="Schunk/gripperPlate.dae" /> </geometry> </visual>
@@ -280,20 +275,15 @@
 		</collision> 
 	</link>
 
-	<link name = "RFT"> 
+	<link name = "rGripper"> 
     <inertial>
       <mass value="1.206"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
       <origin xyz="0 0 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L7.dae" /> </geometry> </visual> 
-		<collision> <origin xyz="0.0 -0.027 0.0"/> <geometry> <box size="0.077 0.0962 0.077"/> </geometry> </collision> 
+		<collision> <origin xyz="0.0 -0.0 0.02615" rpy="0.0 0.0 0.4712"/> <geometry> <box size="0.08 0.112 0.2025"/> </geometry> </collision> 
 	</link>
-
-	<link name = "rGripper">
-		<visual> <geometry> <mesh filename="Schunk/gripper.dae" /> </geometry> </visual>
-		<collision> <origin xyz="-0.00 0.0545 0.0"/> <geometry> <box size="0.1120 0.093 0.0800"/> </geometry> </collision> 
-	</link> 	
 
 	<link name = "rgPlate1">
 		<visual> <geometry> <mesh filename="Schunk/gripperPlate.dae" /> </geometry> </visual>
@@ -358,24 +348,19 @@
 	</joint>
 
 	<!-- For some reason, I had to negate the axis to make sure the motor turns like the others -->
-	<joint name="LJFT" type="revolute"> <parent link="L6" /> <child link="LFT" />
-		<origin xyz="0 -0.159 0" rpy="0 0 0" />
+	<joint name="LJFT" type="revolute"> <parent link="L6" /> <child link="lGripper" />
+		<origin xyz="0 -0.200 0" rpy="1.5708 3.1416 0" />
 		<axis xyz="0 1 0" /> <limit effort="1000" lower="-3.1416" upper="3.1416" velocity="0.1" />
 	</joint>
 
-	<joint name="LMotorGripper" type="fixed"> <parent link="LFT" /> <child link="lGripper" />
-		<origin xyz="0 -0.0672 0" rpy="3.1416 0 0" />
-		<axis xyz="1 0 0" /> <limit effort="1000" lower="-2.094" upper="2.094" velocity="0.1" />
+	<joint name="LMotorPlate1" type="prismatic"> <parent link="lGripper" /> <child link="lgPlate1" />
+		<origin xyz="0.02043 -0.04010 0.127" rpy="3.1416 0 2.04" />
+		<axis xyz="1 0 0" /> <limit effort="1000" lower="0.0" upper="0.022" velocity="0.1" />
 	</joint>
 
-	<joint name="LMotorPlate1" type="fixed"> <parent link="lGripper" /> <child link="lgPlate1" />
-		<origin xyz="-0.0 0.1 0.0" rpy="1.57 0.0 0" />
-		<axis xyz="1 0 0" /> <limit effort="1000" lower="0.0" upper="0.0135" velocity="0.1" />
-	</joint>
-
-	<joint name="LMotorPlate2" type="fixed"> <parent link="lGripper" /> <child link="lgPlate2" />
-		<origin xyz="0.045 0.1 0.0" rpy="1.57 3.1416 0" />
-		<axis xyz="1 0 0" /> <limit effort="1000" lower="0.0" upper="0.0135" velocity="0.1" />
+	<joint name="LMotorPlate2" type="prismatic"> <parent link="lGripper" /> <child link="lgPlate2" />
+		<origin xyz="-0.02043 0.04010 0.127" rpy="3.1416 0 -1.10" />
+		<axis xyz="1 0 0" /> <limit effort="1000" lower="0.0" upper="0.022" velocity="0.1" />
 	</joint>
 
 	<!-- Right arm -->
@@ -410,24 +395,19 @@
 		<axis xyz="-1 0 0" /> <limit effort="1000" lower="-2.094" upper="2.094" velocity="0.1" />
 	</joint>
 
-	<joint name="RJFT" type="revolute"> <parent link="R6" /> <child link="RFT" />
-		<origin xyz="0 -0.159 0" rpy="0 0 0" />
+	<joint name="RJFT" type="revolute"> <parent link="R6" /> <child link="rGripper" />
+		<origin xyz="0 -0.200 0" rpy="1.5708 3.1416 0" />
 		<axis xyz="0 1 0" /> <limit effort="1000" lower="-3.1416" upper="3.1416" velocity="0.1" />
 	</joint>
 
-	<joint name="RMotorGripper" type="fixed"> <parent link="RFT" /> <child link="rGripper" />
-		<origin xyz="0 -0.0672 0" rpy="3.1416 0 0" />
-		<axis xyz="1 0 0" /> <limit effort="1000" lower="-2.094" upper="2.094" velocity="0.1" />
-	</joint>
-
 	<joint name="RMotorPlate1" type="fixed"> <parent link="rGripper" /> <child link="rgPlate1" />
-		<origin xyz="-0.0 0.100 0.0" rpy="1.57 0.0 0" />
-		<axis xyz="1 0 0" /> <limit effort="1000" lower="0.0" upper="0.0135" velocity="0.1" />
+		<origin xyz="0.02043 -0.04010 0.127" rpy="3.1416 0 2.04" />
+		<axis xyz="1 0 0" /> <limit effort="1000" lower="0.0" upper="0.022" velocity="0.1" />
 	</joint>
 
 	<joint name="RMotorPlate2" type="fixed"> <parent link="rGripper" /> <child link="rgPlate2" />
-		<origin xyz="0.045 0.1 0.0" rpy="1.57 3.1416 0" />
-		<axis xyz="1 0 0" /> <limit effort="1000" lower="0.0" upper="0.0135" velocity="0.1" />
+		<origin xyz="-0.02043 0.04010 0.127" rpy="3.1416 0 -1.10" />
+		<axis xyz="1 0 0" /> <limit effort="1000" lower="0.0" upper="0.022" velocity="0.1" />
 	</joint>
 
 </robot>

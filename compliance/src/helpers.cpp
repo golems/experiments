@@ -7,7 +7,9 @@
 
 #include "helpers.h"
 
+
 using namespace kinematics;
+using namespace dynamics;
 using namespace std;
 
 /* ******************************************************************************************** */
@@ -27,6 +29,7 @@ void computeExternal (const somatic_motor_t& llwa, const Vector6d& input, Vector
 	Matrix3d Rees = (AngleAxis <double> (M_PI, Vector3d(0.0, 1.0, 0.0)) * 
                   AngleAxis <double> (M_PI_2, Vector3d(0.0, 0.0, 1.0))).matrix();
 	Rsb = Rees.transpose() * Tbee.topLeftCorner<3,3>().transpose();
+	cout << "Rsb: \n" << Rsb << endl;
 
 	// Create the wrench with computed rotation to change the frame from the bracket to the sensor
 	Matrix6d pSsensor_bracket = MatrixXd::Identity(6,6); 
@@ -66,7 +69,8 @@ void forwardKinematics (const somatic_motor_t& arm, MatrixXd& Tbee) {
 }
 
 /* ******************************************************************************************** */
-void computeOffset (const somatic_motor_t& arm, const Vector6d& raw, Vector6d& offset) {
+void computeOffset (const somatic_motor_t& arm, const Vector6d& raw, SkeletonDynamics& robot, 
+		Vector6d& offset) {
 
 	// Get the point transform wrench due to moving the affected position from com to sensor origin
 	// The transform is an identity with the bottom left a skew symmetric of the point translation
@@ -74,13 +78,13 @@ void computeOffset (const somatic_motor_t& arm, const Vector6d& raw, Vector6d& o
 	pTcom_sensor.bottomLeftCorner<3,3>() << 0.0, -s2com(2), s2com(1), s2com(2), 0.0, -s2com(0), 
 		-s2com(1), s2com(0), 0.0;
 
-	// Get the rotation between the bracket frame and the sensor frame. We assume that the ee
-	// frame is 180 rotation around y and 90 rotation around x away from the 7th module;
-	MatrixXd Tbee;
-	forwardKinematics(arm, Tbee);
-	Matrix3d Rees = (AngleAxis <double> (M_PI, Vector3d(0.0, 1.0, 0.0)) * 
-                  AngleAxis <double> (M_PI_2, Vector3d(0.0, 0.0, 1.0))).matrix();
-	Matrix3d R = Rees.transpose() * Tbee.topLeftCorner<3,3>().transpose();
+	// Get the rotation between the world frame and the sensor frame. 
+	VectorXd vals (7);
+	for(size_t i = 0; i < 7; i++) vals(i) = arm.pos[i];
+	vector <int> arm_ids;
+	for(size_t i = 4; i < 17; i+=2) arm_ids.push_back(i + 6);  
+	robot.setConfig(arm_ids, vals);
+	Matrix3d R = robot.getNode("lGripper")->getWorldTransform().topLeftCorner<3,3>().transpose();
 
 	// Create the wrench with computed rotation to change the frame from the bracket to the sensor
 	Matrix6d pSsensor_bracket = MatrixXd::Identity(6,6); 
@@ -90,7 +94,7 @@ void computeOffset (const somatic_motor_t& arm, const Vector6d& raw, Vector6d& o
 	// Get the weight vector (note that we use the bracket frame for gravity so towards -y)
 	// static const double eeMass = 0.169;	// kg - ft extension
 	Vector6d weightVector_in_bracket;
-	weightVector_in_bracket << 0.0, -eeMass * 9.81, 0.0, 0.0, 0.0, 0.0;
+	weightVector_in_bracket << 0.0, 0.0, -eeMass * 9.81, 0.0, 0.0, 0.0;
 	
 	// Compute what the force and torque should be without any external values by multiplying the 
 	// position and rotation transforms with the expected effect of the gravity 
@@ -111,6 +115,10 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& ft_cha
 	system("killall -s 9 netcanftd");
 	usleep(20000);
 	system("netcanftd -v -d -I lft -b 2 -B 1000 -c llwa_ft -k -r");
+
+	DartLoader dl;
+	simulation::World* mWorld = dl.parseWorld("../scenes/01-World-Robot.urdf");
+	assert((mWorld != NULL) && "Could not find the world");
 
 	// Initialize this daemon (program!)
 	somatic_d_opts_t dopt;
@@ -140,7 +148,7 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& ft_cha
 		ft_data += temp;
 	}
 	ft_data /= 1e3;
-	computeOffset(llwa, ft_data, offset);
+	computeOffset(llwa, ft_data, *(mWorld->getSkeleton(0)), offset);
 }
 
 /* ********************************************************************************************* */

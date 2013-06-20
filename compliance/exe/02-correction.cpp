@@ -41,9 +41,9 @@ void run() {
 		c++;
 
 		// Move the arm to any position with the joystick
-		bool setPos = 1;
+		bool setPos = 0;
 		// double q [] = {0.0, -M_PI_2, 0.0, 0.0, M_PI_2, -M_PI_2, 2*M_PI};	
-		double q [] = {0.0, -M_PI_2, 0.0, 0.0, 0.0, 0.0, 0.0};	
+		double q [] = {0.0, -M_PI_2, 0.0, 0.0, 0.0, 0.0, 2*M_PI};	
 		if(setPos) 
 			somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_POSITION, q, 7, NULL);
 		else 

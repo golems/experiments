@@ -48,6 +48,12 @@ void Timer::Notify() {
 	for(size_t i = 4; i < 17; i+=2) arm_ids.push_back(i + 6);  
 	world->getSkeleton(4)->setConfig(arm_ids, vals);
 
+	Matrix4d Twb = world->getSkeleton(4)->getNode("Bracket")->getWorldTransform();
+ 	Matrix4d Twee = world->getSkeleton(4)->getNode("lGripper")->getWorldTransform();
+	cout << "Twee: \n" << Twee << endl;
+	Matrix4d Teeb = Twee.inverse() * Twb; 
+//	cout << "Teeb: \n" << Teeb << endl;
+	
 	// Restart the timer for the next start
 	viewer->DrawGLScene();
 	Start(0.005 * 1e4);	
