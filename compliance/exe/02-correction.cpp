@@ -41,7 +41,7 @@ void run() {
 		c++;
 
 		// Move the arm to any position with the joystick
-		bool setPos = 0;
+		bool setPos = 1;
 		// double q [] = {0.0, -M_PI_2, 0.0, 0.0, M_PI_2, -M_PI_2, 2*M_PI};	
 		double q [] = {0.0, -M_PI_2, 0.0, 0.0, 0.0, 0.0, 2*M_PI};	
 		if(setPos) 
