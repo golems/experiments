@@ -49,7 +49,6 @@ void run() {
 	size_t numReadings = 0;
 	vector <Vector6d, aligned_allocator<Vector6d> > localReadings;
 	localReadings.resize(NUM_READINGS);
-	bool lastReached = false;
 	while(!somatic_sig_received) {
 		
 		c++;
@@ -64,16 +63,7 @@ void run() {
 		somatic_motor_update(&daemon_cx, &llwa);
 		Vector3d error = Vector3d(llwa.pos[4], llwa.pos[5], llwa.pos[6]) - goals[currGoal];
 		double maxError = error.cwiseAbs().maxCoeff();
-		cout << "c: " << c << ", err: " << error.transpose() << ", max: " << maxError << endl;
 		bool reached = (fabs(maxError) < 1e-2);
-
-		// Sleep for 100ms 
-		if(!lastReached && reached) {
-			cout << "Reached (" << goals[currGoal].transpose() << ") gonna sleep a while" << endl;
-			usleep(1e6);
-			getchar();
-		}
-		lastReached = reached;
 
 		// If reached the position, get enough readings to average over
 		if(reached) {
@@ -98,8 +88,6 @@ void run() {
 				// Get the next goal
 				currGoal++;
 				numReadings = 0;
-				lastReached = false;
-				cout << "next goal: " << goals[currGoal].transpose() << endl;
 			}
 		}
 
@@ -132,7 +120,7 @@ void generateJointValues () {
 
 	// The separation between point samples where dth3 is the smallest angle
 	// double dth1 = -DEG2RAD(12.0), dth2 = DEG2RAD(12.0), dth3 = -DEG2RAD(30.0);
-	double dth1 = -DEG2RAD(120.0), dth2 = DEG2RAD(30.0), dth3 = -DEG2RAD(180.0);
+	double dth1 = -DEG2RAD(120.0), dth2 = DEG2RAD(45.0), dth3 = -DEG2RAD(180.0);
 
 	// We first fix the vertical joint - this basically determines the radius of the circle we
 	// draw in the yz plane, starting from big to small
@@ -158,7 +146,7 @@ void generateJointValues () {
 	
 			// If th1 and th3 are aligned, there is no need to sample th3
 			if(th2 == 0.0) {
-				goals.push_back(Vector3d(th1, th2, th1));
+				goals.push_back(Vector3d(0.0, th2, th1));
 				// cout << goals.back().transpose() << endl;
 				continue;
 			}
