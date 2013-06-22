@@ -76,23 +76,38 @@ void run() {
 	Vector6d ft_data;
 	double dq7 = -0.7;
 	bool changed = false;
+	double lastCheckPoint = 9.14;
+	double dqStop [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 	while(!somatic_sig_received) {
 		
+		if((c++ % 100000) != 0) continue;
+
 		// Check if the arm reached -2pi, if so, turn it around.
 		somatic_motor_update(&daemon_cx, &llwa);
+		continue;
 		if(!changed && (llwa.pos[6] < -2*M_PI)) {
 			dq7 = -dq7;
 			changed = true;
 		}
 	
+		// Check if close to a check point
+/*
+		double mod = fmod(fabs(llwa.pos[6]), M_PI_2/2.0);
+		if((mod < 1e-2) && (fabs(lastCheckPoint - fabs(llwa.pos[6])) > 0.3)) {
+			lastCheckPoint = fabs(llwa.pos[6]);
+			cout << "Reached checkpoint: " << llwa.pos[6] << endl;
+			somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dqStop, 7, NULL);
+			somatic_motor_update(&daemon_cx, &llwa);
+			usleep(1e7);
+			cout << "\tstarting again..." << endl;
+		}
+*/
+		
 		// Move the arm at the given velocity
 		double dq [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, dq7};
 		somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7, NULL);
 
-		// Get the f/t sensor data 
-		bool result = (c++ % 1000000 == 0) && getFT(daemon_cx, ft_chan, ft_data);
-		if(!result) continue;
-		pv(ft_data);
+		usleep(1e4);
 	}
 
 	// Send the stoppig event

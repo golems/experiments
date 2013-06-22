@@ -18,7 +18,7 @@ using namespace simulation;
 
 #define DEG2RAD(x) (((x) / 180.0) * M_PI)
 #define M_2PI (2 * M_PI)
-#define NUM_READINGS 100
+#define NUM_READINGS 1e3
 #define fix(x) ((fabs(x) < 1e-5) ? 0 : x)
 
 
@@ -83,7 +83,9 @@ void run() {
 				mean /= NUM_READINGS;
 
 				// Write the reading and the joint values to a file
-				cout << goals[currGoal].transpose() << " " << mean.transpose() << endl;
+				for(size_t i = 0; i < 3; i++) printf("% 5.5lf\t", goals[currGoal](i));
+				for(size_t i = 0; i < 6; i++) printf("% 5.5lf\t", mean(i));
+				printf("\n"); fflush(stdout);
 
 				// Get the next goal
 				currGoal++;
@@ -94,8 +96,6 @@ void run() {
 		// If did not reach, move towards the goal
 		for(size_t i = 0; i < 3; i++) q[i+4] = (goals[currGoal])(i);
 		somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_POSITION, q, 7, NULL);
-
-		usleep(1e4);
 	}
 
 	// Send the stoppig event
@@ -119,47 +119,45 @@ void generateJointValues () {
 	for(size_t i = 0; i < 7; i++) arm_ids.push_back(arm_ids_a[i]);
 
 	// The separation between point samples where dth3 is the smallest angle
-	// double dth1 = -DEG2RAD(12.0), dth2 = DEG2RAD(12.0), dth3 = -DEG2RAD(30.0);
-	double dth1 = -DEG2RAD(120.0), dth2 = DEG2RAD(45.0), dth3 = -DEG2RAD(180.0);
+	double dth1 = -DEG2RAD(12.0), dth2 = DEG2RAD(10.0), dth3 = -DEG2RAD(30.0);
+	int num_th1 = M_2PI / fabs(dth1), num_th2 = M_PI_2 / fabs(dth2), num_th3 = M_2PI / fabs(dth3);
+	printf("dth1: %lf, dth2: %lf, dth2: %lf\n", dth1, dth2, dth3);
+	printf("num_th1: %lf, num_th2: %lf, num_th2: %lf\n", num_th1, num_th2, num_th3);
 
 	// We first fix the vertical joint - this basically determines the radius of the circle we
 	// draw in the yz plane, starting from big to small
 	bool turn1 = 0, turn3 = 0;
-	double th1Low = M_2PI, th1High = 0.0;
-	double th3Low = M_2PI, th3High = 0.0;
-	for(double th2 = M_PI_2; th2 >= 0; th2 = fix(th2 - dth2)) {
+	for(int th2_idx = num_th2; th2_idx >= 0; th2_idx--) {
 
-		// Decide on the direction th1 is going to rotate at to avoid joint limits
+		// Compute th2 and decide on the direction th1 is going to rotate
+		double th2 = th2_idx * dth2;
 		dth1 *= -1;
-		th1Low = M_2PI - th1Low;
-		th1High = M_2PI - th1High;
 		turn1 = !turn1;
 		
 		// Then, we move the biggest joint, th1, to create a circle for the ee position
-		for(double th1 = th1Low; turn1 ? (th1 < th1High) : (th1 > th1High); th1 = fix(th1 + dth1)) {
+		for(int th1_idx = 0; th1_idx < num_th1; th1_idx++) {
 
-			// Again decide on direction to avoid joint limits
+			// Compute th1 and decide on the direction th3 is going to rotate
+			double th1 = (dth1 * th1_idx) + (turn1 ? 0.0 : M_2PI);
 			dth3 *= -1;
-			th3Low = M_2PI - th3Low;
-			th3High = M_2PI - th3High;
 			turn3 = !turn3;
 	
 			// If th1 and th3 are aligned, there is no need to sample th3
 			if(th2 == 0.0) {
 				goals.push_back(Vector3d(0.0, th2, th1));
-				// cout << goals.back().transpose() << endl;
 				continue;
 			}
 
 			// Lastly, for any fixed location, we rotate the smallest joint
-			for(double th3 = th3Low; turn3 ? (th3 < th3High) : (th3 > th3High); th3 = fix(th3 + dth3)) {
+			for(int th3_idx = 0; th3_idx < num_th3; th3_idx++) {
+				double th3 = (dth3 * th3_idx) + (turn3 ? 0.0 : M_2PI);
 				goals.push_back(Vector3d(th1, th2, th3));
-				// cout << goals.back().transpose() << endl;
 			}
 		}
 	}
 
 	cout << "Generated " << goals.size() << " goals!\n";
+	// for(int i = 0; i < goals.size(); i++) cout << goals[i].transpose() << endl;
 }
 
 /* ******************************************************************************************** */
