@@ -10,10 +10,25 @@
  * than some radius r, we will normalize it so that we don't diverge from the path too much.
  */
 
-#include "helpers.h"
 #include <Eigen/StdVector>
+#include <Eigen/Dense>
+#include <iostream>
+#include <stdio.h>
+#include <stdlib.h>
+
+#include <kinematics/BodyNode.h>
+#include <math/UtilsRotation.h>
+#include <robotics/parser/dart_parser/DartLoader.h>
+#include <simulation/World.h>
+
+#include "helpers.h"
+#include "initModules.h"
+#include "motion.h"
 
 using namespace std;
+using namespace Eigen;
+using namespace dynamics;
+using namespace simulation;
 
 /* ********************************************************************************************* */
 somatic_d_t daemon_cx;
@@ -23,6 +38,8 @@ somatic_motor_t llwa;
 World* mWorld = NULL;					///< Dart structure that contains the robot kinematics
 Vector6d offset;							///< the offset we are going to decrease from raw readings
 vector <Vector7d, aligned_allocator<Vector7d> > traj;	///< The traj to follow in joint space pos
+
+const int r_id = 0;
 
 /* ******************************************************************************************** */
 /// Given a wrench, computes the joint space velocities so that wrench is minimized 
@@ -63,11 +80,11 @@ void computeGoal (const Vector7d& traj, const Vector6d& wrench, Vector7d& goal) 
 	// enough - we will normalize it if it is too much anyway
 	static const double wrenchEffect = 100.0;
 	static Vector7d dq;
-	wrenchToJointVels(external, dq);
+	wrenchToJointVels(wrench, dq);
 	Vector7d offset = dq * wrenchEffect;
 	
 	// Normalize the offset if it is too much
-	static const double maxOffset = 1.0;
+	static const double maxOffset = 0.25;
 	double offsetNorm = offset.norm();
 	if(offsetNorm > maxOffset) offset = offset * (maxOffset / offsetNorm);
 
@@ -83,12 +100,9 @@ void run() {
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
 			SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
 
-	// If we are going to follow a trajectory, it should not be empty
-	assert((recordTraj || !traj.empty()) && "The trajectory should not be empty if no joystick.");
-
 	// Unless an interrupt or terminate message is received, process the new message
 	size_t c = 0, traj_idx = 0;
-	Vector6d raw;
+	Vector6d raw, external;
 	while(!somatic_sig_received) {
 
 		c++;
@@ -96,6 +110,7 @@ void run() {
 		// Check if reached a goal; if not update the motor readings
 		if(traj_idx == traj.size() - 1) break;
 		somatic_motor_update(&daemon_cx, &llwa);
+		pv(eig7(llwa.cur));
 
 		// Get the external force/torque values
 		bool result = false;
@@ -104,15 +119,15 @@ void run() {
 
 		// Compute the next goal position
 		Vector7d goal;
-		computeGoal(traj[traj_idx], external);
+		computeGoal(traj[traj_idx], external, goal);
 
 		// Send the velocity commands 
-		somatic_motor_cmd(&daemon_cx, &llwa, POSITION, goal, 7, NULL);
+		somatic_motor_cmd(&daemon_cx, &llwa, POSITION, goal.data(), 7, NULL);
 
 		// Increment the position counter if we got close to our goal
 		if((traj[traj_idx] - eig7(llwa.pos)).norm() < 1e-1) traj_idx++;
 
-		usleep(1e6 * dt);
+		usleep(1e4);
 	}
 
 	// Send the stoppig event
@@ -137,9 +152,14 @@ int main() {
 	assert((mWorld != NULL) && "Could not find the world");
 
 	// Create a trajectory
-	double q [] = {0.0, -M_PI_2, 0.0, 0.0, 0.0, 0.0, 0.0};	
-	for(double i = M_PI_2; i >= -0.002; i -= 0.01) {
-		q[4] = i;
+	double M_60 = M_PI / 3;
+	double q [] = {0.0, -M_60, 0.0, -M_60, 0.0, M_60/2, 0.0};	
+	for(double i = 2*M_PI; i >= -2*M_PI; i -= 0.01) {
+		q[6] = i;
+		traj.push_back(eig7(q));	
+	}
+	for(double i = -2*M_PI; i < 2*M_PI; i += 0.01) {
+		q[6] = i;
 		traj.push_back(eig7(q));	
 	}
 

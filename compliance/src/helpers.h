@@ -53,8 +53,7 @@ typedef Matrix<double, 7, 1> Vector7d;			///< A typedef for convenience to conta
 typedef Matrix<double, 6, 6> Matrix6d;			///< A typedef for convenience to contain wrenches
 
 /* ******************************************************************************************** */
-//static const double eeMass = 1.6 + 0.169 + 0.000;			///< The mass of the end-effector
-static const double eeMass = 0.2; //1.6 + 0.169 + 0.000;			///< The mass of the end-effector
+static const double eeMass = 1.6 + 0.169 + 0.000;			///< The mass of the end-effector
 
 /* ******************************************************************************************** */
 /// Set the vector from the sensor origin to the gripper center of mass (m)
