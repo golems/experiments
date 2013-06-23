@@ -110,7 +110,11 @@ void run() {
 		// Check if reached a goal; if not update the motor readings
 		if(traj_idx == traj.size() - 1) break;
 		somatic_motor_update(&daemon_cx, &llwa);
-		pv(eig7(llwa.cur));
+
+		// Check that the current values are not being too much, give a warning if so
+		for(size_t i = 0; i < 7; i++)
+			if(fabs(llwa.cur[i]) > 7.0)
+				printf("\t\t\tWARNING: Current at module %d has passed 7 amps: %lf amps\n", i, llwa.cur[i]);
 
 		// Get the external force/torque values
 		bool result = false;
