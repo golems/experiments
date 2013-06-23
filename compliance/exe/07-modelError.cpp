@@ -114,19 +114,36 @@ void destroy() {
 /// Generates the joint positions to reach discretized orientations of the end-effector
 void generateJointValues () {
 
+	goals.push_back(Vector3d(0.0, M_PI_2, 0.0));
+	goals.push_back(Vector3d(1.04720, 1.57080, 6.28319));
+	goals.push_back(Vector3d(1.04720, 1.57080, 5.75959));
+	goals.push_back(Vector3d(1.04720, 1.57080, 5.23599));
+	goals.push_back(Vector3d(1.04720, 1.57080, 4.71239));
+	goals.push_back(Vector3d(1.04720, 1.57080, 4.18879));
+	goals.push_back(Vector3d(1.04720, 1.57080, 3.66519));
+	goals.push_back(Vector3d(1.04720, 1.57080, 3.14159));
+	goals.push_back(Vector3d(1.04720, 1.57080, 2.61799));
+	goals.push_back(Vector3d(1.04720, 1.57080, 2.09440));
+	goals.push_back(Vector3d(1.04720, 1.57080, 1.57080));
+	goals.push_back(Vector3d(1.04720, 1.57080, 1.04720));
+	goals.push_back(Vector3d(1.04720, 1.57080, 0.52360));
+
+	return;
 	std::vector <int> arm_ids;		///< The index vector to set config of arms
 	int arm_ids_a [] = {10, 12, 14, 16, 18, 20, 22};
 	for(size_t i = 0; i < 7; i++) arm_ids.push_back(arm_ids_a[i]);
 
 	// The separation between point samples where dth3 is the smallest angle
 	double dth1 = -DEG2RAD(12.0), dth2 = DEG2RAD(10.0), dth3 = -DEG2RAD(30.0);
-	int num_th1 = M_2PI / fabs(dth1), num_th2 = M_PI_2 / fabs(dth2), num_th3 = M_2PI / fabs(dth3);
+	int num_th1 = -M_PI / fabs(dth1), num_th2 = ((M_PI_2/9.0)*9.0) / fabs(dth2), num_th3 = M_2PI / fabs(dth3);
 	printf("dth1: %lf, dth2: %lf, dth2: %lf\n", dth1, dth2, dth3);
 	printf("num_th1: %lf, num_th2: %lf, num_th2: %lf\n", num_th1, num_th2, num_th3);
 
+	goals.push_back(Vector3d(0.0, M_PI_2, 0.0));
+
 	// We first fix the vertical joint - this basically determines the radius of the circle we
 	// draw in the yz plane, starting from big to small
-	bool turn1 = 0, turn3 = 0;
+	bool turn1 = 1, turn3 = 0;
 	for(int th2_idx = num_th2; th2_idx >= 0; th2_idx--) {
 
 		// Compute th2 and decide on the direction th1 is going to rotate
@@ -157,7 +174,7 @@ void generateJointValues () {
 	}
 
 	cout << "Generated " << goals.size() << " goals!\n";
-	// for(int i = 0; i < goals.size(); i++) cout << goals[i].transpose() << endl;
+//	for(int i = 0; i < goals.size(); i++) cout << goals[i].transpose() << endl;
 }
 
 /* ******************************************************************************************** */
