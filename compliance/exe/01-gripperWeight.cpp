@@ -28,6 +28,9 @@ using namespace std;
 #define parm (cout << llwa.pos[0] << ", " << llwa.pos[1] << ", " << llwa.pos[2] << ", " << \
 	llwa.pos[3] << ", " << llwa.pos[4] << ", " << llwa.pos[5] << ", " << llwa.pos[6] << endl);
 
+#define move(); {double q [] = {0.0, -M_PI_2, 0.0, 0.0, 0.0, 0.0, 2.0*M_PI}; \
+		somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_POSITION, q, 7, NULL); continue;}
+
 /* ********************************************************************************************* */
 somatic_d_t daemon_cx;
 ach_channel_t js_chan;				
@@ -71,19 +74,40 @@ void run() {
 	// Unless an interrupt or terminate message is received, process the new message
 	size_t c = 0;
 	Vector6d ft_data;
+	double dq7 = -0.7;
+	bool changed = false;
+	double lastCheckPoint = 9.14;
+	double dqStop [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 	while(!somatic_sig_received) {
 		
-		// Move the arm to any position with the joystick
-	//	setJoystickInput(daemon_cx, js_chan, llwa, llwa);
-		double q [] = {0.0, -M_PI_2, 0.0, 0.0, 0.0, 0.0, 2.0*M_PI};
-		somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_POSITION, q, 7, NULL);
+		if((c++ % 100000) != 0) continue;
+
+		// Check if the arm reached -2pi, if so, turn it around.
 		somatic_motor_update(&daemon_cx, &llwa);
+		continue;
+		if(!changed && (llwa.pos[6] < -2*M_PI)) {
+			dq7 = -dq7;
+			changed = true;
+		}
 	
-		// Get the f/t sensor data 
-		bool result = (c++ % 1000000 == 0) && getFT(daemon_cx, ft_chan, ft_data);
-		if(!result) continue;
-		parm;
-		cout << "ft: " << ft_data.transpose() << " " << llwa.pos[6] <<endl;
+		// Check if close to a check point
+/*
+		double mod = fmod(fabs(llwa.pos[6]), M_PI_2/2.0);
+		if((mod < 1e-2) && (fabs(lastCheckPoint - fabs(llwa.pos[6])) > 0.3)) {
+			lastCheckPoint = fabs(llwa.pos[6]);
+			cout << "Reached checkpoint: " << llwa.pos[6] << endl;
+			somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dqStop, 7, NULL);
+			somatic_motor_update(&daemon_cx, &llwa);
+			usleep(1e7);
+			cout << "\tstarting again..." << endl;
+		}
+*/
+		
+		// Move the arm at the given velocity
+		double dq [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, dq7};
+		somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7, NULL);
+
+		usleep(1e4);
 	}
 
 	// Send the stoppig event

@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<robot name="cylinder">
+  <link name="base_link">
+		<visual> <geometry> <mesh filename="Schunk/L7.dae" /> </geometry> </visual>
+		<collision> <origin xyz="0.0 -0.0 0.02615" rpy="0.0 0.0 0.4712"/> <geometry> <box size="0.08 0.112 0.2025"/> </geometry> </collision> 
+  </link>
+</robot>

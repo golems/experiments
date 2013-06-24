@@ -1,0 +1,2 @@
+For experiment 3, it makes sense that the norm of the torques is sinusoid since the end-effector 
+comes above and below the f/t sensor at +- 90 degrees.

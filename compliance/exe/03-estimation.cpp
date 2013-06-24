@@ -12,6 +12,8 @@
 #include "helpers.h"
 
 using namespace std;
+using namespace dynamics;
+using namespace simulation;
 
 /* ********************************************************************************************* */
 somatic_d_t daemon_cx;
@@ -19,47 +21,7 @@ ach_channel_t js_chan;
 ach_channel_t ft_chan;
 somatic_motor_t llwa;
 Vector6d offset;							///< the offset we are going to decrease from raw readings
-Vector6d external;
-
-/* ******************************************************************************************** */
-void computeExternal (const Vector6d& input) {
-
-	// Set the vector from the sensor origin to the gripper center of mass
-	static const Vector3d s2com (0.0, 0.0, 0.02);
-
-	// Get the point transform wrench due to moving the affected position from com to sensor origin
-	// The transform is an identity with the bottom left a skew symmetric of the point translation
-	Matrix6d pTcom_sensor = MatrixXd::Identity(6,6); 
-	pTcom_sensor.bottomLeftCorner<3,3>() << 0.0, -s2com(2), s2com(1), s2com(2), 0.0, -s2com(0), 
-		-s2com(1), s2com(0), 0.0;
-
-	// Get the rotation between the bracket frame and the sensor frame. We assume that the ee
-	// frame is 180 rotation around y and 90 rotation around x away from the 7th module;
-	MatrixXd Tbee;
-	forwardKinematics(llwa, Tbee);
-	Matrix3d Rees = (AngleAxis <double> (M_PI, Vector3d(0.0, 1.0, 0.0)) * 
-                  AngleAxis <double> (M_PI_2, Vector3d(0.0, 0.0, 1.0))).matrix();
-	Matrix3d R = Rees.transpose() * Tbee.topLeftCorner<3,3>().transpose();
-
-	// Create the wrench with computed rotation to change the frame from the bracket to the sensor
-	Matrix6d pSsensor_bracket = MatrixXd::Identity(6,6); 
-	pSsensor_bracket.topLeftCorner<3,3>() = R;
-	pSsensor_bracket.bottomRightCorner<3,3>() = R;
-	
-	// Get the weight vector (note that we use the bracket frame for gravity so towards -y)
-	// static const double eeMass = 0.169;	// kg - ft extension
-	Vector6d weightVector_in_bracket;
-	weightVector_in_bracket << 0.0, -eeMass * 9.81, 0.0, 0.0, 0.0, 0.0;
-	
-	// Compute what the force and torque should be without any external values by multiplying the 
-	// position and rotation transforms with the expected effect of the gravity 
-	Vector6d wrenchWeight = pTcom_sensor * pSsensor_bracket * weightVector_in_bracket;
-//	printf("wrench weight (%lf): ", wrenchWeight.norm());
-//	cout << wrenchWeight.transpose() << endl;
-
-	// Remove the effect from the sensor value
-	external = input - wrenchWeight;
-}
+World* mWorld = NULL;
 
 /* ******************************************************************************************** */
 /// The continuous loop
@@ -71,7 +33,8 @@ void run() {
 
 	// Unless an interrupt or terminate message is received, process the new message
 	size_t c = 0;
-	Vector6d raw;
+	Vector6d raw, external;
+	Matrix3d Rsb;	//< The sensor frame in bracket frame (only rotation)
 	while(!somatic_sig_received) {
 		
 		c++;
@@ -81,7 +44,7 @@ void run() {
 		somatic_motor_update(&daemon_cx, &llwa);
 	
 		// Get the f/t sensor data and compute the ideal value
-		size_t k = 1e4;
+		size_t k = 1e6;
 		bool result = (c % k == 0) && getFT(daemon_cx, ft_chan, raw);
 		if(!result) continue;
 
@@ -89,9 +52,8 @@ void run() {
 		Vector6d ideal = raw + offset;
 
 		// Compute the external forces from ideal readings
-		computeExternal(ideal);
-		cout << external.transpose() << " " << llwa.pos[6] << " ";
-		cout << external.topLeftCorner<3,1>().norm() << endl;
+		computeExternal(llwa, ideal, *(mWorld->getSkeleton(0)), external);
+		pv(external);
 
 		usleep(1e4);
 	}
@@ -111,6 +73,9 @@ void destroy() {
 /* ******************************************************************************************** */
 /// The main thread
 int main() {
+	DartLoader dl;
+	mWorld = dl.parseWorld("../scenes/01-World-Robot.urdf");
+	assert((mWorld != NULL) && "Could not find the world");
 	init(daemon_cx, js_chan, ft_chan, llwa, offset);
 	run();
 	destroy();

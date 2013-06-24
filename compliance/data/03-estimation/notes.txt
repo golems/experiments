@@ -7,3 +7,9 @@ is "very" similar to the signal from the experiment with nothing on the f/t sens
 6 in debugging-amplitude folder). 
 
 ---------------------------------------------------------------------------------------------------
+
+Experiment 3 is the f/t graph with joystick moving the arms randomly at a capped speed of 0.1. Note
+that the error increases to 4-5N at some points. We don't know why this happens exactly and I think
+we should model the error without anything on the f/t sensor to see why. 
+
+---------------------------------------------------------------------------------------------------
