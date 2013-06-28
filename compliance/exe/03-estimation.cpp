@@ -17,11 +17,12 @@ using namespace simulation;
 
 /* ********************************************************************************************* */
 somatic_d_t daemon_cx;
-ach_channel_t js_chan;				
+ach_channel_t js_chan;
+ach_channel_t imuChan;
+ach_channel_t waistChan;				
 ach_channel_t ft_chan;
 somatic_motor_t llwa;
 Vector6d offset;							///< the offset we are going to decrease from raw readings
-World* mWorld = NULL;
 
 /* ******************************************************************************************** */
 /// The continuous loop
@@ -35,6 +36,7 @@ void run() {
 	size_t c = 0;
 	Vector6d raw, external;
 	Matrix3d Rsb;	//< The sensor frame in bracket frame (only rotation)
+	double waist=0.0, imu=0.0;	
 	while(!somatic_sig_received) {
 		
 		c++;
@@ -42,9 +44,13 @@ void run() {
 		// Move the arm to any position with the joystick
 		setJoystickInput(daemon_cx, js_chan, llwa, llwa);
 		somatic_motor_update(&daemon_cx, &llwa);
-	
+
+		// Get imu/waist data
+		getImu(&imu, imuChan);
+		getWaist(&waist, waistChan);
+		
 		// Get the f/t sensor data and compute the ideal value
-		size_t k = 1e6;
+		size_t k = 50;
 		bool result = (c % k == 0) && getFT(daemon_cx, ft_chan, raw);
 		if(!result) continue;
 
@@ -52,7 +58,7 @@ void run() {
 		Vector6d ideal = raw + offset;
 
 		// Compute the external forces from ideal readings
-		computeExternal(llwa, ideal, *(mWorld->getSkeleton(0)), external);
+		computeExternal(imu, waist, llwa, ideal, *(mWorld->getSkeleton(0)), external);
 		pv(external);
 
 		usleep(1e4);
@@ -67,16 +73,17 @@ void run() {
 /// Kills the motor and daemon structs 
 void destroy() {
 	somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
+	somatic_d_channel_close(&daemon_cx, &waistChan);
+	somatic_d_channel_close(&daemon_cx, &imuChan);
+	
 	somatic_d_destroy(&daemon_cx);
 }
 
 /* ******************************************************************************************** */
 /// The main thread
 int main() {
-	DartLoader dl;
-	mWorld = dl.parseWorld("../scenes/01-World-Robot.urdf");
-	assert((mWorld != NULL) && "Could not find the world");
-	init(daemon_cx, js_chan, ft_chan, llwa, offset);
+	init(daemon_cx, js_chan, imuChan, waistChan, ft_chan, llwa, offset);
+	cout << "Initialization done!" << endl;
 	run();
 	destroy();
 	return 0;

@@ -12,11 +12,12 @@ using namespace kinematics;
 using namespace dynamics;
 using namespace std;
 
-std::vector <int> arm_ids;		///< The index vector to set config of arms
+vector <int> arm_ids;		///< The index vector to set config of arms
+vector <int> imuWaist_ids; ///< The index vector to set config of waist/imu 
 
 /* ******************************************************************************************** */
-void computeExternal (const somatic_motor_t& llwa, const Vector6d& input, SkeletonDynamics& robot, 
-		Vector6d& external) {
+void computeExternal (double imu, double waist, const somatic_motor_t& llwa, const Vector6d& 
+		input, SkeletonDynamics& robot, Vector6d& external) {
 
 	// Get the point transform wrench due to moving the affected position from com to sensor origin
 	// The transform is an identity with the bottom left a skew symmetric of the point translation
@@ -24,8 +25,10 @@ void computeExternal (const somatic_motor_t& llwa, const Vector6d& input, Skelet
 	pTcom_sensor.bottomLeftCorner<3,3>() << 0.0, -s2com(2), s2com(1), s2com(2), 0.0, -s2com(0), 
 		-s2com(1), s2com(0), 0.0;
 
-	// Get the rotation between the world frame and the sensor frame. 
+	// Get the rotation between the world frame and the sensor frame by setting the arm values
+	// and the imu/waist values
 	robot.setConfig(arm_ids, Map <Vector7d> (llwa.pos));
+	robot.setConfig(imuWaist_ids, Vector2d(imu, waist));
 	Matrix3d Rsw = robot.getNode("lGripper")->getWorldTransform().topLeftCorner<3,3>().transpose();
 	
 	// Create the wrench with computed rotation to change the frame from the world to the sensor
@@ -48,27 +51,8 @@ void computeExternal (const somatic_motor_t& llwa, const Vector6d& input, Skelet
 }
 
 /* ******************************************************************************************** */
-void forwardKinematics (const somatic_motor_t& arm, MatrixXd& Tbee) {
-
-	// Create the DH table for the arm
-	double T [7][4] = {
-		{0.0, -M_PI_2, -L4, arm.pos[0]},
-		{0.0, M_PI_2, 0.0, arm.pos[1]},
-		{0.0, -M_PI_2, -L5, arm.pos[2]},
-		{0.0, M_PI_2, 0.0, arm.pos[3]},
-		{0.0, -M_PI_2, -L6, arm.pos[4]},
-		{0.0, M_PI_2, 0.0, arm.pos[5]},
-		{0.0, 0.0, -L7-L8, arm.pos[6]}};
-
-	// Loop through the joints and aggregate the transformations multiplying from left
-	Tbee = MatrixXd::Identity(4,4);
-	for(size_t i = 0; i < 7; i++) 
-		Tbee *= dh(T[i][0], T[i][1], T[i][2], T[i][3]);		
-}
-
-/* ******************************************************************************************** */
-void computeOffset (const somatic_motor_t& arm, const Vector6d& raw, SkeletonDynamics& robot, 
-		Vector6d& offset) {
+void computeOffset (double imu, double waist, const somatic_motor_t& arm, const Vector6d& raw, 
+		SkeletonDynamics& robot, Vector6d& offset) {
 
 	// Get the point transform wrench due to moving the affected position from com to sensor origin
 	// The transform is an identity with the bottom left a skew symmetric of the point translation
@@ -77,6 +61,7 @@ void computeOffset (const somatic_motor_t& arm, const Vector6d& raw, SkeletonDyn
 		-s2com(1), s2com(0), 0.0;
 
 	// Get the rotation between the world frame and the sensor frame. 
+	robot.setConfig(imuWaist_ids, Vector2d(imu, waist));
 	robot.setConfig(arm_ids, Map <Vector7d> (arm.pos));
 	Matrix3d R = robot.getNode("lGripper")->getWorldTransform().topLeftCorner<3,3>().transpose();
 
@@ -101,19 +86,23 @@ void computeOffset (const somatic_motor_t& arm, const Vector6d& raw, SkeletonDyn
 }
 
 /* ********************************************************************************************* */
-void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& ft_chan, 
-		somatic_motor_t& llwa, Vector6d& offset){
+void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuChan, 
+		ach_channel_t& waistChan, ach_channel_t& ft_chan, somatic_motor_t& llwa, Vector6d& offset){
 
+	// Set up the index vectors
 	int arm_ids_a [] = {10, 12, 14, 16, 18, 20, 22};
 	for(size_t i = 0; i < 7; i++) arm_ids.push_back(arm_ids_a[i]);
+	imuWaist_ids.push_back(5);	
+	imuWaist_ids.push_back(8);	
 
-	/// Restart the netcanft daemon. Need to sleep to let OS kill the program first.
+	// Restart the netcanft daemon. Need to sleep to let OS kill the program first.
 	system("killall -s 9 netcanftd");
 	usleep(20000);
-	system("netcanftd -v -d -I lft -b 2 -B 1000 -c llwa_ft -k -r");
+	system("netcanftd -v -d -I lft -b 1 -B 1000 -c llwa_ft -k -r");
 
+	// Load environment from dart for kinematics
 	DartLoader dl;
-	simulation::World* mWorld = dl.parseWorld("../scenes/01-World-Robot.urdf");
+	mWorld = dl.parseWorld("../scenes/01-World-Robot.urdf");
 	assert((mWorld != NULL) && "Could not find the world");
 
 	// Initialize this daemon (program!)
@@ -126,15 +115,35 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& ft_cha
 	initArm(daemon_cx, llwa, "llwa");
 	somatic_motor_update(&daemon_cx, &llwa);
 
+	// Initialize the channels to the imu and waist sensors
+	somatic_d_channel_open(&daemon_cx, &imuChan, "imu-data", NULL);
+	somatic_d_channel_open(&daemon_cx, &waistChan, "waist-state", NULL);
+
+	// Get imu data
+	double imu = 0.0;
+	for(int i = 0; i < 500; i++) {
+		double temp;
+		getImu(&temp, imuChan);
+		imu += temp;
+	}
+	imu /= 500;
+	cout << "imu : " << imu*180.0/M_PI << endl;
+
+	// Get waist data
+	double waist;
+	while(!getWaist(&waist, waistChan));
+	cout << "waist : " << waist*180.0/M_PI << endl;
+
 	// Initialize the joystick channel
 	int r = ach_open(&js_chan, "joystick-data", NULL);
 	aa_hard_assert(r == ACH_OK, "Ach failure '%s' on opening Joystick channel (%s, line %d)\n", 
 		ach_result_to_string(static_cast<ach_status_t>(r)), __FILE__, __LINE__);
-	
+
 	// Open the state and ft channels 
 	somatic_d_channel_open(&daemon_cx, &ft_chan, "llwa_ft", NULL);
 
 	// Get the first force-torque reading and compute the offset with it
+	cout << "reading FT now" << endl;
 	Vector6d ft_data, temp;
 	ft_data << 0,0,0,0,0,0;
 	for(size_t i = 0; i < 1e3; i++) {
@@ -144,7 +153,8 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& ft_cha
 		ft_data += temp;
 	}
 	ft_data /= 1e3;
-	computeOffset(llwa, ft_data, *(mWorld->getSkeleton(0)), offset);
+	
+	computeOffset(imu, waist, llwa, ft_data, *(mWorld->getSkeleton(0)), offset);
 }
 
 /* ********************************************************************************************* */
@@ -173,3 +183,61 @@ bool getFT (somatic_d_t& daemon_cx, ach_channel_t& ft_chan, Vector6d& data) {
 	return true;
 }
 /* ********************************************************************************************* */
+// Reads waist data and returns true if data successfully updated
+bool getWaist(double* waist, ach_channel_t& waistChan) {
+	// Get the time to get the sensor values by
+	struct timespec currTime;
+	clock_gettime(CLOCK_MONOTONIC, &currTime);
+	struct timespec abstime = aa_tm_add(aa_tm_sec2timespec(1.0/30.0), currTime);
+
+	// Get the data from the motors
+	int r;
+	Somatic__MotorState * waistState = SOMATIC_WAIT_LAST_UNPACK( r, somatic__motor_state, 
+		&protobuf_c_system_allocator, 1024, &waistChan, &abstime);
+	
+	// Ach sanity check
+	aa_hard_assert(r == ACH_OK || r == ACH_TIMEOUT || r == ACH_MISSED_FRAME,
+			"Ach wait failure %s on pcio data receive (%s, line %d)\n",
+			ach_result_to_string(static_cast<ach_status_t>(r)),
+			__FILE__, __LINE__);
+
+	if (r == ACH_OK) {
+		// Read the data
+		*waist = waistState->position->data[0];
+		
+		// Free the memory
+		somatic__motor_state__free_unpacked(waistState, &protobuf_c_system_allocator );
+		return true;
+	}
+	return false;
+}
+/* ********************************************************************************************* */
+void getImu (double *imu, ach_channel_t& imuChan) {
+
+	// Get the value
+	int r;
+	struct timespec currTime;
+	clock_gettime(CLOCK_MONOTONIC, &currTime);
+	struct timespec abstime = aa_tm_add(aa_tm_sec2timespec(1.0/30.0), currTime);
+	Somatic__Vector *imu_msg = SOMATIC_WAIT_LAST_UNPACK(r, somatic__vector, 
+			&protobuf_c_system_allocator, IMU_CHANNEL_SIZE, &imuChan, &abstime );
+	assert((imu_msg != NULL) && "Imu message is faulty!");
+
+	// Prepare the ssdmu structure 
+	ssdmu_sample_t imu_sample;
+	imu_sample.x  = imu_msg->data[0];
+	imu_sample.y  = imu_msg->data[1];
+	imu_sample.z  = imu_msg->data[2];
+	imu_sample.dP = imu_msg->data[3];
+	imu_sample.dQ = imu_msg->data[4];
+	imu_sample.dR = imu_msg->data[5];
+
+	// Free the unpacked message
+	somatic__vector__free_unpacked( imu_msg, &protobuf_c_system_allocator );
+
+	// Make the calls to extract the pitch and rate of extraction
+	*imu = -ssdmu_pitch(&imu_sample) + M_PI/2;				 
+}
+
+/* ********************************************************************************************* */
+
