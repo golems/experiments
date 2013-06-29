@@ -48,9 +48,8 @@ const int r_id = 0;
 void wrenchToJointVels (const Vector6d& wrench, Vector7d& dq) {
 
 	// Get the Jacobian towards computing joint-space velocities
-	static kinematics::BodyNode* eeNode = (arm == RIGHT) ? 
-		world->getSkeleton(r_id)->getNode("rGripper") : 
-		world->getSkeleton(r_id)->getNode("lGripper");
+	const char* nodeName = useLeftArm ? "lGripper" : "rGripper";
+	static kinematics::BodyNode* eeNode = world->getSkeleton(r_id)->getNode(nodeName);
 	MatrixXd Jlin = eeNode->getJacobianLinear().topRightCorner<3,7>();
 	MatrixXd Jang = eeNode->getJacobianAngular().topRightCorner<3,7>();
 	MatrixXd J (6,7);
@@ -162,20 +161,14 @@ void destroy() {
 int main(const int argc, char** argv) {
 
 	// Check if the user wants the right arm indicated by the -r flag
-	if((argc > 1) && (strcmp(argv[2], "-r") == 0)) useLeftArm = false;
+	if((argc > 1) && (strcmp(argv[1], "-r") == 0)) useLeftArm = false;
 
-	// Create a trajectory
+	// Create a trajectory moving j6 left and right 2*pi each time
 	double M_60 = M_PI / 3;
-	double sign = (arm == LEFT) ? 1.0 : -1.0;
+	double sign = useLeftArm ? 1.0 : -1.0;
 	double q [] = {1.30 * sign, -M_60 * sign, 0.0, -M_60 * sign, 0.0, M_60/2 * sign, 0.0};	
-	for(double i = 2*M_PI; i >= -2*M_PI; i -= 0.01) {
-		q[6] = i;
-		traj.push_back(eig7(q));	
-	}
-	for(double i = -2*M_PI; i < 2*M_PI; i += 0.01) {
-		q[6] = i;
-		traj.push_back(eig7(q));	
-	}
+	for(q[6] = 2*M_PI; q[6] >= -2*M_PI; q[6] -= 0.01) traj.push_back(eig7(q));	
+	for(q[6] = -2*M_PI; q[6] < 2*M_PI; q[6] += 0.01) traj.push_back(eig7(q));	
 
 	// Initialize the robot
 	init(daemon_cx, js_chan, imuChan, waistChan, ft_chan, lwa, offset, useLeftArm);
