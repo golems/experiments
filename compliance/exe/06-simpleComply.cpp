@@ -46,7 +46,8 @@ const int r_id = 0;
 void wrenchToJointVels (const Vector6d& wrench, Vector7d& dq) {
 
 	// Get the Jacobian towards computing joint-space velocities
-	static kinematics::BodyNode* eeNode = world->getSkeleton(r_id)->getNode("lGripper");
+	const char* nodeName = useLeftArm ? "lGripper" : "rGripper";
+	static kinematics::BodyNode* eeNode = world->getSkeleton(r_id)->getNode(nodeName);
 	MatrixXd Jlin = eeNode->getJacobianLinear().topRightCorner<3,7>();
 	MatrixXd Jang = eeNode->getJacobianAngular().topRightCorner<3,7>();
 	MatrixXd J (6,7);
@@ -93,14 +94,14 @@ void run() {
 		for(size_t i = 0; i < 7; i++) vals(i) = llwa.pos[i];
 		world->getSkeleton(r_id)->setConfig(arm_ids, vals);
 
+		// Get imu/waist data
+		getImu(&imu, imuChan);
+		getWaist(&waist, waistChan);
+		
 		// Get the f/t sensor data and compute the ideal value
 		size_t k = 1e1;
 		bool result = (c % k == 0) && getFT(daemon_cx, ft_chan, raw);
 		if(!result) continue;
-		
-		// Get imu/waist data
-		getImu(&imu, imuChan);
-		getWaist(&waist, waistChan);
 		
 		// Compute the ideal value
 		Vector6d ideal = raw + offset;
@@ -126,7 +127,7 @@ void run() {
 		pv(dq);
 
 		// Apply the joint space velocities to the robot
-		bool run = 0;
+		bool run = 1;
 		if(run)
 			somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq.data(), 7, 
 				NULL);
@@ -146,10 +147,10 @@ void destroy() {
 
 /* ******************************************************************************************** */
 /// The main thread
-int main() {
+int main(int argc, char* argv[]) {
 
 	// Check if the user wants the right arm indicated by the -r flag
-	if((argc > 1) && (strcmp(argv[2], "-r") == 0)) useLeftArm = false;
+	if((argc > 1) && (strcmp(argv[1], "-r") == 0)) useLeftArm = false;
 
 	// Initialize the robot
 	init(daemon_cx, js_chan, imuChan, waistChan, ft_chan, llwa, offset, useLeftArm);
