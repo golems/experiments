@@ -121,8 +121,8 @@ void run() {
 
 		// Check that the current values are not being too much, give a warning if so
 		for(size_t i = 0; i < 7; i++)
-			if(fabs(lwa.cur[i]) > 7.0)
-				printf("\t\t\tWARNING: Current at module %d has passed 7 amps: %lf amps\n", i, lwa.cur[i]);
+			if(fabs(lwa.cur[i]) > 8.0)
+				printf("\t\t\tWARNING: Current at module %d has passed 8 amps: %lf amps\n", i, lwa.cur[i]);
 
 		// Get the external force/torque values
 		bool result = false;
