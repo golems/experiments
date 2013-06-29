@@ -23,38 +23,7 @@ ach_channel_t waistChan;
 ach_channel_t ft_chan;
 somatic_motor_t lwa;
 Vector6d offset;							///< the offset we are going to decrease from raw readings
-
-/* ********************************************************************************************* */
-// Argument processing
-
-/// Options that will be presented to the user
-static struct argp_option options[] = {
-		{"arm",'a', "arm", 0, "arm to work on (left/right)", 0},
-		{0, 0, 0, 0, 0, 0}
-};
-
-/// The one-line explanation of the executable
-static char doc[]= "allows user to correct positions of the pcio modules";
-
-/// The parser function
-static int parse_opt( int key, char *arg, struct argp_state *state) {
-	(void) state; 
-
-	// Make sure the input flag for motor group is set
-	if(key != 'a') return 0;
-
-	// Determine which arm to work on
-	if(strcmp(strdup(arg), "left") == 0) arm = LEFT;
-	else if(strcmp(strdup(arg), "right") == 0) arm = RIGHT;
-	else {
-		printf("Unidentifiable motor group!\n");
-		exit(0);
-	}
-	return 0;
-}
-
-/// The argp structure to parse stuff
-static struct argp argp = {options, parse_opt, NULL, doc, NULL, NULL, NULL };
+bool useLeftArm = true;				///< The indicator that the left arm will be used for this program
 
 /* ******************************************************************************************** */
 /// The continuous loop
@@ -68,7 +37,7 @@ void run() {
 	size_t c = 0;
 	Vector6d raw, external;
 	Matrix3d Rsb;	//< The sensor frame in bracket frame (only rotation)
-	double waist=0.0, imu=0.0;	
+	double waist = 0.0, imu = 0.0;	
 	while(!somatic_sig_received) {
 		
 		c++;
@@ -82,7 +51,7 @@ void run() {
 		getWaist(&waist, waistChan);
 		
 		// Get the f/t sensor data and compute the ideal value
-		size_t k = 50;
+		size_t k = 10;
 		bool result = (c % k == 0) && getFT(daemon_cx, ft_chan, raw);
 		if(!result) continue;
 
@@ -90,7 +59,7 @@ void run() {
 		Vector6d ideal = raw + offset;
 
 		// Compute the external forces from ideal readings
-		computeExternal(imu, waist, lwa, ideal, *(mWorld->getSkeleton(0)), external);
+		computeExternal(imu, waist, lwa, ideal, *(world->getSkeleton(0)), external, useLeftArm);
 		pv(external);
 
 		usleep(1e4);
@@ -114,9 +83,18 @@ void destroy() {
 /* ******************************************************************************************** */
 /// The main thread
 int main(const int argc, char** argv) {
-	argp_parse (&argp, argc, argv, 0, NULL, NULL);
-	init(daemon_cx, js_chan, imuChan, waistChan, ft_chan, lwa, offset);
+
+	for(size_t i = 0; i < argc; i++) printf("argv[%d]: '%s'\n", i, argv[i]);
+
+	// Check if the user wants the right arm indicated by the -r flag
+	if((argc > 1) && (strcmp(argv[1], "-r") == 0)) useLeftArm = false;
+	printf("Using the %s arm\n", useLeftArm ? "left" : "right");
+
+	// Initialize the robot
+	init(daemon_cx, js_chan, imuChan, waistChan, ft_chan, lwa, offset, useLeftArm);
 	cout << "Initialization done!" << endl;
+
+	// Run and clean up
 	run();
 	destroy();
 	return 0;

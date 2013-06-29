@@ -39,49 +39,17 @@ ach_channel_t ft_chan;
 somatic_motor_t lwa;
 Vector6d offset;							///< the offset we are going to decrease from raw readings
 vector <Vector7d, aligned_allocator<Vector7d> > traj;	///< The traj to follow in joint space pos
+bool useLeftArm = true;				///< The indicator that the left arm will be used for this program
 
 const int r_id = 0;
-
-/* ********************************************************************************************* */
-// Argument processing
-
-/// Options that will be presented to the user
-static struct argp_option options[] = {
-		{"arm",'a', "arm", 0, "arm to work on (left/right)", 0},
-		{0, 0, 0, 0, 0, 0}
-};
-
-/// The one-line explanation of the executable
-static char doc[]= "allows user to correct positions of the pcio modules";
-
-/// The parser function
-static int parse_opt( int key, char *arg, struct argp_state *state) {
-	(void) state; 
-
-	// Make sure the input flag for motor group is set
-	if(key != 'a') return 0;
-
-	// Determine which arm to work on
-	if(strcmp(strdup(arg), "left") == 0) arm = LEFT;
-	else if(strcmp(strdup(arg), "right") == 0) arm = RIGHT;
-	else {
-		printf("Unidentifiable motor group!\n");
-		exit(0);
-	}
-	return 0;
-}
-
-/// The argp structure to parse stuff
-static struct argp argp = {options, parse_opt, NULL, doc, NULL, NULL, NULL };
 
 /* ******************************************************************************************** */
 /// Given a wrench, computes the joint space velocities so that wrench is minimized 
 void wrenchToJointVels (const Vector6d& wrench, Vector7d& dq) {
 
 	// Get the Jacobian towards computing joint-space velocities
-	static kinematics::BodyNode* eeNode = (arm == RIGHT) ? 
-		mWorld->getSkeleton(r_id)->getNode("rGripper") : 
-		mWorld->getSkeleton(r_id)->getNode("lGripper");
+	const char* nodeName = useLeftArm ? "lGripper" : "rGripper";
+	static kinematics::BodyNode* eeNode = world->getSkeleton(r_id)->getNode(nodeName);
 	MatrixXd Jlin = eeNode->getJacobianLinear().topRightCorner<3,7>();
 	MatrixXd Jang = eeNode->getJacobianAngular().topRightCorner<3,7>();
 	MatrixXd J (6,7);
@@ -153,13 +121,13 @@ void run() {
 
 		// Check that the current values are not being too much, give a warning if so
 		for(size_t i = 0; i < 7; i++)
-			if(fabs(lwa.cur[i]) > 7.0)
-				printf("\t\t\tWARNING: Current at module %d has passed 7 amps: %lf amps\n", i, lwa.cur[i]);
+			if(fabs(lwa.cur[i]) > 8.0)
+				printf("\t\t\tWARNING: Current at module %d has passed 8 amps: %lf amps\n", i, lwa.cur[i]);
 
 		// Get the external force/torque values
 		bool result = false;
 		while(!result) result = getFT(daemon_cx, ft_chan, raw);
-		computeExternal(imu, waist, lwa, raw + offset, *(mWorld->getSkeleton(0)), external);
+		computeExternal(imu, waist, lwa, raw + offset, *(world->getSkeleton(0)), external, useLeftArm);
 
 		// Compute the next goal position
 		Vector7d goal;
@@ -192,24 +160,18 @@ void destroy() {
 /// The main thread
 int main(const int argc, char** argv) {
 
-	// Argument parsing
-	argp_parse (&argp, argc, argv, 0, NULL, NULL);
+	// Check if the user wants the right arm indicated by the -r flag
+	if((argc > 1) && (strcmp(argv[1], "-r") == 0)) useLeftArm = false;
 
-	// Create a trajectory
+	// Create a trajectory moving j6 left and right 2*pi each time
 	double M_60 = M_PI / 3;
-	double sign = (arm == LEFT) ? 1.0 : -1.0;
+	double sign = useLeftArm ? 1.0 : -1.0;
 	double q [] = {1.30 * sign, -M_60 * sign, 0.0, -M_60 * sign, 0.0, M_60/2 * sign, 0.0};	
-	for(double i = 2*M_PI; i >= -2*M_PI; i -= 0.01) {
-		q[6] = i;
-		traj.push_back(eig7(q));	
-	}
-	for(double i = -2*M_PI; i < 2*M_PI; i += 0.01) {
-		q[6] = i;
-		traj.push_back(eig7(q));	
-	}
+	for(q[6] = 2*M_PI; q[6] >= -2*M_PI; q[6] -= 0.01) traj.push_back(eig7(q));	
+	for(q[6] = -2*M_PI; q[6] < 2*M_PI; q[6] += 0.01) traj.push_back(eig7(q));	
 
 	// Initialize the robot
-	init(daemon_cx, js_chan, imuChan, waistChan, ft_chan, lwa, offset);
+	init(daemon_cx, js_chan, imuChan, waistChan, ft_chan, lwa, offset, useLeftArm);
 
 	// Run and once done, halt motors and clean up
 	run();

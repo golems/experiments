@@ -56,11 +56,8 @@ typedef Matrix<double, 6, 6> Matrix6d;			///< A typedef for convenience to conta
 
 /* ******************************************************************************************** */
 static const double eeMass = 1.6 + 0.169 + 0.000;			///< The mass of the end-effector
-simulation::World *mWorld = NULL;									///< The dart environment loaded for kinematics
+simulation::World *world = NULL;									///< The dart environment loaded for kinematics
 
-enum armType {LEFT, RIGHT, NONE};			///< Arm Type. Determines which arm to work on
-
-armType arm = NONE;
 /* ******************************************************************************************** */
 /// Set the vector from the sensor origin to the gripper center of mass (m)
 static const Vector3d s2com (0.0, 0.0, 0.09); // 0.0683 schunk itself, 0.026 length of ext + 2nd
@@ -70,17 +67,18 @@ void forwardKinematics (const somatic_motor_t& llwa, MatrixXd& Tbee);
 
 /// Computes the initial offset from the given first raw value
 void computeOffset (double imu, double waist, const somatic_motor_t& llwa, const Vector6d& raw, 
-		dynamics::SkeletonDynamics& robot, Vector6d& offset);
+		dynamics::SkeletonDynamics& robot, Vector6d& offset, bool left);
 
 /// Computes the external force and torque from the values assuming that the input is already
 /// corrected for the effect of gravity. That is the arm readings should reflect the weight
 /// of the end-effector when there are no external inputs.
 void computeExternal (double imu, double waist, const somatic_motor_t& llwa, const Vector6d& input, 
-		dynamics::SkeletonDynamics& robot, Vector6d& external);
+		dynamics::SkeletonDynamics& robot, Vector6d& external, bool left);
 
 /// Initializes the daemon, joystick/ft channels, left arm and computes the initial offset for ft
 void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuChan, 
-		ach_channel_t& waistChan, ach_channel_t& ft_chan, somatic_motor_t& llwa, Vector6d& offset);
+		ach_channel_t& waistChan, ach_channel_t& ft_chan, somatic_motor_t& llwa, Vector6d& offset,
+		bool left);
 
 /// Returns the f/t data if available at that instance
 bool getFT (somatic_d_t& daemon_cx, ach_channel_t& ft_chan, Vector6d& data);

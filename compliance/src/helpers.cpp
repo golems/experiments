@@ -17,7 +17,7 @@ vector <int> imuWaist_ids; ///< The index vector to set config of waist/imu
 
 /* ******************************************************************************************** */
 void computeExternal (double imu, double waist, const somatic_motor_t& lwa, const Vector6d& 
-		input, SkeletonDynamics& robot, Vector6d& external) {
+		input, SkeletonDynamics& robot, Vector6d& external, bool left) {
 
 	// Get the point transform wrench due to moving the affected position from com to sensor origin
 	// The transform is an identity with the bottom left a skew symmetric of the point translation
@@ -29,9 +29,8 @@ void computeExternal (double imu, double waist, const somatic_motor_t& lwa, cons
 	// and the imu/waist values
 	robot.setConfig(arm_ids, Map <Vector7d> (lwa.pos));
 	robot.setConfig(imuWaist_ids, Vector2d(imu, waist));
-	Matrix3d Rsw = (arm == RIGHT) ? 
-		robot.getNode("rGripper")->getWorldTransform().topLeftCorner<3,3>().transpose()
-		:	robot.getNode("lGripper")->getWorldTransform().topLeftCorner<3,3>().transpose();
+	const char* nodeName = left ? "lGripper" : "rGripper";
+	Matrix3d Rsw = robot.getNode(nodeName)->getWorldTransform().topLeftCorner<3,3>().transpose();
 	
 	// Create the wrench with computed rotation to change the frame from the world to the sensor
 	Matrix6d pSsensor_world = MatrixXd::Identity(6,6); 
@@ -49,12 +48,12 @@ void computeExternal (double imu, double waist, const somatic_motor_t& lwa, cons
 
 	// Remove the effect from the sensor value and convert the wrench into the world frame
 	external = input - wrenchWeight;
-	//external = pSsensor_world.transpose() * external;	// Comment this line out for 03 experiments!!!
+	external = pSsensor_world.transpose() * external;	
 }
 
 /* ******************************************************************************************** */
 void computeOffset (double imu, double waist, const somatic_motor_t& lwa, const Vector6d& raw, 
-		SkeletonDynamics& robot, Vector6d& offset) {
+		SkeletonDynamics& robot, Vector6d& offset, bool left) {
 
 	// Get the point transform wrench due to moving the affected position from com to sensor origin
 	// The transform is an identity with the bottom left a skew symmetric of the point translation
@@ -65,9 +64,8 @@ void computeOffset (double imu, double waist, const somatic_motor_t& lwa, const 
 	// Get the rotation between the world frame and the sensor frame. 
 	robot.setConfig(imuWaist_ids, Vector2d(imu, waist));
 	robot.setConfig(arm_ids, Map <Vector7d> (lwa.pos));
-	Matrix3d R = (arm == RIGHT) ? 
-		robot.getNode("rGripper")->getWorldTransform().topLeftCorner<3,3>().transpose()
-		: robot.getNode("lGripper")->getWorldTransform().topLeftCorner<3,3>().transpose();
+	const char* nodeName = left ? "lGripper" : "rGripper";
+	Matrix3d R = robot.getNode(nodeName)->getWorldTransform().topLeftCorner<3,3>().transpose();
 
 	// Create the wrench with computed rotation to change the frame from the bracket to the sensor
 	Matrix6d pSsensor_bracket = MatrixXd::Identity(6,6); 
@@ -91,12 +89,13 @@ void computeOffset (double imu, double waist, const somatic_motor_t& lwa, const 
 
 /* ********************************************************************************************* */
 void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuChan, 
-		ach_channel_t& waistChan, ach_channel_t& ft_chan, somatic_motor_t& lwa, Vector6d& offset){
+		ach_channel_t& waistChan, ach_channel_t& ft_chan, somatic_motor_t& lwa, Vector6d& offset, 
+		bool left){
 
 	// Set up the index vectors
 	int right_arm_ids_a [] = {11, 13, 15, 17, 19, 21, 23};
 	int left_arm_ids_a [] = 	{10, 12, 14, 16, 18, 20, 22};
-	int * arm_ids_a = (arm == RIGHT) ? right_arm_ids_a : left_arm_ids_a;
+	int * arm_ids_a = left ? left_arm_ids_a : right_arm_ids_a;
 	for(size_t i = 0; i < 7; i++) arm_ids.push_back(arm_ids_a[i]);
 	imuWaist_ids.push_back(5);	
 	imuWaist_ids.push_back(8);	
@@ -104,13 +103,13 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuCha
 	// Restart the netcanft daemon. Need to sleep to let OS kill the program first.
 	system("killall -s 9 netcanftd");
 	usleep(20000);
-	if( arm == RIGHT ) system("netcanftd -v -d -I rft -b 9 -B 1000 -c rlwa_ft -k -r");
-	else system("netcanftd -v -d -I lft -b 1 -B 1000 -c llwa_ft -k -r");
+	if(left) system("netcanftd -v -d -I lft -b 1 -B 1000 -c llwa_ft -k -r");
+	else system("netcanftd -v -d -I rft -b 9 -B 1000 -c rlwa_ft -k -r");
 
 	// Load environment from dart for kinematics
 	DartLoader dl;
-	mWorld = dl.parseWorld("../scenes/01-World-Robot.urdf");
-	assert((mWorld != NULL) && "Could not find the world");
+	world = dl.parseWorld("../../common/scenes/01-World-Robot.urdf");
+	assert((world != NULL) && "Could not find the world");
 
 	// Initialize this daemon (program!)
 	somatic_d_opts_t dopt;
@@ -119,8 +118,8 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuCha
 	somatic_d_init( &daemon_cx, &dopt );
 
 	// Initialize the left arm
-	if( arm == RIGHT ) initArm(daemon_cx, lwa, "rlwa");
-	else{ initArm(daemon_cx, lwa, "llwa"); }
+	if(left) initArm(daemon_cx, lwa, "llwa");
+	else{ initArm(daemon_cx, lwa, "rlwa"); }
 	somatic_motor_update(&daemon_cx, &lwa);
 
 	// Initialize the channels to the imu and waist sensors
@@ -148,8 +147,8 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuCha
 		ach_result_to_string(static_cast<ach_status_t>(r)), __FILE__, __LINE__);
 
 	// Open the state and ft channels
-	if(arm == RIGHT) somatic_d_channel_open(&daemon_cx, &ft_chan, "rlwa_ft", NULL);
-	else somatic_d_channel_open(&daemon_cx, &ft_chan, "llwa_ft", NULL);
+	if(left) somatic_d_channel_open(&daemon_cx, &ft_chan, "llwa_ft", NULL);
+	else somatic_d_channel_open(&daemon_cx, &ft_chan, "rlwa_ft", NULL);
 
 	// Get the first force-torque reading and compute the offset with it
 	cout << "reading FT now" << endl;
@@ -163,7 +162,7 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuCha
 	}
 	ft_data /= 1e3;
 	
-	computeOffset(imu, waist, lwa, ft_data, *(mWorld->getSkeleton(0)), offset);
+	computeOffset(imu, waist, lwa, ft_data, *(world->getSkeleton(0)), offset, left);
 }
 
 /* ********************************************************************************************* */

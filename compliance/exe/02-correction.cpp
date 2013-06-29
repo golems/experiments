@@ -22,6 +22,8 @@ using namespace std;
 somatic_d_t daemon_cx;
 ach_channel_t js_chan;				
 ach_channel_t ft_chan;
+ach_channel_t imuChan;
+ach_channel_t waistChan;				
 somatic_motor_t llwa;
 Vector6d offset;							///< the offset we are going to decrease from raw readings
 
@@ -78,7 +80,7 @@ void destroy() {
 /* ******************************************************************************************** */
 /// The main thread
 int main() {
-	init(daemon_cx, js_chan, ft_chan, llwa, offset);
+	init(daemon_cx, js_chan, imuChan, waistChan, ft_chan, llwa, offset, false);
 	run();
 	destroy();
 	return 0;
