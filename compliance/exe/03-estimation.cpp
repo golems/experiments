@@ -84,8 +84,11 @@ void destroy() {
 /// The main thread
 int main(const int argc, char** argv) {
 
+	for(size_t i = 0; i < argc; i++) printf("argv[%d]: '%s'\n", i, argv[i]);
+
 	// Check if the user wants the right arm indicated by the -r flag
-	if((argc > 1) && (strcmp(argv[2], "-r") == 0)) useLeftArm = false;
+	if((argc > 1) && (strcmp(argv[1], "-r") == 0)) useLeftArm = false;
+	printf("Using the %s arm\n", useLeftArm ? "left" : "right");
 
 	// Initialize the robot
 	init(daemon_cx, js_chan, imuChan, waistChan, ft_chan, lwa, offset, useLeftArm);
