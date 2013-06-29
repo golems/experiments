@@ -80,7 +80,7 @@ void destroy() {
 /* ******************************************************************************************** */
 /// The main thread
 int main() {
-	init(daemon_cx, js_chan, imuChan, waistChan, ft_chan, llwa, offset);
+	init(daemon_cx, js_chan, imuChan, waistChan, ft_chan, llwa, offset, false);
 	run();
 	destroy();
 	return 0;

@@ -39,40 +39,9 @@ ach_channel_t ft_chan;
 somatic_motor_t lwa;
 Vector6d offset;							///< the offset we are going to decrease from raw readings
 vector <Vector7d, aligned_allocator<Vector7d> > traj;	///< The traj to follow in joint space pos
+bool useLeftArm = true;				///< The indicator that the left arm will be used for this program
 
 const int r_id = 0;
-
-/* ********************************************************************************************* */
-// Argument processing
-
-/// Options that will be presented to the user
-static struct argp_option options[] = {
-		{"arm",'a', "arm", 0, "arm to work on (left/right)", 0},
-		{0, 0, 0, 0, 0, 0}
-};
-
-/// The one-line explanation of the executable
-static char doc[]= "allows user to correct positions of the pcio modules";
-
-/// The parser function
-static int parse_opt( int key, char *arg, struct argp_state *state) {
-	(void) state; 
-
-	// Make sure the input flag for motor group is set
-	if(key != 'a') return 0;
-
-	// Determine which arm to work on
-	if(strcmp(strdup(arg), "left") == 0) arm = LEFT;
-	else if(strcmp(strdup(arg), "right") == 0) arm = RIGHT;
-	else {
-		printf("Unidentifiable motor group!\n");
-		exit(0);
-	}
-	return 0;
-}
-
-/// The argp structure to parse stuff
-static struct argp argp = {options, parse_opt, NULL, doc, NULL, NULL, NULL };
 
 /* ******************************************************************************************** */
 /// Given a wrench, computes the joint space velocities so that wrench is minimized 
@@ -159,7 +128,7 @@ void run() {
 		// Get the external force/torque values
 		bool result = false;
 		while(!result) result = getFT(daemon_cx, ft_chan, raw);
-		computeExternal(imu, waist, lwa, raw + offset, *(world->getSkeleton(0)), external);
+		computeExternal(imu, waist, lwa, raw + offset, *(world->getSkeleton(0)), external, useLeftArm);
 
 		// Compute the next goal position
 		Vector7d goal;
@@ -192,8 +161,8 @@ void destroy() {
 /// The main thread
 int main(const int argc, char** argv) {
 
-	// Argument parsing
-	argp_parse (&argp, argc, argv, 0, NULL, NULL);
+	// Check if the user wants the right arm indicated by the -r flag
+	if((argc > 1) && (strcmp(argv[2], "-r") == 0)) useLeftArm = false;
 
 	// Create a trajectory
 	double M_60 = M_PI / 3;
@@ -209,7 +178,7 @@ int main(const int argc, char** argv) {
 	}
 
 	// Initialize the robot
-	init(daemon_cx, js_chan, imuChan, waistChan, ft_chan, lwa, offset);
+	init(daemon_cx, js_chan, imuChan, waistChan, ft_chan, lwa, offset, useLeftArm);
 
 	// Run and once done, halt motors and clean up
 	run();

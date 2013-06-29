@@ -37,6 +37,7 @@ ach_channel_t waistChan;
 ach_channel_t ft_chan;
 somatic_motor_t llwa;
 Vector6d offset;							///< the offset we are going to decrease from raw readings
+bool useLeftArm = true;				///< The indicator that the left arm will be used for this program
 
 const int r_id = 0;
 
@@ -82,6 +83,7 @@ void run() {
 	double waist = 0.0, imu = 0.0;	
 	for(size_t i = 4; i < 17; i+=2) arm_ids.push_back(i + 6);  
 	double dqZero [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+	cout << "\n\nStarting the loop" << endl;
 	while(!somatic_sig_received) {
 		
 		c++;
@@ -92,7 +94,7 @@ void run() {
 		world->getSkeleton(r_id)->setConfig(arm_ids, vals);
 
 		// Get the f/t sensor data and compute the ideal value
-		size_t k = 1e3;
+		size_t k = 1e1;
 		bool result = (c % k == 0) && getFT(daemon_cx, ft_chan, raw);
 		if(!result) continue;
 		
@@ -104,7 +106,7 @@ void run() {
 		Vector6d ideal = raw + offset;
 
 		// Compute the external forces from ideal readings and move it to bracket frame
-		computeExternal(imu, waist, llwa, ideal, *(world->getSkeleton(r_id)), external);
+		computeExternal(imu, waist, llwa, ideal, *(world->getSkeleton(r_id)), external, useLeftArm);
 
 		// Threshold the values - 4N for forces, 0.4Nm for torques
 		if((external.topLeftCorner<3,1>().norm() < 7) && 
@@ -128,7 +130,6 @@ void run() {
 		if(run)
 			somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq.data(), 7, 
 				NULL);
-
 	}
 
 	// Send the stoppig event
@@ -147,8 +148,11 @@ void destroy() {
 /// The main thread
 int main() {
 
+	// Check if the user wants the right arm indicated by the -r flag
+	if((argc > 1) && (strcmp(argv[2], "-r") == 0)) useLeftArm = false;
+
 	// Initialize the robot
-	init(daemon_cx, js_chan, imuChan, waistChan, ft_chan, llwa, offset);
+	init(daemon_cx, js_chan, imuChan, waistChan, ft_chan, llwa, offset, useLeftArm);
 
 	// Run and once done, halt motors and clean up
 	run();
