@@ -90,7 +90,7 @@ void run() {
 		Vector6d ideal = raw + offset;
 
 		// Compute the external forces from ideal readings
-		computeExternal(imu, waist, lwa, ideal, *(mWorld->getSkeleton(0)), external);
+		computeExternal(imu, waist, lwa, ideal, *(world->getSkeleton(0)), external);
 		pv(external);
 
 		usleep(1e4);

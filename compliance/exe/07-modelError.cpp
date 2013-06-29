@@ -28,7 +28,6 @@ ach_channel_t js_chan;
 ach_channel_t ft_chan;
 somatic_motor_t llwa;
 Vector6d offset;							
-World* mWorld = NULL;
 
 vector <Vector3d, aligned_allocator<Vector3d> > goals;		///< Last 3 dof that the arm will visit
 vector <Vector6d, aligned_allocator<Vector6d> > readings;	///< Mean readings at the goal locations

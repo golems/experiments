@@ -32,9 +32,10 @@ using namespace simulation;
 /* ********************************************************************************************* */
 somatic_d_t daemon_cx;
 ach_channel_t js_chan;				
+ach_channel_t imuChan;
+ach_channel_t waistChan;				
 ach_channel_t ft_chan;
 somatic_motor_t llwa;
-World* mWorld = NULL;					///< Dart structure that contains the robot kinematics
 Vector6d offset;							///< the offset we are going to decrease from raw readings
 
 const int r_id = 0;
@@ -44,7 +45,7 @@ const int r_id = 0;
 void wrenchToJointVels (const Vector6d& wrench, Vector7d& dq) {
 
 	// Get the Jacobian towards computing joint-space velocities
-	static kinematics::BodyNode* eeNode = mWorld->getSkeleton(r_id)->getNode("lGripper");
+	static kinematics::BodyNode* eeNode = world->getSkeleton(r_id)->getNode("lGripper");
 	MatrixXd Jlin = eeNode->getJacobianLinear().topRightCorner<3,7>();
 	MatrixXd Jang = eeNode->getJacobianAngular().topRightCorner<3,7>();
 	MatrixXd J (6,7);
@@ -78,6 +79,7 @@ void run() {
 	Vector6d raw, external;
 	Vector7d dq, vals;
 	vector <int> arm_ids;
+	double waist = 0.0, imu = 0.0;	
 	for(size_t i = 4; i < 17; i+=2) arm_ids.push_back(i + 6);  
 	double dqZero [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 	while(!somatic_sig_received) {
@@ -87,36 +89,31 @@ void run() {
 		// Update the arm position in dart with the real arm positions
 		somatic_motor_update(&daemon_cx, &llwa);
 		for(size_t i = 0; i < 7; i++) vals(i) = llwa.pos[i];
-		mWorld->getSkeleton(r_id)->setConfig(arm_ids, vals);
+		world->getSkeleton(r_id)->setConfig(arm_ids, vals);
 
 		// Get the f/t sensor data and compute the ideal value
 		size_t k = 1e3;
 		bool result = (c % k == 0) && getFT(daemon_cx, ft_chan, raw);
-		if(!result) {
-//			somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dqZero, 7, NULL);
-//			cout << "setting 0 - no data!" << endl;
-			continue;
-		}
-
+		if(!result) continue;
+		
+		// Get imu/waist data
+		getImu(&imu, imuChan);
+		getWaist(&waist, waistChan);
+		
 		// Compute the ideal value
 		Vector6d ideal = raw + offset;
 
 		// Compute the external forces from ideal readings and move it to bracket frame
-		computeExternal(llwa, ideal, *(mWorld->getSkeleton(r_id)), external);
+		computeExternal(imu, waist, llwa, ideal, *(world->getSkeleton(r_id)), external);
 
 		// Threshold the values - 4N for forces, 0.4Nm for torques
 		if((external.topLeftCorner<3,1>().norm() < 7) && 
        (external.bottomLeftCorner<3,1>().norm() < 0.4)) {
 			somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dqZero, 7, NULL);
-			//cout << ".";
 			continue;
 		}
-//		cout << endl;
-/*
-		external(0) = 0;
-		external(1) = 0;
-		external(2) = 0;
-*/
+
+		// Increase the sensitivity to the torque values
 		external(3) *= 20;
 		external(4) *= 20;
 		external(5) *= 40;
@@ -127,7 +124,7 @@ void run() {
 		pv(dq);
 
 		// Apply the joint space velocities to the robot
-		bool run = 1;
+		bool run = 0;
 		if(run)
 			somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq.data(), 7, 
 				NULL);
@@ -150,13 +147,8 @@ void destroy() {
 /// The main thread
 int main() {
 
-	// Load the world
-	DartLoader dl;
-	mWorld = dl.parseWorld("../scenes/01-World-Robot.urdf");
-	assert((mWorld != NULL) && "Could not find the world");
-
 	// Initialize the robot
-	init(daemon_cx, js_chan, ft_chan, llwa, offset);
+	init(daemon_cx, js_chan, imuChan, waistChan, ft_chan, llwa, offset);
 
 	// Run and once done, halt motors and clean up
 	run();

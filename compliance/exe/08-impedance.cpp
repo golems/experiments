@@ -80,8 +80,8 @@ void wrenchToJointVels (const Vector6d& wrench, Vector7d& dq) {
 
 	// Get the Jacobian towards computing joint-space velocities
 	static kinematics::BodyNode* eeNode = (arm == RIGHT) ? 
-		mWorld->getSkeleton(r_id)->getNode("rGripper") : 
-		mWorld->getSkeleton(r_id)->getNode("lGripper");
+		world->getSkeleton(r_id)->getNode("rGripper") : 
+		world->getSkeleton(r_id)->getNode("lGripper");
 	MatrixXd Jlin = eeNode->getJacobianLinear().topRightCorner<3,7>();
 	MatrixXd Jang = eeNode->getJacobianAngular().topRightCorner<3,7>();
 	MatrixXd J (6,7);
@@ -159,7 +159,7 @@ void run() {
 		// Get the external force/torque values
 		bool result = false;
 		while(!result) result = getFT(daemon_cx, ft_chan, raw);
-		computeExternal(imu, waist, lwa, raw + offset, *(mWorld->getSkeleton(0)), external);
+		computeExternal(imu, waist, lwa, raw + offset, *(world->getSkeleton(0)), external);
 
 		// Compute the next goal position
 		Vector7d goal;

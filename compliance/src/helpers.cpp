@@ -49,7 +49,7 @@ void computeExternal (double imu, double waist, const somatic_motor_t& lwa, cons
 
 	// Remove the effect from the sensor value and convert the wrench into the world frame
 	external = input - wrenchWeight;
-	//external = pSsensor_world.transpose() * external;	// Comment this line out for 03 experiments!!!
+	external = pSsensor_world.transpose() * external;	
 }
 
 /* ******************************************************************************************** */
@@ -109,8 +109,8 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuCha
 
 	// Load environment from dart for kinematics
 	DartLoader dl;
-	mWorld = dl.parseWorld("../scenes/01-World-Robot.urdf");
-	assert((mWorld != NULL) && "Could not find the world");
+	world = dl.parseWorld("../scenes/01-World-Robot.urdf");
+	assert((world != NULL) && "Could not find the world");
 
 	// Initialize this daemon (program!)
 	somatic_d_opts_t dopt;
@@ -163,7 +163,7 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuCha
 	}
 	ft_data /= 1e3;
 	
-	computeOffset(imu, waist, lwa, ft_data, *(mWorld->getSkeleton(0)), offset);
+	computeOffset(imu, waist, lwa, ft_data, *(world->getSkeleton(0)), offset);
 }
 
 /* ********************************************************************************************* */
