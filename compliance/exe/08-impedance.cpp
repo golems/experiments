@@ -33,9 +33,10 @@ using namespace simulation;
 /* ********************************************************************************************* */
 somatic_d_t daemon_cx;
 ach_channel_t js_chan;				
+ach_channel_t imuChan;
+ach_channel_t waistChan;				
 ach_channel_t ft_chan;
 somatic_motor_t llwa;
-World* mWorld = NULL;					///< Dart structure that contains the robot kinematics
 Vector6d offset;							///< the offset we are going to decrease from raw readings
 vector <Vector7d, aligned_allocator<Vector7d> > traj;	///< The traj to follow in joint space pos
 
@@ -103,6 +104,7 @@ void run() {
 	// Unless an interrupt or terminate message is received, process the new message
 	size_t c = 0, traj_idx = 0;
 	Vector6d raw, external;
+	double imu = 0.0, waist = 0.0;
 	while(!somatic_sig_received) {
 
 		c++;
@@ -110,6 +112,10 @@ void run() {
 		// Check if reached a goal; if not update the motor readings
 		if(traj_idx == traj.size() - 1) break;
 		somatic_motor_update(&daemon_cx, &llwa);
+
+		// Get imu/waist data
+		getImu(&imu, imuChan);
+		getWaist(&waist, waistChan);
 
 		// Check that the current values are not being too much, give a warning if so
 		for(size_t i = 0; i < 7; i++)
@@ -119,7 +125,7 @@ void run() {
 		// Get the external force/torque values
 		bool result = false;
 		while(!result) result = getFT(daemon_cx, ft_chan, raw);
-		computeExternal(llwa, raw + offset, *(mWorld->getSkeleton(0)), external);
+		computeExternal(imu, waist, llwa, raw + offset, *(mWorld->getSkeleton(0)), external);
 
 		// Compute the next goal position
 		Vector7d goal;
@@ -143,6 +149,8 @@ void run() {
 /// Kills the motor and daemon structs 
 void destroy() {
 	somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
+	somatic_d_channel_close(&daemon_cx, &waistChan);
+	somatic_d_channel_close(&daemon_cx, &imuChan);
 	somatic_d_destroy(&daemon_cx);
 }
 
@@ -150,14 +158,9 @@ void destroy() {
 /// The main thread
 int main() {
 
-	// Load the world
-	DartLoader dl;
-	mWorld = dl.parseWorld("../scenes/01-World-Robot.urdf");
-	assert((mWorld != NULL) && "Could not find the world");
-
 	// Create a trajectory
 	double M_60 = M_PI / 3;
-	double q [] = {0.0, -M_60, 0.0, -M_60, 0.0, M_60/2, 0.0};	
+	double q [] = {1.295, -M_60, 0.0, -M_60, 0.0, M_60/2, 0.0};	
 	for(double i = 2*M_PI; i >= -2*M_PI; i -= 0.01) {
 		q[6] = i;
 		traj.push_back(eig7(q));	
@@ -168,7 +171,7 @@ int main() {
 	}
 
 	// Initialize the robot
-	init(daemon_cx, js_chan, ft_chan, llwa, offset);
+	init(daemon_cx, js_chan, imuChan, waistChan, ft_chan, llwa, offset);
 
 	// Run and once done, halt motors and clean up
 	run();
