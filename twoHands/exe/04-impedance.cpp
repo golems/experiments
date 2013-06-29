@@ -1,9 +1,9 @@
 /**
- * @file 08-impedance.cpp
+ * @file 04-impedance.cpp
  * @author Can Erdogan
- * @date June 23, 2013
+ * @date June 29, 2013
  * @brief This executable demonstrates the manipulator follow a trajectory while being partially
- * compliant to external force. The idea is that we will send position commands to the motors
+ * compliant to external force (on Krang). The idea is that we will send positions to the motors
  * which incorporate both the trajectory and the f/t sensor information. To do so, we will only
  * consider f/t readings that have a norm > 5N and if there is such a reading, we will move the
  * goal position with vector v such that the f/t value is minimized. If the norm of v is more
@@ -15,6 +15,7 @@
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
+#include <fstream>
 
 #include <kinematics/BodyNode.h>
 #include <math/UtilsRotation.h>
@@ -40,6 +41,7 @@ somatic_motor_t lwa;
 Vector6d offset;							///< the offset we are going to decrease from raw readings
 vector <Vector7d, aligned_allocator<Vector7d> > traj;	///< The traj to follow in joint space pos
 bool useLeftArm = true;				///< The indicator that the left arm will be used for this program
+vector <VectorXd> path;           ///< The path that the robot will execute
 
 const int r_id = 0;
 
@@ -73,7 +75,9 @@ void wrenchToJointVels (const Vector6d& wrench, Vector7d& dq) {
 void computeGoal (const Vector7d& traj, const Vector6d& wrench, Vector7d& goal) {
 
 	// Make sure the threshold is not negligible
-	if((wrench.topLeftCorner<3,1>().norm() < 7) && (wrench.bottomLeftCorner<3,1>().norm() < 0.4)) {
+	static int i = 0;
+	i++;
+	if((i < 10) || ((wrench.topLeftCorner<3,1>().norm() < 7) && (wrench.bottomLeftCorner<3,1>().norm() < 0.4))) {
 		goal = traj;
 		return;
 	}
@@ -105,7 +109,7 @@ void run() {
 			SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
 
 	// Unless an interrupt or terminate message is received, process the new message
-	size_t c = 0, traj_idx = 0;
+	size_t c = 0, path_idx = 0;
 	Vector6d raw, external;
 	double imu = 0.0, waist = 0.0;
 	while(!somatic_sig_received) {
@@ -113,7 +117,7 @@ void run() {
 		c++;
 
 		// Check if reached a goal; if not update the motor readings
-		if(traj_idx == traj.size() - 1) break;
+		if(path_idx == path.size() - 1) path_idx = 0;
 		somatic_motor_update(&daemon_cx, &lwa);
 
 		// Get imu/waist data
@@ -130,15 +134,21 @@ void run() {
 		while(!result) result = getFT(daemon_cx, ft_chan, raw);
 		computeExternal(imu, waist, lwa, raw + offset, *(world->getSkeleton(0)), external, useLeftArm);
 
+		// Get the 7 dof arm value from the given 24dof path
+		Vector7d pathGoal;
+		for(size_t i = 10, j = 0; i < 23; i+=2, j++) pathGoal(j) = path[path_idx](i);
+		pv(pathGoal);
+
 		// Compute the next goal position
 		Vector7d goal;
-		computeGoal(traj[traj_idx], external, goal);
+		computeGoal(pathGoal, external, goal);
+		pv(goal);
 
 		// Send the velocity commands 
 		somatic_motor_cmd(&daemon_cx, &lwa, POSITION, goal.data(), 7, NULL);
 
 		// Increment the position counter if we got close to our goal
-		if((traj[traj_idx] - eig7(lwa.pos)).norm() < 1e-1) traj_idx++;
+		if((pathGoal - eig7(lwa.pos)).norm() < 1e-1) path_idx++;
 
 		usleep(1e4);
 	}
@@ -157,6 +167,26 @@ void destroy() {
 	somatic_d_destroy(&daemon_cx);
 }
 
+/* ********************************************************************************************* */
+/// Reads a joint data for the entire robot (24 dof - no grips) from a file to the global variable
+void readFile () {
+
+	// Open the file
+	fstream file ("data");
+	assert(file.is_open() && "Could not open the file!");
+
+	// Read each line
+	double temp;
+	std::string line;
+	VectorXd row = VectorXd::Zero(24);
+	while(getline(file, line)) {
+		size_t i = 0;
+		stringstream stream (line, stringstream::in);
+		while(stream >> temp) row(i++) = temp;
+		path.push_back(row);
+	}
+}
+
 /* ******************************************************************************************** */
 /// The main thread
 int main(const int argc, char** argv) {
@@ -164,12 +194,8 @@ int main(const int argc, char** argv) {
 	// Check if the user wants the right arm indicated by the -r flag
 	if((argc > 1) && (strcmp(argv[1], "-r") == 0)) useLeftArm = false;
 
-	// Create a trajectory moving j6 left and right 2*pi each time
-	double M_60 = M_PI / 3;
-	double sign = useLeftArm ? 1.0 : -1.0;
-	double q [] = {1.30 * sign, -M_60 * sign, 0.0, -M_60 * sign, 0.0, M_60/2 * sign, 0.0};	
-	for(q[6] = 2*M_PI; q[6] >= -2*M_PI; q[6] -= 0.01) traj.push_back(eig7(q));	
-	for(q[6] = -2*M_PI; q[6] < 2*M_PI; q[6] += 0.01) traj.push_back(eig7(q));	
+	// Read the trajectory from the data file in the build directory
+	readFile();
 
 	// Initialize the robot
 	init(daemon_cx, js_chan, imuChan, waistChan, ft_chan, lwa, offset, useLeftArm);
