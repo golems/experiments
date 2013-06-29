@@ -72,7 +72,7 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	viewer->worldV += Vector3d(0.0, 0.0, -0.7);
 	viewer->UpdateCamera();
 	SetSizer(sizerFull);
-	frame->DoLoad("../scenes/02-World-JInv.urdf");
+	frame->DoLoad("../../common/scenes/02-World-JInv.urdf");
 
 	// Create the timer to notify the function that draws the robot at multiple configurations
 	timer = new Timer();

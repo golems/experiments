@@ -108,7 +108,7 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuCha
 
 	// Load environment from dart for kinematics
 	DartLoader dl;
-	world = dl.parseWorld("../scenes/01-World-Robot.urdf");
+	world = dl.parseWorld("../../common/scenes/01-World-Robot.urdf");
 	assert((world != NULL) && "Could not find the world");
 
 	// Initialize this daemon (program!)
