@@ -149,8 +149,8 @@
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
       <origin xyz="0 0 0"/>
     </inertial>
-		<visual> <origin xyz="0.0 -0.0 0.02615" rpy="0.0 0.0 0.4712"/> <geometry> <box size="0.08 0.112 0.2025"/> </geometry> </visual> 
-		<collision> <origin xyz="0.0 -0.0 0.02615" rpy="0.0 0.0 0.4712"/> <geometry> <box size="0.08 0.112 0.2025"/> </geometry> </collision> 
+		<visual> <origin xyz="0.0 -0.0 0.02615" rpy="0.0 0.0 1.5708"/> <geometry> <box size="0.08 0.112 0.2025"/> </geometry> </visual> 
+		<collision> <origin xyz="0.0 -0.0 0.02615" rpy="0.0 0.0 1.5708"/> <geometry> <box size="0.08 0.112 0.2025"/> </geometry> </collision> 
 	</link>
 
 	<link name = "lgPlate1">
@@ -227,8 +227,8 @@
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
       <origin xyz="0 0 0"/>
     </inertial>
-		<visual> <origin xyz="0.0 -0.0 0.02615" rpy="0.0 0.0 0.4712"/> <geometry> <box size="0.08 0.112 0.2025"/> </geometry> </visual> 
-		<collision> <origin xyz="0.0 -0.0 0.02615" rpy="0.0 0.0 0.4712"/> <geometry> <box size="0.08 0.112 0.2025"/> </geometry> </collision> 
+		<visual> <origin xyz="0.0 -0.0 0.02615" rpy="0.0 0.0 1.5708"/> <geometry> <box size="0.08 0.112 0.2025"/> </geometry> </visual> 
+		<collision> <origin xyz="0.0 -0.0 0.02615" rpy="0.0 0.0 1.5708"/> <geometry> <box size="0.08 0.112 0.2025"/> </geometry> </collision> 
 	</link>
 
 	<link name = "rgPlate1">
@@ -300,12 +300,12 @@
 	</joint>
 
 	<joint name="LMotorPlate1" type="fixed"> <parent link="lGripper" /> <child link="lgPlate1" />
-		<origin xyz="0.02043 -0.04010 0.127" rpy="3.1416 0 2.04" />
+		<origin xyz="-0.045 0.0 0.127" rpy="3.1416 0 0.0" />
 		<axis xyz="1 0 0" /> <limit effort="1000" lower="0.0" upper="0.0135" velocity="0.1" />
 	</joint>
 
 	<joint name="LMotorPlate2" type="fixed"> <parent link="lGripper" /> <child link="lgPlate2" />
-		<origin xyz="-0.02043 0.04010 0.127" rpy="3.1416 0 -1.10" />
+		<origin xyz="0.045 0.000 0.127" rpy="3.1416 0 3.1416" />
 		<axis xyz="1 0 0" /> <limit effort="1000" lower="0.0" upper="0.0135" velocity="0.1" />
 	</joint>
 
@@ -347,12 +347,12 @@
 	</joint>
 
 	<joint name="RMotorPlate1" type="fixed"> <parent link="rGripper" /> <child link="rgPlate1" />
-		<origin xyz="-0.02043 0.04010 0.127" rpy="3.1416 0 -1.10" />
+		<origin xyz="-0.045 0.0 0.127" rpy="3.1416 0 0" />
 		<axis xyz="1 0 0" /> <limit effort="1000" lower="0.0" upper="0.0135" velocity="0.1" />
 	</joint>
 
 	<joint name="RMotorPlate2" type="fixed"> <parent link="rGripper" /> <child link="rgPlate2" />
-		<origin xyz="0.050 0.1 0.0" rpy="1.57 3.1416 0" />
+		<origin xyz="0.045 0.000 0.127" rpy="3.1416 0 3.1416" />
 		<axis xyz="1 0 0" /> <limit effort="1000" lower="0.0" upper="0.0135" velocity="0.1" />
 	</joint>
 

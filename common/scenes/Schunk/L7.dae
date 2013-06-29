@@ -2020,7 +2020,6 @@
         <translate>0	0.041 0</translate>
         <translate>0	-0.0674 0</translate>
         <rotate>0 0	1	 180</rotate>
-        <rotate>0 1	0	 -63</rotate>
         <matrix sid="transform">0.001 0 0 0 0 0.001 0 0 0 0 0.001 0 0 0 0 1</matrix>
         <instance_geometry url="#schunkGrippe-mesh">
           <bind_material>
