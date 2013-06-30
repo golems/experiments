@@ -7,13 +7,38 @@
 
 #include "helpers.h"
 
-
-using namespace kinematics;
-using namespace dynamics;
 using namespace std;
+using namespace dynamics;
+using namespace kinematics;
 
-vector <int> arm_ids;		///< The index vector to set config of arms
-vector <int> imuWaist_ids; ///< The index vector to set config of waist/imu 
+vector <int> arm_ids;				///< The index vector to set config of arms
+vector <int> imuWaist_ids; 	///< The index vector to set config of waist/imu 
+
+/* ******************************************************************************************** */
+/// Given a wrench, computes the joint space velocities so that wrench is minimized 
+void wrenchToJointVels (const Vector6d& wrench, Vector7d& dq, bool left) {
+
+	// Get the Jacobian towards computing joint-space velocities
+	const char* nodeName = left ? "lGripper" : "rGripper";
+	static kinematics::BodyNode* eeNode = world->getSkeleton(0)->getNode(nodeName);
+	MatrixXd Jlin = eeNode->getJacobianLinear().topRightCorner<3,7>();
+	MatrixXd Jang = eeNode->getJacobianAngular().topRightCorner<3,7>();
+	MatrixXd J (6,7);
+	J << Jlin, Jang;
+
+	// Compute the inverse of the Jacobian
+	Eigen::MatrixXd Jt = J.transpose();
+	Eigen::MatrixXd Jinv = Jt * (J * Jt).inverse();
+
+	// Get the joint-space velocities by multiplying inverse Jacobian with the opposite wrench.
+	dq = Jinv * wrench / 300.0;
+
+	// Threshold the velocities
+	for(size_t i = 0; i < 7; i++) {
+		if(dq(i) > 0.1) dq(i) = 0.2;
+		else if(dq(i) < -0.1) dq(i) = -0.2;
+	}
+}
 
 /* ******************************************************************************************** */
 void computeExternal (double imu, double waist, const somatic_motor_t& lwa, const Vector6d& 
@@ -88,17 +113,20 @@ void computeOffset (double imu, double waist, const somatic_motor_t& lwa, const 
 }
 
 /* ********************************************************************************************* */
-void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuChan, 
-		ach_channel_t& waistChan, ach_channel_t& ft_chan, somatic_motor_t& lwa, Vector6d& offset, 
-		bool left){
+void initWholeArm (somatic_d_t& daemon_cx, somatic_motor_t& lwa, ach_channel_t& ft_chan, 
+		Vector6d& offset, ach_channel_t& imuChan, ach_channel_t& waistChan, bool left) {
+
+	// =======================================================================
+	// Initialize the ft and arm channels
+
+	// Sanity check that the world is setup
+	assert(world != NULL && "Before initializing an arm the world should be loaded");
 
 	// Set up the index vectors
 	int right_arm_ids_a [] = {11, 13, 15, 17, 19, 21, 23};
 	int left_arm_ids_a [] = 	{10, 12, 14, 16, 18, 20, 22};
 	int * arm_ids_a = left ? left_arm_ids_a : right_arm_ids_a;
 	for(size_t i = 0; i < 7; i++) arm_ids.push_back(arm_ids_a[i]);
-	imuWaist_ids.push_back(5);	
-	imuWaist_ids.push_back(8);	
 
 	// Restart the netcanft daemon. Need to sleep to let OS kill the program first.
 	system("killall -s 9 netcanftd");
@@ -106,25 +134,26 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuCha
 	if(left) system("netcanftd -v -d -I lft -b 1 -B 1000 -c llwa_ft -k -r");
 	else system("netcanftd -v -d -I rft -b 9 -B 1000 -c rlwa_ft -k -r");
 
-	// Load environment from dart for kinematics
-	DartLoader dl;
-	world = dl.parseWorld("../../common/scenes/01-World-Robot.urdf");
-	assert((world != NULL) && "Could not find the world");
-
-	// Initialize this daemon (program!)
-	somatic_d_opts_t dopt;
-	memset(&dopt, 0, sizeof(dopt)); // zero initialize
-	dopt.ident = "01-gripperWeight";
-	somatic_d_init( &daemon_cx, &dopt );
-
-	// Initialize the left arm
+	// Initialize the arm motors
 	if(left) initArm(daemon_cx, lwa, "llwa");
 	else{ initArm(daemon_cx, lwa, "rlwa"); }
 	somatic_motor_update(&daemon_cx, &lwa);
 
-	// Initialize the channels to the imu and waist sensors
-	somatic_d_channel_open(&daemon_cx, &imuChan, "imu-data", NULL);
-	somatic_d_channel_open(&daemon_cx, &waistChan, "waist-state", NULL);
+	// Open the ft channel
+	if(left) somatic_d_channel_open(&daemon_cx, &ft_chan, "llwa_ft", NULL);
+	else somatic_d_channel_open(&daemon_cx, &ft_chan, "rlwa_ft", NULL);
+
+	// =======================================================================
+	// Compute the offset between the raw ft readings and the truth
+
+	// Get the first force-torque reading and compute the offset with it
+	cout << "reading FT now" << endl;
+	Vector6d ft_data, temp;
+	for(size_t i = 0; i < 1e3; i++) {
+		while(!getFT(daemon_cx, ft_chan, temp));
+		ft_data += temp;
+	}
+	ft_data /= 1e3;
 
 	// Get imu data
 	double imu = 0.0;
@@ -141,28 +170,39 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuCha
 	while(!getWaist(&waist, waistChan));
 	cout << "waist : " << waist*180.0/M_PI << endl;
 
-	// Initialize the joystick channel
-	int r = ach_open(&js_chan, "joystick-data", NULL);
-	aa_hard_assert(r == ACH_OK, "Ach failure '%s' on opening Joystick channel (%s, line %d)\n", 
-		ach_result_to_string(static_cast<ach_status_t>(r)), __FILE__, __LINE__);
-
-	// Open the state and ft channels
-	if(left) somatic_d_channel_open(&daemon_cx, &ft_chan, "llwa_ft", NULL);
-	else somatic_d_channel_open(&daemon_cx, &ft_chan, "rlwa_ft", NULL);
-
-	// Get the first force-torque reading and compute the offset with it
-	cout << "reading FT now" << endl;
-	Vector6d ft_data, temp;
-	ft_data << 0,0,0,0,0,0;
-	for(size_t i = 0; i < 1e3; i++) {
-		bool gotReading = false;
-		while(!gotReading) 
-			gotReading = getFT(daemon_cx, ft_chan, temp);
-		ft_data += temp;
-	}
-	ft_data /= 1e3;
-	
+	// Using imu, waist and ft data, compute the offset
 	computeOffset(imu, waist, lwa, ft_data, *(world->getSkeleton(0)), offset, left);
+}
+
+/* ********************************************************************************************* */
+void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuChan, 
+		ach_channel_t& waistChan, Arm* left, Arm* right) {
+
+	// Set up the index vectors for the imu and waist angles
+	imuWaist_ids.push_back(5);	
+	imuWaist_ids.push_back(8);	
+
+	// Load environment from dart for kinematics
+	DartLoader dl;
+	world = dl.parseWorld("../../common/scenes/01-World-Robot.urdf");
+	assert((world != NULL) && "Could not find the world");
+
+	// Initialize this daemon (program!)
+	somatic_d_opts_t dopt;
+	memset(&dopt, 0, sizeof(dopt)); // zero initialize
+	dopt.ident = "01-gripperWeight";
+	somatic_d_init( &daemon_cx, &dopt );
+
+	// Initialize the channels to the imu and waist sensors, and to joystick channel
+	somatic_d_channel_open(&daemon_cx, &js_chan, "joystick-data", NULL);
+	somatic_d_channel_open(&daemon_cx, &imuChan, "imu-data", NULL);
+	somatic_d_channel_open(&daemon_cx, &waistChan, "waist-state", NULL);
+
+	// Make calls for the arms if necessary
+	if(left != NULL) initWholeArm(daemon_cx, left->lwa, left->ft_chan, left->offset, 
+		imuChan, waistChan, true);
+	if(right != NULL) initWholeArm(daemon_cx, right->lwa, right->ft_chan, right->offset,
+		imuChan, waistChan, false);
 }
 
 /* ********************************************************************************************* */
@@ -190,8 +230,8 @@ bool getFT (somatic_d_t& daemon_cx, ach_channel_t& ft_chan, Vector6d& data) {
 	for(size_t i = 0; i < 3; i++) data(i+3) = ftMessage->moment->data[i]; 
 	return true;
 }
+
 /* ********************************************************************************************* */
-// Reads waist data and returns true if data successfully updated
 bool getWaist(double* waist, ach_channel_t& waistChan) {
 	// Get the time to get the sensor values by
 	struct timespec currTime;
@@ -219,6 +259,7 @@ bool getWaist(double* waist, ach_channel_t& waistChan) {
 	}
 	return false;
 }
+
 /* ********************************************************************************************* */
 void getImu (double *imu, ach_channel_t& imuChan) {
 
@@ -246,6 +287,4 @@ void getImu (double *imu, ach_channel_t& imuChan) {
 	// Make the calls to extract the pitch and rate of extraction
 	*imu = -ssdmu_pitch(&imu_sample) + M_PI/2;				 
 }
-
 /* ********************************************************************************************* */
-

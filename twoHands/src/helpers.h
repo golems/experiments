@@ -7,12 +7,16 @@
 
 #pragma once
 
+#include <fstream>
 #include <stdlib.h>
+#include <stdio.h>
 #include <unistd.h>
 #include <iostream>
 #include <syslog.h>
 #include <fcntl.h>
 #include <argp.h>
+
+#include <Eigen/StdVector>
 #include <Eigen/Dense>
 
 #include "somatic.h"
@@ -54,6 +58,13 @@ typedef Matrix<double, 6, 1> Vector6d;			///< A typedef for convenience to conta
 typedef Matrix<double, 7, 1> Vector7d;			///< A typedef for convenience to contain joint values
 typedef Matrix<double, 6, 6> Matrix6d;			///< A typedef for convenience to contain wrenches
 
+/// A useful struct to contain a single arm information
+struct Arm {
+	somatic_motor_t lwa;					///< the motor control for the arm
+	ach_channel_t ft_chan;				///< the channel for the f/t sensor
+ 	Vector6d offset;							///< the offset in f/t readings from the truth
+};
+
 /* ******************************************************************************************** */
 static const double eeMass = 1.6 + 0.169 + 0.000;			///< The mass of the end-effector
 simulation::World *world = NULL;									///< The dart environment loaded for kinematics
@@ -62,8 +73,15 @@ simulation::World *world = NULL;									///< The dart environment loaded for ki
 /// Set the vector from the sensor origin to the gripper center of mass (m)
 static const Vector3d s2com (0.0, 0.0, 0.09); // 0.0683 schunk itself, 0.026 length of ext + 2nd
 
-/// Returns the representation of the end-effector frame in the base frame
-void forwardKinematics (const somatic_motor_t& llwa, MatrixXd& Tbee);
+/// Initializes the daemon, joystick/ft channels, left arm and computes the initial offset for ft
+void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuChan, 
+		ach_channel_t& waistChan, Arm* left = NULL, Arm* right = NULL);
+
+/* ******************************************************************************************** */
+// Functions to process data as in computing external wrenches or what to do with them
+
+/// Given a wrench, computes the joint space velocities so that wrench is minimized 
+void wrenchToJointVels (const Vector6d& wrench, Vector7d& dq, bool left);
 
 /// Computes the initial offset from the given first raw value
 void computeOffset (double imu, double waist, const somatic_motor_t& llwa, const Vector6d& raw, 
@@ -75,10 +93,8 @@ void computeOffset (double imu, double waist, const somatic_motor_t& llwa, const
 void computeExternal (double imu, double waist, const somatic_motor_t& llwa, const Vector6d& input, 
 		dynamics::SkeletonDynamics& robot, Vector6d& external, bool left);
 
-/// Initializes the daemon, joystick/ft channels, left arm and computes the initial offset for ft
-void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuChan, 
-		ach_channel_t& waistChan, ach_channel_t& ft_chan, somatic_motor_t& llwa, Vector6d& offset,
-		bool left);
+/* ******************************************************************************************** */
+// Functions to retrieve data
 
 /// Returns the f/t data if available at that instance
 bool getFT (somatic_d_t& daemon_cx, ach_channel_t& ft_chan, Vector6d& data);
