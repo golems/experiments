@@ -16,7 +16,6 @@
 #include <fcntl.h>
 #include <argp.h>
 
-#include <Eigen/StdVector>
 #include <Eigen/Dense>
 
 #include "somatic.h"
@@ -38,6 +37,7 @@
 #include <simulation/World.h>
 
 using namespace Eigen;
+using namespace std; 
 
 /* ******************************************************************************************** */
 #define pv(x) std::cout << #x << ": " << (x).transpose() << std::endl;
@@ -83,7 +83,6 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuCha
 // Functions to process data as in computing external wrenches or what to do with them
 
 /// Given a wrench, computes the joint space velocities so that wrench is minimized 
-void wrenchToJointVels (const Vector6d& wrench, Vector7d& dq, bool left);
 
 /// Computes the initial offset from the given first raw value
 void computeOffset (double imu, double waist, const somatic_motor_t& llwa, const Vector6d& raw, 
@@ -106,4 +105,48 @@ void getImu(double* imu, ach_channel_t& imuChan);
 
 /// Reads waist channel 
 bool getWaist(double* waist, ach_channel_t& waistChan);
+/* ******************************************************************************************** */
+/// Given a wrench, computes the joint space velocities so that wrench is minimized 
+void wrenchToJointVels (const Vector6d& wrench, Vector7d& dq, bool left) {
+
+	// Get the Jacobian towards computing joint-space velocities
+	const char* nodeName = left ? "lGripper" : "rGripper";
+	kinematics::BodyNode* eeNode = world->getSkeleton(0)->getNode(nodeName);
+	MatrixXd Jlin = eeNode->getJacobianLinear().topRightCorner<3,7>();
+	MatrixXd Jang = eeNode->getJacobianAngular().topRightCorner<3,7>();
+	MatrixXd J (6,7);
+//	J << Jlin, Jang;
+	J << 
+   -0.212143,   -0.00293434,   -0.00115444,    -0.274904,    0.0011593,  -0.00161734,            0, 
+-2.19769e-06,      0.512943,      0.316126, -0.000241083,     -0.19742,  0.000473829,            0, 
+    0.563953,   0.000572774,   -0.00138194,     0.242018,   0.00047711,     0.199993,            0, 
+ 4.20758e-06,      0.191334,     -0.981521,   0.00334647,    -0.151977,   0.00587214,     -0.99995, 
+          -1,  -1.46636e-06,   -0.00274795,     -0.99999,  -0.00328108,     -0.99998,  -0.00589149, 
+-2.31416e-06,      0.981525,      0.191334,   0.00280506,    -0.988379,   0.00241667,  -0.00807629;
+
+
+ vector <int> dofs;   
+ for(size_t i = 0; i < 24; i++) dofs.push_back(i);
+	cout << "vvvvvHELLO WORLDvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << endl;
+// cout << "\nq: " << world->getSkeleton(0)->getConfig(dofs) << endl;   
+	cout << J << "\n\n" << endl;
+
+	// Compute the inverse of the Jacobian
+	Eigen::MatrixXd Jt = J.transpose();
+	Eigen::MatrixXd Jinv = Jt * (J * Jt).inverse();
+	cout << "\n\nJinv: \n" << Jinv << endl;
+
+	// Get the joint-space velocities by multiplying inverse Jacobian with the opposite wrench.
+	pv(wrench);
+	dq = Jinv * wrench / 300.0;
+	pv(dq);
+
+	// Threshold the velocities
+	double limit = 0.2;
+	for(size_t i = 0; i < 7; i++) {
+		if(dq(i) > limit) dq(i) = limit;
+		else if(dq(i) < -limit) dq(i) = -limit;
+	}
+}
+
 

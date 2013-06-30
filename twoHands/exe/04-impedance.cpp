@@ -44,16 +44,22 @@ void computeGoal (const Vector7d& traj, const Vector6d& wrench, Vector7d& goal, 
 	// Compute the position offset due to the wrench - the effect should be set to make it sensitive
 	// enough - we will normalize it if it is too much anyway
 	static const double wrenchEffect = 100.0;
-	static Vector7d dq;
+	Vector7d dq;
+	pv(wrench);
+
 	wrenchToJointVels(wrench, dq, leftArm);
+	pv(dq);
 	Vector7d offset = dq * wrenchEffect;
 	
+	pv(offset);
+	exit(0);
 	// Normalize the offset if it is too much
 	static const double maxOffset = 0.25;
 	double offsetNorm = offset.norm();
 	if(offsetNorm > maxOffset) offset = offset * (maxOffset / offsetNorm);
 
 	// Add the offset to the goal
+	pv(offset);
 	goal = traj + offset;
 }
 
@@ -65,17 +71,13 @@ void getExternal (Vector6d& external, bool leftArm) {
 	Arm* arm = leftArm ? larm : rarm;
 	double imu = 0.0, waist = 0.0;
 	static Vector6d raw;
-	while(!getFT(daemon_cx, arm->ft_chan, raw));
-	cout << "\tgot f/t value" << endl;
 	getImu(&imu, imuChan);
-	cout << "\tgot imu" << endl;
 	while(!getWaist(&waist, waistChan));
-	cout << "\tgot waist" << endl;
+	while(!getFT(daemon_cx, arm->ft_chan, raw));
 
 	// Compute the external wrench
 	computeExternal(imu, waist, arm->lwa, raw+arm->offset, *(world->getSkeleton(0)), external, 
 		leftArm);
-	cout << "\tcomputed external wrench" << endl;
 }
 
 /* ********************************************************************************************* */
@@ -86,9 +88,9 @@ void runArm(bool leftArm, const Vector7d& pathGoal) {
 	Vector6d external;
 	Arm* arm = leftArm ? larm : rarm; 
 	somatic_motor_update(&daemon_cx, &(arm->lwa));
-	cout << "\tgot motor update" << endl;
 	getExternal(external, leftArm);
-	cout << "\t\tupdated motor and wrench values" << endl;
+	external = Vector6d();
+	external << 0.0, -8.0, 0.0, 0.0, 0.0, 0.0;
 
 	// Check that the current values are not being too much, give a warning if so
 	for(size_t i = 0; i < 7; i++)
@@ -99,11 +101,9 @@ void runArm(bool leftArm, const Vector7d& pathGoal) {
 	// Compute the goal
 	Vector7d goal;
 	computeGoal(pathGoal, external, goal, leftArm);
-	cout << "\tcomputed the goal" << endl;
 
 	// Send the position commands 
 	somatic_motor_cmd(&daemon_cx, &(arm->lwa), POSITION, goal.data(), 7, NULL);
-	cout << "\tsent the motor command" << endl;
 }
 
 /* ********************************************************************************************* */
@@ -119,7 +119,7 @@ void run() {
 	Vector7d pathGoalLeft, pathGoalRight;
 	while(!somatic_sig_received) {
 
-		cout << "\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << endl;
+		// cout << "\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << endl;
 
 		// Get the motor goals for both arms from the path
 		for(size_t i = 0; i < 7; i++) {
@@ -127,21 +127,16 @@ void run() {
 			pathGoalRight(i) = path[path_idx](right_arm_ids[i]);
 		}
 
-		cout << "running left arm" << endl;
 		// Update the motor positions with the latest goal positions
 		if(larm != NULL) runArm(true, pathGoalLeft);
-		cout << "\tleft arm finished" << endl;
-		cout << "running right arm" << endl;
 		if(rarm != NULL) runArm(false, pathGoalRight);
-		cout << "\tright arm finished" << endl;
 
 		// Check if reached the goal; stop if reached the end
 		double errorLeft = larm ? (pathGoalLeft - eig7(larm->lwa.pos)).norm() : 0.0;
 		double errorRight = rarm ? (pathGoalRight - eig7(rarm->lwa.pos)).norm() : 0.0;
-		printf("path idx: %lu, errors: <%lf, %lf>\n", path_idx, errorLeft, errorRight);
 		if((errorLeft < 1e-1) && (errorRight < 1e-1)) path_idx++;
 		if(path_idx == path.size() - 1) path_idx = 0;
-		// if(path_idx == 1) break; // path_idx = 0;
+		if(path_idx == 1) path_idx = 0;
 		usleep(1e5);
 	}
 
@@ -193,6 +188,7 @@ int main(const int argc, char** argv) {
 
 	// Read the trajectory from the data file in the build directory
 	readFile();
+
 
 	// Initialize the robot
 	init(daemon_cx, js_chan, imuChan, waistChan, larm, rarm);

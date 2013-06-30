@@ -14,32 +14,6 @@ using namespace kinematics;
 vector <int> imuWaist_ids; 	///< The index vector to set config of waist/imu 
 
 /* ******************************************************************************************** */
-/// Given a wrench, computes the joint space velocities so that wrench is minimized 
-void wrenchToJointVels (const Vector6d& wrench, Vector7d& dq, bool left) {
-
-	// Get the Jacobian towards computing joint-space velocities
-	const char* nodeName = left ? "lGripper" : "rGripper";
-	kinematics::BodyNode* eeNode = world->getSkeleton(0)->getNode(nodeName);
-	MatrixXd Jlin = eeNode->getJacobianLinear().topRightCorner<3,7>();
-	MatrixXd Jang = eeNode->getJacobianAngular().topRightCorner<3,7>();
-	MatrixXd J (6,7);
-	J << Jlin, Jang;
-
-	// Compute the inverse of the Jacobian
-	Eigen::MatrixXd Jt = J.transpose();
-	Eigen::MatrixXd Jinv = Jt * (J * Jt).inverse();
-
-	// Get the joint-space velocities by multiplying inverse Jacobian with the opposite wrench.
-	dq = Jinv * wrench / 300.0;
-
-	// Threshold the velocities
-	for(size_t i = 0; i < 7; i++) {
-		if(dq(i) > 0.1) dq(i) = 0.2;
-		else if(dq(i) < -0.1) dq(i) = -0.2;
-	}
-}
-
-/* ******************************************************************************************** */
 void computeExternal (double imu, double waist, const somatic_motor_t& lwa, const Vector6d& 
 		input, SkeletonDynamics& robot, Vector6d& external, bool left) {
 
@@ -127,7 +101,7 @@ void initWholeArm (somatic_d_t& daemon_cx, somatic_motor_t& lwa, ach_channel_t& 
 
 	// Initialize the arm motors
 	if(left) initArm(daemon_cx, lwa, "llwa");
-	else{ initArm(daemon_cx, lwa, "rlwa"); }
+	else initArm(daemon_cx, lwa, "rlwa"); 
 	somatic_motor_update(&daemon_cx, &lwa);
 
 	// Open the ft channel
@@ -178,8 +152,8 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuCha
 	imuWaist_ids.push_back(8);	
 
 	// Set up the arm index vectors
-	int right_arm_ids_a [] = {11, 13, 15, 17, 19, 21, 23};
 	int left_arm_ids_a [] = 	{10, 12, 14, 16, 18, 20, 22};
+	int right_arm_ids_a [] = {11, 13, 15, 17, 19, 21, 23};
 	for(size_t i = 0; i < 7; i++) left_arm_ids.push_back(left_arm_ids_a[i]);
 	for(size_t i = 0; i < 7; i++) right_arm_ids.push_back(right_arm_ids_a[i]);
 
@@ -191,7 +165,7 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuCha
 	// Initialize this daemon (program!)
 	somatic_d_opts_t dopt;
 	memset(&dopt, 0, sizeof(dopt)); // zero initialize
-	dopt.ident = "01-gripperWeight";
+	dopt.ident = "04-compliance";
 	somatic_d_init( &daemon_cx, &dopt );
 
 	// Initialize the channels to the imu and waist sensors, and to joystick channel
@@ -289,3 +263,4 @@ void getImu (double *imu, ach_channel_t& imuChan) {
 	*imu = -ssdmu_pitch(&imu_sample) + M_PI/2;				 
 }
 /* ********************************************************************************************* */
+
