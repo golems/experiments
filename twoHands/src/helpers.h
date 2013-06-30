@@ -68,6 +68,8 @@ struct Arm {
 /* ******************************************************************************************** */
 static const double eeMass = 1.6 + 0.169 + 0.000;			///< The mass of the end-effector
 simulation::World *world = NULL;									///< The dart environment loaded for kinematics
+std::vector <int> left_arm_ids;				///< The index vector to set config of arms
+std::vector <int> right_arm_ids;				///< The index vector to set config of arms
 
 /* ******************************************************************************************** */
 /// Set the vector from the sensor origin to the gripper center of mass (m)

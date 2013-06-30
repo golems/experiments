@@ -11,7 +11,6 @@ using namespace std;
 using namespace dynamics;
 using namespace kinematics;
 
-vector <int> arm_ids;				///< The index vector to set config of arms
 vector <int> imuWaist_ids; 	///< The index vector to set config of waist/imu 
 
 /* ******************************************************************************************** */
@@ -20,7 +19,7 @@ void wrenchToJointVels (const Vector6d& wrench, Vector7d& dq, bool left) {
 
 	// Get the Jacobian towards computing joint-space velocities
 	const char* nodeName = left ? "lGripper" : "rGripper";
-	static kinematics::BodyNode* eeNode = world->getSkeleton(0)->getNode(nodeName);
+	kinematics::BodyNode* eeNode = world->getSkeleton(0)->getNode(nodeName);
 	MatrixXd Jlin = eeNode->getJacobianLinear().topRightCorner<3,7>();
 	MatrixXd Jang = eeNode->getJacobianAngular().topRightCorner<3,7>();
 	MatrixXd J (6,7);
@@ -52,7 +51,7 @@ void computeExternal (double imu, double waist, const somatic_motor_t& lwa, cons
 
 	// Get the rotation between the world frame and the sensor frame by setting the arm values
 	// and the imu/waist values
-	robot.setConfig(arm_ids, Map <Vector7d> (lwa.pos));
+	robot.setConfig(left ? left_arm_ids : right_arm_ids, Map <Vector7d> (lwa.pos));
 	robot.setConfig(imuWaist_ids, Vector2d(imu, waist));
 	const char* nodeName = left ? "lGripper" : "rGripper";
 	Matrix3d Rsw = robot.getNode(nodeName)->getWorldTransform().topLeftCorner<3,3>().transpose();
@@ -88,7 +87,7 @@ void computeOffset (double imu, double waist, const somatic_motor_t& lwa, const 
 
 	// Get the rotation between the world frame and the sensor frame. 
 	robot.setConfig(imuWaist_ids, Vector2d(imu, waist));
-	robot.setConfig(arm_ids, Map <Vector7d> (lwa.pos));
+	robot.setConfig(left ? left_arm_ids : right_arm_ids, Map <Vector7d> (lwa.pos));
 	const char* nodeName = left ? "lGripper" : "rGripper";
 	Matrix3d R = robot.getNode(nodeName)->getWorldTransform().topLeftCorner<3,3>().transpose();
 
@@ -122,15 +121,7 @@ void initWholeArm (somatic_d_t& daemon_cx, somatic_motor_t& lwa, ach_channel_t& 
 	// Sanity check that the world is setup
 	assert(world != NULL && "Before initializing an arm the world should be loaded");
 
-	// Set up the index vectors
-	int right_arm_ids_a [] = {11, 13, 15, 17, 19, 21, 23};
-	int left_arm_ids_a [] = 	{10, 12, 14, 16, 18, 20, 22};
-	int * arm_ids_a = left ? left_arm_ids_a : right_arm_ids_a;
-	for(size_t i = 0; i < 7; i++) arm_ids.push_back(arm_ids_a[i]);
-
 	// Restart the netcanft daemon. Need to sleep to let OS kill the program first.
-	system("killall -s 9 netcanftd");
-	usleep(20000);
 	if(left) system("netcanftd -v -d -I lft -b 1 -B 1000 -c llwa_ft -k -r");
 	else system("netcanftd -v -d -I rft -b 9 -B 1000 -c rlwa_ft -k -r");
 
@@ -178,9 +169,19 @@ void initWholeArm (somatic_d_t& daemon_cx, somatic_motor_t& lwa, ach_channel_t& 
 void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuChan, 
 		ach_channel_t& waistChan, Arm* left, Arm* right) {
 
+	// Kill any netcanftds around
+	system("killall -s 9 netcanftd");
+	usleep(20000);
+
 	// Set up the index vectors for the imu and waist angles
 	imuWaist_ids.push_back(5);	
 	imuWaist_ids.push_back(8);	
+
+	// Set up the arm index vectors
+	int right_arm_ids_a [] = {11, 13, 15, 17, 19, 21, 23};
+	int left_arm_ids_a [] = 	{10, 12, 14, 16, 18, 20, 22};
+	for(size_t i = 0; i < 7; i++) left_arm_ids.push_back(left_arm_ids_a[i]);
+	for(size_t i = 0; i < 7; i++) right_arm_ids.push_back(right_arm_ids_a[i]);
 
 	// Load environment from dart for kinematics
 	DartLoader dl;

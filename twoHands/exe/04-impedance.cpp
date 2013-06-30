@@ -24,8 +24,6 @@ ach_channel_t waistChan;
 Arm* larm = NULL, * rarm = NULL;	///< Arm descriptors with ft chan, somatic_motor_t and ft offset
 vector <VectorXd> path;       ///< The path that the robot will execute
 const int r_id = 0;						///< The robot id in the simulation world
-vector <int> left_arm_ids;				///< The index vector to set config of arms
-vector <int> right_arm_ids;				///< The index vector to set config of arms
 
 /* ********************************************************************************************* */
 void computeGoal (const Vector7d& traj, const Vector6d& wrench, Vector7d& goal, bool leftArm) {
@@ -68,12 +66,16 @@ void getExternal (Vector6d& external, bool leftArm) {
 	double imu = 0.0, waist = 0.0;
 	static Vector6d raw;
 	while(!getFT(daemon_cx, arm->ft_chan, raw));
+	cout << "\tgot f/t value" << endl;
 	getImu(&imu, imuChan);
+	cout << "\tgot imu" << endl;
 	while(!getWaist(&waist, waistChan));
+	cout << "\tgot waist" << endl;
 
 	// Compute the external wrench
 	computeExternal(imu, waist, arm->lwa, raw+arm->offset, *(world->getSkeleton(0)), external, 
 		leftArm);
+	cout << "\tcomputed external wrench" << endl;
 }
 
 /* ********************************************************************************************* */
@@ -84,20 +86,24 @@ void runArm(bool leftArm, const Vector7d& pathGoal) {
 	Vector6d external;
 	Arm* arm = leftArm ? larm : rarm; 
 	somatic_motor_update(&daemon_cx, &(arm->lwa));
-	getExternal(external, true);
+	cout << "\tgot motor update" << endl;
+	getExternal(external, leftArm);
+	cout << "\t\tupdated motor and wrench values" << endl;
 
 	// Check that the current values are not being too much, give a warning if so
 	for(size_t i = 0; i < 7; i++)
 		if(fabs(arm->lwa.cur[i]) > 8.0)
-			printf("\t\tWARNING: Mod. %d [%s] curr. over 8A: %lf\n", i, arm->lwa.cur[i], 
-				leftArm ? "l" : "r");
+			printf("\t\tWARNING: Mod. %d [%s] curr. over 8A: %lf\n", i, leftArm ? "l" : "r", 
+				arm->lwa.cur[i]);
 
 	// Compute the goal
 	Vector7d goal;
 	computeGoal(pathGoal, external, goal, leftArm);
+	cout << "\tcomputed the goal" << endl;
 
 	// Send the position commands 
 	somatic_motor_cmd(&daemon_cx, &(arm->lwa), POSITION, goal.data(), 7, NULL);
+	cout << "\tsent the motor command" << endl;
 }
 
 /* ********************************************************************************************* */
@@ -113,22 +119,30 @@ void run() {
 	Vector7d pathGoalLeft, pathGoalRight;
 	while(!somatic_sig_received) {
 
+		cout << "\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << endl;
+
 		// Get the motor goals for both arms from the path
 		for(size_t i = 0; i < 7; i++) {
 			pathGoalLeft(i) = path[path_idx](left_arm_ids[i]);
 			pathGoalRight(i) = path[path_idx](right_arm_ids[i]);
 		}
 
+		cout << "running left arm" << endl;
 		// Update the motor positions with the latest goal positions
 		if(larm != NULL) runArm(true, pathGoalLeft);
+		cout << "\tleft arm finished" << endl;
+		cout << "running right arm" << endl;
 		if(rarm != NULL) runArm(false, pathGoalRight);
+		cout << "\tright arm finished" << endl;
 
 		// Check if reached the goal; stop if reached the end
 		double errorLeft = larm ? (pathGoalLeft - eig7(larm->lwa.pos)).norm() : 0.0;
 		double errorRight = rarm ? (pathGoalRight - eig7(rarm->lwa.pos)).norm() : 0.0;
+		printf("path idx: %lu, errors: <%lf, %lf>\n", path_idx, errorLeft, errorRight);
 		if((errorLeft < 1e-1) && (errorRight < 1e-1)) path_idx++;
 		if(path_idx == path.size() - 1) path_idx = 0;
-		usleep(1e4);
+		// if(path_idx == 1) break; // path_idx = 0;
+		usleep(1e5);
 	}
 
 	// Send the stoppig event
@@ -174,14 +188,8 @@ int main(const int argc, char** argv) {
 
 	// Check if the user wants the right arm indicated by the -r flag
 	if((argc > 1) && (strcmp(argv[1], "-r") == 0)) rarm = new Arm();
-	else if((argc > 1) && (strcmp(argv[1], "-both") == 0)) larm = new Arm(), rarm = new Arm();
+	else if((argc > 1) && (strcmp(argv[1], "-b") == 0)) larm = new Arm(), rarm = new Arm();
 	else larm = new Arm();
-
-	// Prepare the indices
-	for(size_t i = 10; i < 24; i+=2) {
-		left_arm_ids.push_back(i);
-		right_arm_ids.push_back(i+1);
-	}
 
 	// Read the trajectory from the data file in the build directory
 	readFile();
