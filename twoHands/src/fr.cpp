@@ -128,12 +128,17 @@ bool fr::ikRight (double nearestPhi, Node& newNode) {
 		// Perform inverse kinematics
 		bool result = ik(relGoal, phi, theta);
 		if(result) {
-			newNode.phi = phi;
-			newNode.right = theta;
-			if(debug) cout << "happy" << endl;
-			// cout << leftFrame.topRightCorner<3,1>().transpose() << " " << 
-			//	rightFrame.topRightCorner<3,1>().transpose(); //  << endl;
-			return true;
+
+			// Check collision
+			vector <int> arm_ids;
+			for(size_t i = 4; i < 17; i+=2) arm_ids.push_back(i + 6 + 1);  
+			robot->setConfig(arm_ids, theta);
+			bool collision = world->checkCollision(false);
+			if(!collision) {
+				newNode.phi = phi;
+				newNode.right = theta;
+				return true;
+			}
 		}
 	}
 	

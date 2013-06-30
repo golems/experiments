@@ -19,7 +19,7 @@ using namespace Eigen;
 using namespace dynamics;
 
 bool rightArm = 0;
-bool bothArms = 0;
+bool bothArms = 1;
 
 /* ********************************************************************************************* */
 /// Returns the I.K. goals for turning a valve where the green arrow is at the center of the valve
@@ -40,12 +40,23 @@ void armGoalsValve (const Matrix4d& Twee, Matrix4d& TweeL, Matrix4d& TweeR) {
 }
 
 /* ********************************************************************************************* */
+void armGoalsStick (const Matrix4d& Twee, Matrix4d& TweeL, Matrix4d& TweeR) {
+
+	// Decide on the frame for the left hand
+	TweeL = Twee;
+	TweeL.topRightCorner<4,1>() += Twee.block<4,1>(0,1).normalized() * 0.28;
+
+	TweeR = TweeL;
+	TweeR.topRightCorner<4,1>() -= TweeL.block<4,1>(0,1).normalized() * 0.56;
+}
+
+/* ********************************************************************************************* */
 /// Performs I.K. to both arms
 bool bothArmsIK (SkeletonDynamics* robot, const Matrix4d& Twee) {
 
 	// Get the end-effector goals for a specific task
 	Matrix4d TweeL = Twee, TweeR = Twee;
-	armGoalsValve(Twee, TweeL, TweeR);
+	armGoalsStick(Twee, TweeL, TweeR);
 	pmr(TweeL);
 	pmr(TweeR);
 
