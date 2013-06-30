@@ -259,7 +259,8 @@
 	</joint>
 
 	<joint name="JTorso" type="revolute"> <parent link="Spine" /> <child link="Bracket" />
-		<origin xyz = "-0.0285 0.584 0.1088" rpy="0 3.1416 0" />
+		<!-- <origin xyz = "-0.0285 0.584 0.1088" rpy="0 3.1416 0" /> -->
+		<origin xyz = "-0.0285 0.443 0.1088" rpy="0 3.1416 0" />
 		<axis xyz="0 -1 0" /> <limit effort="1000" lower="-0.8" upper="0.8" velocity="0.1" />
 	</joint>
 
