@@ -89,8 +89,6 @@ void runArm(bool leftArm, const Vector7d& pathGoal) {
 	Arm* arm = leftArm ? larm : rarm; 
 	somatic_motor_update(&daemon_cx, &(arm->lwa));
 	getExternal(external, leftArm);
-	external = Vector6d();
-	external << 0.0, -8.0, 0.0, 0.0, 0.0, 0.0;
 
 	// Check that the current values are not being too much, give a warning if so
 	for(size_t i = 0; i < 7; i++)
@@ -119,8 +117,6 @@ void run() {
 	Vector7d pathGoalLeft, pathGoalRight;
 	while(!somatic_sig_received) {
 
-		// cout << "\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << endl;
-
 		// Get the motor goals for both arms from the path
 		for(size_t i = 0; i < 7; i++) {
 			pathGoalLeft(i) = path[path_idx](left_arm_ids[i]);
@@ -136,7 +132,6 @@ void run() {
 		double errorRight = rarm ? (pathGoalRight - eig7(rarm->lwa.pos)).norm() : 0.0;
 		if((errorLeft < 1e-1) && (errorRight < 1e-1)) path_idx++;
 		if(path_idx == path.size() - 1) path_idx = 0;
-		if(path_idx == 1) path_idx = 0;
 		usleep(1e5);
 	}
 
