@@ -1,5 +1,5 @@
 /**
- * @file 05-fr.cpp
+ * @file 03-fr.cpp
  * @author Can Erdogan
  * @date May 19, 2013
  * @brief This executable demonstrates the first-order retraction method for task constrained
@@ -145,7 +145,10 @@ void line_err_ground (const Vector7d& node, Vector6d& error) {
 /// to its -y axis, returns where the right hand should be.
 void stick_constraint (const Matrix4d& left, Matrix4d& right) {
 	right = left;
-	right.topRightCorner<4,1>() -= left.block<4,1>(0,0).normalized() * 0.3;
+	right.block<4,1>(0,0) *= -1;
+	right.block<4,1>(0,2) *= -1;
+	right.topRightCorner<4,1>() += left.block<4,1>(0,2).normalized() * L8_Schunk;
+	right.topRightCorner<4,1>() -= left.block<4,1>(0,1).normalized() * 0.56;
 }
 
 /* ********************************************************************************************** */
@@ -154,18 +157,21 @@ bool computeIK (Node& node, double phi) {
 
 	// Perform forward kinematics and determine where the right frame should be
 	world->getSkeleton(r_id)->setConfig(left_idx, node.left);
+	world->getSkeleton(r_id)->setConfig(imuWaist_ids, Vector2d(1.857-3.0 * M_PI_2, (5.0 / 6) * M_PI));
 	Matrix4d leftFrame = world->getSkeleton(r_id)->getNode("lGripper")->getWorldTransform(), 
 		rightFrame;
 
-	// pmr(leftFrame);
+	pmr(leftFrame);
 	stick_constraint(leftFrame, rightFrame);
-	// pmr(rightFrame);
+	pmr(rightFrame);
 
 	pv(node.left);
+
 
 	// Get the relative goal
 	static Transform <double, 3, Affine> relGoal;
 	getWristInShoulder(world->getSkeleton(r_id), rightFrame, true, relGoal.matrix());
+	pm(relGoal);
 
 	// Perform IK
 	bool result = ik(relGoal, phi, node.right);
@@ -220,11 +226,11 @@ int main (int argc, char* argv[]) {
 	}
 	
 	// Perform I.K. for the start/goal nodes
-	//assert((computeIK(start, 0.0)) && "Could not compute I.K. for the start node");
-	//assert((computeIK(goal, 0.0)) && "Could not compute I.K. for the goal node");
+	assert((computeIK(start, 0.0)) && "Could not compute I.K. for the start node");
+	assert((computeIK(goal, 0.0)) && "Could not compute I.K. for the goal node");
 
 	// Create the fr-rrt planner
-	planner = new fr (world, 1, start, goal, line_err_ground, NULL); //stick_constraint);
+	planner = new fr (world, r_id, start, goal, line_err_ground, stick_constraint);
 	
 	// Make the call
 	list <Node*> path;
