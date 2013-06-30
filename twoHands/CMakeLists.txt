@@ -16,6 +16,9 @@ endif()
 # Include Dart and Grip stuff
 include(simulation.cmake)
 
+# Link to the timing library
+link_libraries(timing)
+
 # Link to somatic, amino and ach
 # NOTE: Ideally we would like to 'find' these packages but for now, we assume they are either 
 # in /usr/lib or /usr/local/lib

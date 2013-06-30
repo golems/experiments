@@ -29,7 +29,7 @@ using namespace simulation;
 vector <VectorXd> path;           ///< The path that the robot will execute
 vector <int> dofs;                ///< Indices to set the configuration
 
-bool justVisualizeScene = 0;
+bool justVisualizeScene = 1;
 
 void SimTab::GRIPEventSimulationBeforeTimestep() {
 
@@ -95,8 +95,7 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	SetSizer(sizerFull);
 
 	// Load the schunk scene automatically
-	frame->DoLoad("/home/cerdogan/Documents/MacGyver/3rdParty/simulation/scenes/08-World-Valve.urdf");
-//	frame->DoLoad("/home/cerdogan/Documents/MacGyver/3rdParty/simulation/scenes/00-World-Test.urdf");
+	frame->DoLoad("../../common/scenes/01-World-Robot.urdf");
 
 	// Return immediately if just want to see a scene and not a path
 	if(justVisualizeScene) return;

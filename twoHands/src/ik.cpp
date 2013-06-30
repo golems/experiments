@@ -98,7 +98,7 @@ void getWristInShoulder (SkeletonDynamics* robot, const Matrix4d& Twee, bool rig
 
 	// Next, get the wrist location by going backwards from the end-effector towards the wrist
 	// I think + () because z3 and z10 are opposite.
-	Vector3d posGoal = Tbee.translation() + Tsw.linear() * Vector3d(0.0, -0.0250, L7);
+	Vector3d posGoal = Tbee.translation() + Tsw.linear() * Vector3d(0.0, 0.0, L7 + L8_Schunk);
 	Tsw.translation() = posGoal;
 
 	// Lastly, transform the matrix to the shoulder frame

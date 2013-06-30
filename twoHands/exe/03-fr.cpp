@@ -163,11 +163,10 @@ int main (int argc, char* argv[]) {
 
 	// Load the world
 	DartLoader loader;
-	world = loader.parseWorld("/home/cerdogan/Documents/MacGyver/3rdParty/simulation/scenes/"
-		"07-World-FR.urdf");
+	world = loader.parseWorld("../../common/scenes/03-World-FR.urdf");
 	
 	// Setup the start and goal nodes
-	const size_t case_id = 3;
+	const size_t case_id = 0;
 	Node start, goal;
 	for(size_t i = 0; i < 7; i++) {
 		start.left(i) = start_goals[2*case_id][i];

@@ -40,6 +40,7 @@ static const double L4 = .2856;				///> Arm link length between modules 0 and 2
 static const double L5 = .3278;				///> Arm link length between modules 2 and 4
 static const double L6 = .2763;				///> Arm link length between modules 4 and 6
 static const double L7 = .2220;				///> Arm link length between modules 6 and end-effector
+static const double L8_Schunk = 0.1750;	///> The length from f/t to middle of schunk gripper metals
 
 /// The A matrix is the 4x4 transformation that represents the proximal elbow frame in the
 /// distal shoulder frame. In Krang, this represents the 6th frame in the 5th frame.
