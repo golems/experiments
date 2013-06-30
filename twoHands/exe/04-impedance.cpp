@@ -25,6 +25,18 @@ Arm* larm = NULL, * rarm = NULL;	///< Arm descriptors with ft chan, somatic_moto
 vector <VectorXd> path;       ///< The path that the robot will execute
 const int r_id = 0;						///< The robot id in the simulation world
 
+/* ******************************************************************************************** */
+/// Kills the motor and daemon structs 
+void destroy() {
+	if(larm) 
+		somatic_motor_cmd(&daemon_cx, &(larm->lwa), SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
+	if(rarm) 
+		somatic_motor_cmd(&daemon_cx, &(rarm->lwa), SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
+	somatic_d_channel_close(&daemon_cx, &waistChan);
+	somatic_d_channel_close(&daemon_cx, &imuChan);
+	somatic_d_destroy(&daemon_cx);
+}
+
 /* ********************************************************************************************* */
 void computeGoal (const Vector7d& traj, const Vector6d& wrench, Vector7d& goal, bool leftArm) {
 
@@ -45,21 +57,15 @@ void computeGoal (const Vector7d& traj, const Vector6d& wrench, Vector7d& goal, 
 	// enough - we will normalize it if it is too much anyway
 	static const double wrenchEffect = 100.0;
 	Vector7d dq;
-	pv(wrench);
-
 	wrenchToJointVels(wrench, dq, leftArm);
-	pv(dq);
 	Vector7d offset = dq * wrenchEffect;
 	
-	pv(offset);
-	exit(0);
 	// Normalize the offset if it is too much
 	static const double maxOffset = 0.25;
 	double offsetNorm = offset.norm();
 	if(offsetNorm > maxOffset) offset = offset * (maxOffset / offsetNorm);
 
 	// Add the offset to the goal
-	pv(offset);
 	goal = traj + offset;
 }
 
@@ -91,10 +97,17 @@ void runArm(bool leftArm, const Vector7d& pathGoal) {
 	getExternal(external, leftArm);
 
 	// Check that the current values are not being too much, give a warning if so
-	for(size_t i = 0; i < 7; i++)
-		if(fabs(arm->lwa.cur[i]) > 8.0)
+	for(size_t i = 0; i < 7; i++) {
+		if(fabs(arm->lwa.cur[i]) > 10.0) {
+			printf("\t\tDANGER: Mod. %d [%s] curr. over 10A: %lf, exitting!\n", i, 
+				leftArm ? "l" : "r", arm->lwa.cur[i]);
+			destroy();
+			exit(0);
+		}
+		else if(fabs(arm->lwa.cur[i]) > 8.0)
 			printf("\t\tWARNING: Mod. %d [%s] curr. over 8A: %lf\n", i, leftArm ? "l" : "r", 
 				arm->lwa.cur[i]);
+	}
 
 	// Compute the goal
 	Vector7d goal;
@@ -131,25 +144,13 @@ void run() {
 		double errorLeft = larm ? (pathGoalLeft - eig7(larm->lwa.pos)).norm() : 0.0;
 		double errorRight = rarm ? (pathGoalRight - eig7(rarm->lwa.pos)).norm() : 0.0;
 		if((errorLeft < 1e-1) && (errorRight < 1e-1)) path_idx++;
-		if(path_idx == path.size() - 1) path_idx = 0;
+		if(path_idx >= (path.size() - 1)) path_idx = 0;
 		usleep(1e5);
 	}
 
 	// Send the stoppig event
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
 					 SOMATIC__EVENT__CODES__PROC_STOPPING, NULL, NULL);
-}
-
-/* ******************************************************************************************** */
-/// Kills the motor and daemon structs 
-void destroy() {
-	if(larm) 
-		somatic_motor_cmd(&daemon_cx, &(larm->lwa), SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
-	if(rarm) 
-		somatic_motor_cmd(&daemon_cx, &(rarm->lwa), SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
-	somatic_d_channel_close(&daemon_cx, &waistChan);
-	somatic_d_channel_close(&daemon_cx, &imuChan);
-	somatic_d_destroy(&daemon_cx);
 }
 
 /* ********************************************************************************************* */
@@ -183,7 +184,6 @@ int main(const int argc, char** argv) {
 
 	// Read the trajectory from the data file in the build directory
 	readFile();
-
 
 	// Initialize the robot
 	init(daemon_cx, js_chan, imuChan, waistChan, larm, rarm);
