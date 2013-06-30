@@ -28,7 +28,7 @@ bool fr::plan (std::list <Node*>& path) {
 	const double goalRadiusSq = SQ(0.05);
 
 	// Sanity check start and goal configurations with the error bounds
-	epsilonSq = SQ(0.01);
+	epsilonSq = SQ(0.02);
 	Vector6d error;
 	task_error(start.left, error);
 	assert((error.squaredNorm() < epsilonSq) && "Start does not satisfy constraint!");
@@ -128,12 +128,17 @@ bool fr::ikRight (double nearestPhi, Node& newNode) {
 		// Perform inverse kinematics
 		bool result = ik(relGoal, phi, theta);
 		if(result) {
-			newNode.phi = phi;
-			newNode.right = theta;
-			if(debug) cout << "happy" << endl;
-			// cout << leftFrame.topRightCorner<3,1>().transpose() << " " << 
-			//	rightFrame.topRightCorner<3,1>().transpose(); //  << endl;
-			return true;
+
+			// Check collision
+			vector <int> arm_ids;
+			for(size_t i = 4; i < 17; i+=2) arm_ids.push_back(i + 6 + 1);  
+			robot->setConfig(arm_ids, theta);
+			bool collision = world->checkCollision(false);
+			if(!collision) {
+				newNode.phi = phi;
+				newNode.right = theta;
+				return true;
+			}
 		}
 	}
 	
@@ -147,7 +152,7 @@ bool fr::ikRight (double nearestPhi, Node& newNode) {
 inline void fr::retractConfig(Vector7d& sample, const Vector6d& error) {
 
 	// Get the Jacobian
-	kinematics::BodyNode* eeNode = world->getSkeleton(1)->getNode("lgPlate1");
+	kinematics::BodyNode* eeNode = world->getSkeleton(r_id)->getNode("lgPlate1");
 	MatrixXd Jlin = eeNode->getJacobianLinear().topRightCorner<3,7>();
 	MatrixXd Jang = eeNode->getJacobianAngular().topRightCorner<3,7>();
 	MatrixXd J (6,7);
@@ -245,9 +250,10 @@ void fr::printPath(const list<Node*>& path) {
 	cout << "two: " << twoHands << endl;
 	ofstream ofs ("data", ofstream::out);
 	VectorXd temp = VectorXd::Zero(24);
-	temp(2) = 0.27;
+	temp(2) = 0.30;
 	temp(3) = -1.5708;
-	temp(5) = 1.5708;
+	temp(5) = 1.857-3.0 * M_PI_2; //1.5708;
+	temp(8) = (5.0 / 6) * M_PI;
 	for(list<Node*>::const_iterator it=path.begin(); it != path.end(); ++it) {
 		for(size_t i = 10, j = 0; i < 23; i+=2, j++) temp(i) = (*it)->left(j);
 		if(twoHands)

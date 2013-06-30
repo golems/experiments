@@ -61,7 +61,6 @@ void wrenchToJointVels (const Vector6d& wrench, Vector7d& dq) {
 
 	// Get the joint-space velocities by multiplying inverse Jacobian with the opposite wrench.
 	dq = Jinv * wrench / 300.0;
-	//pv(dq);
 
 	// Threshold the velocities
 	for(size_t i = 0; i < 7; i++) {
@@ -78,6 +77,8 @@ void computeGoal (const Vector7d& traj, const Vector6d& wrench, Vector7d& goal) 
 		goal = traj;
 		return;
 	}
+	
+	cout << "Felt wrench: " << wrench.transpose() << endl;
 
 	// Compute the position offset due to the wrench - the effect should be set to make it sensitive
 	// enough - we will normalize it if it is too much anyway

@@ -30,6 +30,7 @@ bool singleArmIK (World* mWorld, SkeletonDynamics* robot, const Matrix4d& Twee, 
 
 		// Get an IK solution with this phi angle
 		// phi = 0.0;
+		pm(relGoal);
 		cout << "Trying phi: " << phi << endl;
 		bool result = ik(relGoal, phi, theta);
 
@@ -43,7 +44,7 @@ bool singleArmIK (World* mWorld, SkeletonDynamics* robot, const Matrix4d& Twee, 
 			bool collision = mWorld->checkCollision(false);
 			if(!collision) {
 				success = true;
-				pmr((robot->getNode(rightArm ? "rgPlate1" : "lgPlate1")->getWorldTransform()));
+				pmr((robot->getNode(rightArm ? "rGripper" : "lGripper")->getWorldTransform()));
 				pv(theta);
 				break;
 			}
