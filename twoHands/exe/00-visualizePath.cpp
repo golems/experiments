@@ -29,7 +29,7 @@ using namespace simulation;
 vector <VectorXd> path;           ///< The path that the robot will execute
 vector <int> dofs;                ///< Indices to set the configuration
 
-bool justVisualizeScene = 1;
+bool justVisualizeScene = 0;
 
 void SimTab::GRIPEventSimulationBeforeTimestep() {
 
@@ -40,9 +40,10 @@ void Timer::Notify() {
 
 	// Draw the skeleton
 	static size_t path_idx = 0;
-	mWorld->getSkeleton(1)->setConfig(dofs, path[path_idx]);	
+	mWorld->getSkeleton(0)->setConfig(dofs, path[path_idx]);	
 
-	// Get the orientation
+	// Set the valve angle based on the end-effector position
+	/*
 	kinematics::BodyNode* eeNode = world->getSkeleton(1)->getNode("lgPlate1");
 	MatrixXd eeTransform = eeNode->getWorldTransform();
 	double angle = atan2(eeTransform(1,3), eeTransform(0,3) - 0.44);
@@ -51,6 +52,7 @@ void Timer::Notify() {
 	VectorXd bla (1);
 	bla << angle;
 	mWorld->getSkeleton(0)->setConfig(valve_dofs, bla);
+	*/
 
 	// Restart the timer for the next turn 
 	viewer->DrawGLScene();
@@ -104,7 +106,7 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	readFile();
 
 	// Set the initial configuration
-	SkeletonDynamics* robot = mWorld->getSkeleton(1);
+	SkeletonDynamics* robot = mWorld->getSkeleton(0);
 	for(size_t i = 0; i < 24; i++) dofs.push_back(i);
 	robot->setConfig(dofs, path[0]);
 

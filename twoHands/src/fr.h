@@ -42,6 +42,9 @@ typedef void (*constraint_func) (const Matrix4d&, Matrix4d&);
 #define SQ(x) ((x) * (x))
 #define pc(a) std::cout << #a << ": " << (a) << "\n" << std::endl
 
+/// The index of the robot skeleton in world array
+static const int r_id = 0;
+
 /// The configuration of a node
 struct Node {
 	/// To get byte-aligned Eigen vectors

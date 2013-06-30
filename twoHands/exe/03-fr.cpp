@@ -4,6 +4,8 @@
  * @date May 19, 2013
  * @brief This executable demonstrates the first-order retraction method for task constrained
  * motion planning for Krang, trying to open a valve.
+ * Some of the examples are for the pedestal and some for Krang on the ground. Look for _ground
+ * extension to the function names.
  */
 
 #include <robotics/parser/dart_parser/DartLoader.h>
@@ -19,6 +21,7 @@ using namespace Eigen;
 using namespace std;
 
 vector <int> left_idx;
+vector <int> imuWaist_ids; 
 World* world;
 
 fr* planner;
@@ -27,8 +30,9 @@ fr* planner;
 /// Performs forward kinematics and returns the position and orientation (quaternion) of the
 /// left end-effector
 void forward (const Vector7d& node, Vector3d& eePos, Quaternion <double>& eeOri) {
-	world->getSkeleton(1)->setConfig(left_idx, node);
-	kinematics::BodyNode* eeNode = world->getSkeleton(1)->getNode("lgPlate1");
+	world->getSkeleton(r_id)->setConfig(left_idx, node);
+	world->getSkeleton(r_id)->setConfig(imuWaist_ids, Vector2d(1.857-3.0 * M_PI_2, (5.0 / 6) * M_PI));
+	kinematics::BodyNode* eeNode = world->getSkeleton(r_id)->getNode("lGripper");
 	MatrixXd eeTransform = eeNode->getWorldTransform();
 	eePos = eeTransform.topRightCorner<3,1>();
 	eeOri = Quaternion <double> (eeTransform.topLeftCorner<3,3>());
@@ -107,6 +111,35 @@ void plane_err (const Vector7d& node, Vector6d& error) {
 }
 
 /* ********************************************************************************************** */
+/// The left end-effector should move upwards in the z axis while keeping the same xy values
+/// and the orientation; robot is sitting on the ground.
+void line_err_ground (const Vector7d& node, Vector6d& error) {
+
+	// Perform forward kinematics
+	static Vector3d eePos;
+	static Quaternion <double> eeOri;
+	forward(node, eePos, eeOri);
+
+	// We want the ee to follow a line with x = 0.34 and y = 0.28.
+	Vector3d errPos = Vector3d(0.3419, 0.2797, 0.0) - eePos;
+	errPos(2) = 0.0;
+	
+	// Get the orientation constraint
+	Vector3d constRPY (0.0, M_PI_2, 0.0);
+	Matrix3d constOriM = math::eulerToMatrix(constRPY, math::XYZ);
+	Quaternion <double> constOri (constOriM); 
+ 
+	// Find the orientation error and express it in RPY representation
+	Quaternion <double> errOriQ = constOri * eeOri.inverse();
+	Matrix3d errOriM = errOriM = errOriQ.matrix();
+	Vector3d errOri = math::matrixToEuler(errOriM, math::XYZ);
+
+	// Set the total error with the x-axis being free
+	error << errPos, errOri; 
+//	pv(error);
+}
+
+/* ********************************************************************************************** */
 /// Given that the left hand is holding a stick perpendicular to its x axis and extending to its
 /// y axis, and the right hand would hold it again perpendicular to its x axis but extending
 /// to its -y axis, returns where the right hand should be.
@@ -120,8 +153,10 @@ void stick_constraint (const Matrix4d& left, Matrix4d& right) {
 bool computeIK (Node& node, double phi) {
 
 	// Perform forward kinematics and determine where the right frame should be
-	world->getSkeleton(1)->setConfig(left_idx, node.left);
-	Matrix4d leftFrame = world->getSkeleton(1)->getNode("lgPlate1")->getWorldTransform(), rightFrame;
+	world->getSkeleton(r_id)->setConfig(left_idx, node.left);
+	Matrix4d leftFrame = world->getSkeleton(r_id)->getNode("lGripper")->getWorldTransform(), 
+		rightFrame;
+
 	// pmr(leftFrame);
 	stick_constraint(leftFrame, rightFrame);
 	// pmr(rightFrame);
@@ -130,7 +165,7 @@ bool computeIK (Node& node, double phi) {
 
 	// Get the relative goal
 	static Transform <double, 3, Affine> relGoal;
-	getWristInShoulder(world->getSkeleton(1), rightFrame, true, relGoal.matrix());
+	getWristInShoulder(world->getSkeleton(r_id), rightFrame, true, relGoal.matrix());
 
 	// Perform IK
 	bool result = ik(relGoal, phi, node.right);
@@ -139,9 +174,9 @@ bool computeIK (Node& node, double phi) {
 	return result;	
 }
 
-/* ********************************************************************************************** */
+/* ********************************************************************************************** *
 // The following are the start and goal configurations for the left arm: (1-2) line, (3) circle 
-// (no rotation), (4) circle (rotation)
+// (no rotation), (4) circle (rotation) when the robot is on the pedestal
 double start_goals [][7] = {
 	{-0.241886,  -1.90735,  -0.64163 ,  1.92837,         0,   -1.5166, -0.970454},
 	{-0.238262,  -1.90277, -0.640441,   1.85266,         0,  -1.44662, -0.970454}, 
@@ -154,16 +189,27 @@ double start_goals [][7] = {
 };
 
 /* ********************************************************************************************** */
+// The following are the start and goal configurations for the left arm: (1-2) line, (3) circle 
+// (no rotation), (4) circle (rotation) when the robot is on the ground with imu = -1.87 and
+// waist = 150. 
+double start_goals [][7] = {
+	{ 0.525674,    -1.57797,    -1.58317,     1.65143, -0.00998171,    -1.41622,     -1.5589},
+	{ 1.15765 ,   -1.58036 ,   -1.57499 ,   0.959028, -0.00736767 ,   -1.35574 ,   -1.56166},
+ };
+
+/* ********************************************************************************************** */
 int main (int argc, char* argv[]) {
 
 	srand(time(NULL));
 
-	// Prepare the line error
+	// Prepare the joint indices in forward kinematics function 
 	for(size_t i = 10; i < 23; i+=2) left_idx.push_back(i);
+	imuWaist_ids.push_back(5);	
+	imuWaist_ids.push_back(8);	
 
 	// Load the world
 	DartLoader loader;
-	world = loader.parseWorld("../../common/scenes/03-World-FR.urdf");
+	world = loader.parseWorld("../../common/scenes/01-World-Robot.urdf");
 	
 	// Setup the start and goal nodes
 	const size_t case_id = 0;
@@ -174,11 +220,11 @@ int main (int argc, char* argv[]) {
 	}
 	
 	// Perform I.K. for the start/goal nodes
-	assert((computeIK(start, 0.0)) && "Could not compute I.K. for the start node");
-	assert((computeIK(goal, 0.0)) && "Could not compute I.K. for the goal node");
+	//assert((computeIK(start, 0.0)) && "Could not compute I.K. for the start node");
+	//assert((computeIK(goal, 0.0)) && "Could not compute I.K. for the goal node");
 
 	// Create the fr-rrt planner
-	planner = new fr (world, 1, start, goal, plane_err, stick_constraint);
+	planner = new fr (world, 1, start, goal, line_err_ground, NULL); //stick_constraint);
 	
 	// Make the call
 	list <Node*> path;
@@ -190,7 +236,6 @@ int main (int argc, char* argv[]) {
 	Vector6d error;
 	Matrix4d temp;
 	for (list<Node*>::iterator it=path.begin(); it != path.end(); ++it) {
-		plane_err((*it)->left, error);
 //		cout << planner->leftFrame.topRightCorner<3,1>().transpose() << endl;
 		// pv(error);
 	}
