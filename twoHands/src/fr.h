@@ -107,7 +107,7 @@ public:
 	/// Given a candidate node with a selected 7-dof, perform I.K. with a phi value in the window of 
 	/// the nearest neighbors and check for collisions. If I.K. fails with MAX_NUM_PHIS due to reach
 	/// or collision detections, return false so that a new random left arm configuration is sampled.
-	bool ikRight (double nearestPhi, Node& newNode);
+	bool ikRight (const Node& nearestNode, Node& newNode);
 
 	/// Traces the path from some node to the initConfig node - useful in creating the full path
 	/// after the goal is reached.

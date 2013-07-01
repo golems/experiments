@@ -226,8 +226,8 @@ int main (int argc, char* argv[]) {
 	}
 	
 	// Perform I.K. for the start/goal nodes
-	assert((computeIK(start, 0.0)) && "Could not compute I.K. for the start node");
-	assert((computeIK(goal, 0.0)) && "Could not compute I.K. for the goal node");
+	assert((computeIK(start, M_PI)) && "Could not compute I.K. for the start node");
+	assert((computeIK(goal, M_PI)) && "Could not compute I.K. for the goal node");
 
 	// Create the fr-rrt planner
 	planner = new fr (world, r_id, start, goal, line_err_ground, stick_constraint);

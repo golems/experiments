@@ -16,7 +16,7 @@
 
 #define MAX_NUM_NODES ((int) (1e5))
 #define MAX_NUM_PHIS 32
-#define PHI_RANGE (10.0 * M_PI / 180.0)
+#define PHI_RANGE (0.0 * M_PI / 180.0)
 
 using namespace std;
 
@@ -28,7 +28,7 @@ bool fr::plan (std::list <Node*>& path) {
 	const double goalRadiusSq = SQ(0.05);
 
 	// Sanity check start and goal configurations with the error bounds
-	epsilonSq = SQ(0.02);
+	epsilonSq = SQ(0.005);
 	Vector6d error;
 	task_error(start.left, error);
 	assert((error.squaredNorm() < epsilonSq) && "Start does not satisfy constraint!");
@@ -40,11 +40,11 @@ bool fr::plan (std::list <Node*>& path) {
 	// Expand the tree until the limit of number of nodes is reached
 	size_t numNodes = 1;
 	Node target;
-	double minDistance = 1000000000000;
+	double minDistanceSq = 1000000000000;
 	while(numNodes < MAX_NUM_NODES - 1) {
 
 		// cout << "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << endl;
-//		if(numNodes % 100000 == 0) exit(0); // cout << numNodes << endl;
+		if(numNodes % 10 == 0) cout << numNodes << " " << sqrt(minDistanceSq) << endl;
 
 		// Choose a target: either random or the goal
 		double biasRand = (((double) rand()) / RAND_MAX);
@@ -68,7 +68,7 @@ bool fr::plan (std::list <Node*>& path) {
 		if(!result) continue;
 
 		// Perform I.K. for the right arm and get the phi value. If not possible, repeat.
-		if(twoHands && !ikRight(nodes[nearest_id].phi, newNode)) {
+		if(twoHands && !ikRight(nodes[nearest_id], newNode)) {
 			continue;
 		}
 
@@ -81,8 +81,7 @@ bool fr::plan (std::list <Node*>& path) {
 
 		// Check for the end condition
 		double goalDistanceSq = (goal.left - newNode.left).squaredNorm();
-		minDistance = min(goalDistanceSq, minDistance);
-		// cout << " " <<  minDistance << endl;
+		minDistanceSq = min(goalDistanceSq, minDistanceSq);
 		if(goalDistanceSq < goalRadiusSq) {
 			printf("Done with %lu nodes and goal distance %lf\n", numNodes, sqrt(goalDistanceSq));
 			toc_(everything);
@@ -102,7 +101,7 @@ bool fr::plan (std::list <Node*>& path) {
 }
 
 /* ********************************************************************************************** */
-bool fr::ikRight (double nearestPhi, Node& newNode) {
+bool fr::ikRight (const Node& nearestNode, Node& newNode) {
 
 	static const bool debug = 0;
 
@@ -122,7 +121,7 @@ bool fr::ikRight (double nearestPhi, Node& newNode) {
 	for(size_t phi_idx = 0; phi_idx < MAX_NUM_PHIS; phi_idx++) {
 
 		// Select a phi
-		double phi = nearestPhi + PHI_RANGE * ((((double) rand()) / RAND_MAX) - 0.5);
+		double phi = nearestNode.phi + PHI_RANGE * ((((double) rand()) / RAND_MAX) - 0.5);
 		if(debug) cout << "trying phi: " << phi << endl;
 
 		// Perform inverse kinematics
@@ -134,11 +133,17 @@ bool fr::ikRight (double nearestPhi, Node& newNode) {
 			for(size_t i = 4; i < 17; i+=2) arm_ids.push_back(i + 6 + 1);  
 			robot->setConfig(arm_ids, theta);
 			bool collision = world->checkCollision(false);
-			if(!collision) {
-				newNode.phi = phi;
-				newNode.right = theta;
-				return true;
-			}
+			if(collision) continue;
+
+			// Check if the right arm configuration is too far from nearest
+			Vector7d diff = theta - nearestNode.right;
+			double maxDiff = diff.lpNorm<Infinity>();
+			if(maxDiff > 0.5) continue;
+
+			// Add the node if no problems
+			newNode.phi = phi;
+			newNode.right = theta;
+			return true;
 		}
 	}
 	
@@ -203,7 +208,7 @@ inline bool fr::constrainedLeft (const Vector7d& nearest, const Vector7d& target
 	dir /= distance;
 
 	// First create a sample by extending towards the target, ignoring the constraint	
-	const double deltaT = 0.01;
+	const double deltaT = 0.001;
 	if(distance < deltaT) left = target;
 	else left = nearest + deltaT * dir;
 
