@@ -14,6 +14,7 @@
 #include <dynamics/SkeletonDynamics.h>
 #include <simulation/World.h>
 #include <kinematics/BodyNode.h>
+#include <kinematics/Dof.h>
 #include <math/UtilsRotation.h>
 
 using namespace dynamics;

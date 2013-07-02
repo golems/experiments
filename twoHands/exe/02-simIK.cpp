@@ -24,7 +24,7 @@ bool bothArms = 1;
 /* ********************************************************************************************* */
 /// Returns the I.K. goals for turning a valve where the green arrow is at the center of the valve
 /// Basically, we want each end-effector to look towards the green arrow at some distance .08
-void armGoalsValve (const Matrix4d& Twee, Matrix4d& TweeL, Matrix4d& TweeR) {
+void armGoalsValveSideGrip (const Matrix4d& Twee, Matrix4d& TweeL, Matrix4d& TweeR) {
 
 	// Decide on the frame for the left hand
 	TweeL.topRightCorner<4,1>() += Twee.topLeftCorner<4,1>().normalized() * 0.12;
@@ -37,6 +37,24 @@ void armGoalsValve (const Matrix4d& Twee, Matrix4d& TweeL, Matrix4d& TweeR) {
 	TweeR.topRightCorner<4,1>() -= TweeL.block<4,1>(0,2).normalized() * 0.24;
 	TweeR.topLeftCorner<3,3>() =  TweeL.topLeftCorner<3,3>() *
 		AngleAxis<double>(-M_PI, Vector3d(1.0, 0.0, 0.0)).matrix();
+}
+
+/* ********************************************************************************************* */
+/// Returns the I.K. goals for a rotation motion where the green arrow is at the center. We want
+/// the side of the end-effectors to be towards the arrow and front looking down.
+void armGoalsValveDownGrip (const Matrix4d& Twee, Matrix4d& TweeL, Matrix4d& TweeR) {
+
+	// Decide on the frame for the left hand
+	TweeL.topRightCorner<4,1>() += Twee.topLeftCorner<4,1>().normalized() * 0.20;
+	TweeL.topLeftCorner<3,3>() = Twee.topLeftCorner<3,3>() *
+		AngleAxis<double>(M_PI_2, Vector3d(0.0, 0.0, 1.0)).matrix() * 
+		AngleAxis<double>(-M_PI_2, Vector3d(0.0, 1.0, 0.0)).matrix();
+
+	// Decide on the frame for the right hand given the left hand
+	TweeR = TweeL;
+	TweeR.topRightCorner<4,1>() += TweeL.block<4,1>(0,1).normalized() * 0.40;
+//	TweeR.topLeftCorner<3,3>() =  TweeL.topLeftCorner<3,3>() *
+//		AngleAxis<double>(M_PI, Vector3d(1.0, 0.0, 0.0)).matrix();
 }
 
 /* ********************************************************************************************* */
@@ -56,7 +74,7 @@ bool bothArmsIK (SkeletonDynamics* robot, const Matrix4d& Twee) {
 
 	// Get the end-effector goals for a specific task
 	Matrix4d TweeL = Twee, TweeR = Twee;
-	armGoalsStick(Twee, TweeL, TweeR);
+	armGoalsValveDownGrip(Twee, TweeL, TweeR);
 	pmr(TweeL);
 	pmr(TweeR);
 
@@ -118,7 +136,7 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	
 	// Set the camera zoom
 	viewer->camRadius = 2.0;
-	viewer->worldV += Vector3d(0.0, -1.0, -0.8);
+	viewer->worldV += Vector3d(0.0, -0.0, -0.8);
 	viewer->UpdateCamera();
 
 	// Set the full sizer as the sizer of this tab
