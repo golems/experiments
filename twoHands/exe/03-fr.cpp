@@ -140,6 +140,37 @@ void line_err_ground (const Vector7d& node, Vector6d& error) {
 }
 
 /* ********************************************************************************************** */
+/// The left end-effector should move in a circle around the point (0.25, 0.0, 0.78)
+void circle_err_ground (const Vector7d& node, Vector6d& error) {
+
+	// Perform forward kinematics
+	static Vector3d eePos;
+	static Quaternion <double> eeOri;
+	forward(node, eePos, eeOri);
+
+	// The xy error is computed by assuming the point is already on the correct z value and then
+	// projecting it to the circle (we get the angle wrt to the center and move radius away from it)
+	double cx = 0.25, cy = 0.0, L = 0.20;
+	double angle = atan2(eePos(1) - cy, eePos(0) - cx);
+	double rx = L * cos(angle) + cx, ry = L * sin(angle) + cy;
+	Vector3d errPos = Vector3d(rx, ry, 1.54013) - eePos;
+	
+	// Get the orientation constraint
+	Vector3d constRPY (0.0, 0.0, M_PI);
+	Matrix3d constOriM = math::eulerToMatrix(constRPY, math::XYZ);
+	Quaternion <double> constOri (constOriM); 
+ 
+	// Find the orientation error and express it in RPY representation
+	Quaternion <double> errOriQ = constOri * eeOri.inverse();
+	Matrix3d errOriM = errOriM = errOriQ.matrix();
+	Vector3d errOri = math::matrixToEuler(errOriM, math::XYZ);
+
+	// Set the total error with the x-axis being free
+	error << errPos, errOri; 
+	pv(error);
+}
+
+/* ********************************************************************************************** */
 /// Given that the left hand is holding a stick perpendicular to its x axis and extending to its
 /// y axis, and the right hand would hold it again perpendicular to its x axis but extending
 /// to its -y axis, returns where the right hand should be.
@@ -195,12 +226,13 @@ double start_goals [][7] = {
 };
 
 /* ********************************************************************************************** */
-// The following are the start and goal configurations for the left arm: (1-2) line, (3) circle 
-// (no rotation), (4) circle (rotation) when the robot is on the ground with imu = -1.87 and
-// waist = 150. 
+// The following are the start and goal configurations for the left arm: (1) stick, (2) circle 
+// when the robot is on the ground with imu = -1.87 and waist = 150. 
 double start_goals [][7] = {
 	{ 0.525674,    -1.57797,    -1.58317,     1.65143, -0.00998171,    -1.41622,     -1.5589},
 	{ 1.15765 ,   -1.58036 ,   -1.57499 ,   0.959028, -0.00736767 ,   -1.35574 ,   -1.56166},
+	{1.77443, -1.76594,  1.61081,  1.29396, -2.99145, -1.27951,  1.84021}, 
+	{1.53664,  -1.7507,  1.56468, 0.886069, -3.01066, -1.45379,  1.50574},
  };
 
 /* ********************************************************************************************** */
@@ -230,7 +262,7 @@ int main (int argc, char* argv[]) {
 	assert((computeIK(goal, M_PI)) && "Could not compute I.K. for the goal node");
 
 	// Create the fr-rrt planner
-	planner = new fr (world, r_id, start, goal, line_err_ground, stick_constraint);
+	planner = new fr (world, r_id, start, goal, circle_err_ground); //, stick_constraint);
 	
 	// Make the call
 	list <Node*> path;
