@@ -153,10 +153,10 @@ void circle_err_ground (const Vector7d& node, Vector6d& error) {
 	double cx = 0.25, cy = 0.0, L = 0.20;
 	double angle = atan2(eePos(1) - cy, eePos(0) - cx);
 	double rx = L * cos(angle) + cx, ry = L * sin(angle) + cy;
-	Vector3d errPos = Vector3d(rx, ry, 1.54013) - eePos;
+	Vector3d errPos = Vector3d(rx, ry, 0.70) - eePos;
 	
 	// Get the orientation constraint
-	Vector3d constRPY (0.0, 0.0, M_PI);
+	Vector3d constRPY (M_PI, 0.0, angle - M_PI_2);
 	Matrix3d constOriM = math::eulerToMatrix(constRPY, math::XYZ);
 	Quaternion <double> constOri (constOriM); 
  
@@ -167,7 +167,6 @@ void circle_err_ground (const Vector7d& node, Vector6d& error) {
 
 	// Set the total error with the x-axis being free
 	error << errPos, errOri; 
-	pv(error);
 }
 
 /* ********************************************************************************************** */
@@ -183,6 +182,17 @@ void stick_constraint (const Matrix4d& left, Matrix4d& right) {
 }
 
 /* ********************************************************************************************** */
+/// The wrench constraint - basically we are holding two sticks around an object with the
+/// hands at the same orientation but symmetric around the object
+void wrench_constraint (const Matrix4d& left, Matrix4d& right) {
+	right = left;
+	right.block<4,1>(0,0) *= -1;
+	right.block<4,1>(0,2) *= -1;
+	right.topRightCorner<4,1>() += left.block<4,1>(0,2).normalized() * L8_Schunk;
+	right.topRightCorner<4,1>() += left.block<4,1>(0,1).normalized() * 0.40;
+}
+
+/* ********************************************************************************************** */
 /// Computes I.K. for a given node and phi value
 bool computeIK (Node& node, double phi) {
 
@@ -192,12 +202,10 @@ bool computeIK (Node& node, double phi) {
 	Matrix4d leftFrame = world->getSkeleton(r_id)->getNode("lGripper")->getWorldTransform(), 
 		rightFrame;
 
-	pmr(leftFrame);
-	stick_constraint(leftFrame, rightFrame);
-	pmr(rightFrame);
-
 	pv(node.left);
-
+	pmr(leftFrame);
+	wrench_constraint(leftFrame, rightFrame);
+	pmr(rightFrame);
 
 	// Get the relative goal
 	static Transform <double, 3, Affine> relGoal;
@@ -250,7 +258,7 @@ int main (int argc, char* argv[]) {
 	world = loader.parseWorld("../../common/scenes/01-World-Robot.urdf");
 	
 	// Setup the start and goal nodes
-	const size_t case_id = 0;
+	const size_t case_id = 1;
 	Node start, goal;
 	for(size_t i = 0; i < 7; i++) {
 		start.left(i) = start_goals[2*case_id][i];
@@ -258,11 +266,11 @@ int main (int argc, char* argv[]) {
 	}
 	
 	// Perform I.K. for the start/goal nodes
-	assert((computeIK(start, M_PI)) && "Could not compute I.K. for the start node");
-	assert((computeIK(goal, M_PI)) && "Could not compute I.K. for the goal node");
+	assert((computeIK(start, 0.0)) && "Could not compute I.K. for the start node");
+	assert((computeIK(goal, 0.0)) && "Could not compute I.K. for the goal node");
 
 	// Create the fr-rrt planner
-	planner = new fr (world, r_id, start, goal, circle_err_ground); //, stick_constraint);
+	planner = new fr (world, r_id, start, goal, circle_err_ground, wrench_constraint);
 	
 	// Make the call
 	list <Node*> path;

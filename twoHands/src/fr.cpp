@@ -29,11 +29,11 @@ bool fr::plan (std::list <Node*>& path) {
 
 	// Sanity check start and goal configurations with the error bounds
 	epsilonSq = SQ(0.005);
-	Vector6d error;
-	task_error(start.left, error);
-	assert((error.squaredNorm() < epsilonSq) && "Start does not satisfy constraint!");
-	task_error(goal.left, error);
-	assert((error.squaredNorm() < epsilonSq) && "Goal does not satisfy constraint!");
+	Vector6d errorStart, errorGoal;
+	task_error(start.left, errorStart);
+	task_error(goal.left, errorGoal);
+	assert((errorStart.squaredNorm() < epsilonSq) && "Start does not satisfy constraint!");
+	assert((errorGoal.squaredNorm() < epsilonSq) && "Goal does not satisfy constraint!");
 
 	tic_(everything);
 
