@@ -24,6 +24,7 @@ ach_channel_t waistChan;
 Arm* larm = NULL, * rarm = NULL;	///< Arm descriptors with ft chan, somatic_motor_t and ft offset
 vector <VectorXd> path;       ///< The path that the robot will execute
 const int r_id = 0;						///< The robot id in the simulation world
+bool goInit = false;
 
 /* ******************************************************************************************** */
 /// Kills the motor and daemon structs 
@@ -42,7 +43,7 @@ void computeGoal (const Vector7d& traj, const Vector6d& wrench, Vector7d& goal, 
 
 	// Skip the first few steps
 	static int i = 0;
-	if(i++ < 10) {
+	if(i++ < 1e6) {
 		goal = traj;
 		return;
 	}
@@ -126,9 +127,12 @@ void run() {
 			SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
 
 	// Unless an interrupt or terminate message is received, process the new message
-	size_t c = 0, path_idx = 0;
+	int c = 0, path_idx = path.size()-1;
 	Vector7d pathGoalLeft, pathGoalRight;
 	while(!somatic_sig_received) {
+
+		if(goInit) path_idx = path.size()-1;
+		cout << "path_idx: " << path_idx << endl;
 
 		// Get the motor goals for both arms from the path
 		for(size_t i = 0; i < 7; i++) {
@@ -141,10 +145,11 @@ void run() {
 		if(rarm != NULL) runArm(false, pathGoalRight);
 
 		// Check if reached the goal; stop if reached the end
+		double errorTolerance = goInit ? 1e-3 : 1e-1;
 		double errorLeft = larm ? (pathGoalLeft - eig7(larm->lwa.pos)).norm() : 0.0;
 		double errorRight = rarm ? (pathGoalRight - eig7(rarm->lwa.pos)).norm() : 0.0;
-		if((errorLeft < 1e-1) && (errorRight < 1e-1)) path_idx++;
-		if(path_idx >= (path.size() - 1)) path_idx = 0;
+		if((errorLeft < errorTolerance) && (errorRight < errorTolerance)) path_idx--;
+		if(path_idx < 0) break;
 		usleep(1e5);
 	}
 
@@ -171,6 +176,7 @@ void readFile () {
 		while(stream >> temp) row(i++) = temp;
 		path.push_back(row);
 	}
+	cout << "num points: " << path.size() << endl;
 }
 
 /* ******************************************************************************************** */
@@ -181,6 +187,9 @@ int main(const int argc, char** argv) {
 	if((argc > 1) && (strcmp(argv[1], "-r") == 0)) rarm = new Arm();
 	else if((argc > 1) && (strcmp(argv[1], "-b") == 0)) larm = new Arm(), rarm = new Arm();
 	else larm = new Arm();
+
+	// Check if the user wants the arms to go the initial point in the traj. with the -i flag
+	if((argc > 2) && (strcmp(argv[2], "-i") == 0)) goInit = true;
 
 	// Read the trajectory from the data file in the build directory
 	readFile();

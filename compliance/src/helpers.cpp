@@ -31,6 +31,9 @@ void computeExternal (double imu, double waist, const somatic_motor_t& lwa, cons
 	robot.setConfig(imuWaist_ids, Vector2d(imu, waist));
 	const char* nodeName = left ? "lGripper" : "rGripper";
 	Matrix3d Rsw = robot.getNode(nodeName)->getWorldTransform().topLeftCorner<3,3>().transpose();
+	vector <int> dofs;
+	for(size_t i = 0; i < 24; i++) dofs.push_back(i);
+	//cout << "\nq in computeExternal: " << robot.getConfig(dofs).transpose() << endl;
 	
 	// Create the wrench with computed rotation to change the frame from the world to the sensor
 	Matrix6d pSsensor_world = MatrixXd::Identity(6,6); 
@@ -217,8 +220,10 @@ bool getWaist(double* waist, ach_channel_t& waistChan) {
 		somatic__motor_state__free_unpacked(waistState, &protobuf_c_system_allocator );
 		return true;
 	}
+
 	return false;
 }
+
 /* ********************************************************************************************* */
 void getImu (double *imu, ach_channel_t& imuChan) {
 
