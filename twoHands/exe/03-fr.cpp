@@ -140,6 +140,39 @@ void line_err_ground (const Vector7d& node, Vector6d& error) {
 }
 
 /* ********************************************************************************************** */
+/// The error function for task-constrained planning of the left arm when trying to move a box on
+/// the ground using a lever. The lever remains in yz plane of the world. The fulcrum is a point
+/// (fx, fy, fz), the distance of the left arm from the fulcrum is 'd' and lever is aligned along
+/// -ve y-axis of the left arm
+void boxLift_err_ground (const Vector7d& node, Vector6d& error) {
+
+	// Perform forward kinematics
+	static Vector3d eePos;
+	static Quaternion <double> eeOri;
+	forward(node, eePos, eeOri);
+
+	// The yz error is computed by assuming the point is already on the correct x value and then
+	// projecting it to the circle (we get the angle wrt to the center and move radius away from it)
+	double fx = 0.30, fy = 0.30, fz = 0.39, d = 0.23;
+	double angle = atan2(eePos(2) - fz, eePos(1) - fy);
+	double ry = d * cos(angle) + fy, rz = d * sin(angle) + fz;
+	Vector3d errPos = Vector3d(fx, ry, rz) - eePos;
+	
+	// Get the orientation constraint
+	Vector3d constRPY (angle, M_PI_2, 0.0);
+	Matrix3d constOriM = math::eulerToMatrix(constRPY, math::XYZ);
+	Quaternion <double> constOri (constOriM); 
+ 
+	// Find the orientation error and express it in RPY representation
+	Quaternion <double> errOriQ = constOri * eeOri.inverse();
+	Matrix3d errOriM = errOriM = errOriQ.matrix();
+	Vector3d errOri = math::matrixToEuler(errOriM, math::XYZ);
+
+	// Set the total error with the x-axis being free
+	error << errPos, errOri; 
+}
+
+/* ********************************************************************************************** */
 /// The left end-effector should move in a circle around the point (0.25, 0.0, 0.78)
 void circle_err_ground (const Vector7d& node, Vector6d& error) {
 
@@ -190,6 +223,17 @@ void wrench_constraint (const Matrix4d& left, Matrix4d& right) {
 	right.block<4,1>(0,2) *= -1;
 	right.topRightCorner<4,1>() += left.block<4,1>(0,2).normalized() * L8_Schunk;
 	right.topRightCorner<4,1>() += left.block<4,1>(0,1).normalized() * 0.40;
+}
+
+/* ********************************************************************************************** */
+/// The wrench constraint - basically we are holding two sticks around an object with the
+/// hands at the same orientation but symmetric around the object
+void wrench_constraint (const Matrix4d& left, Matrix4d& right) {
+	right = left;
+	right.block<4,1>(0,0) *= -1;
+	right.block<4,1>(0,2) *= -1;
+	right.topRightCorner<4,1>() += left.block<4,1>(0,2).normalized() * L8_Schunk;
+	right.topRightCorner<4,1>() += left.block<4,1>(0,1).normalized() * 0.15;
 }
 
 /* ********************************************************************************************** */
@@ -270,7 +314,7 @@ int main (int argc, char* argv[]) {
 	assert((computeIK(goal, 0.0)) && "Could not compute I.K. for the goal node");
 
 	// Create the fr-rrt planner
-	planner = new fr (world, r_id, start, goal, circle_err_ground, wrench_constraint);
+	planner = new fr (world, r_id, start, goal, boxLift_err_ground, wrench_constraint);
 	
 	// Make the call
 	list <Node*> path;
