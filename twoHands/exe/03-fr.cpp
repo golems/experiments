@@ -153,7 +153,7 @@ void boxLift_err_ground (const Vector7d& node, Vector6d& error) {
 
 	// The yz error is computed by assuming the point is already on the correct x value and then
 	// projecting it to the circle (we get the angle wrt to the center and move radius away from it)
-	double fx = 0.30, fy = 0.30, fz = 0.39, d = 0.23;
+	double fx = 0.45, fy = 0.15, fz = 0.50, d = 0.20;
 	double angle = atan2(eePos(2) - fz, eePos(1) - fy);
 	double ry = d * cos(angle) + fy, rz = d * sin(angle) + fz;
 	Vector3d errPos = Vector3d(fx, ry, rz) - eePos;
@@ -228,12 +228,12 @@ void wrench_constraint (const Matrix4d& left, Matrix4d& right) {
 /* ********************************************************************************************** */
 /// The wrench constraint - basically we are holding two sticks around an object with the
 /// hands at the same orientation but symmetric around the object
-void wrench_constraint (const Matrix4d& left, Matrix4d& right) {
+void lever_constraint (const Matrix4d& left, Matrix4d& right) {
 	right = left;
 	right.block<4,1>(0,0) *= -1;
 	right.block<4,1>(0,2) *= -1;
 	right.topRightCorner<4,1>() += left.block<4,1>(0,2).normalized() * L8_Schunk;
-	right.topRightCorner<4,1>() += left.block<4,1>(0,1).normalized() * 0.15;
+	right.topRightCorner<4,1>() += left.block<4,1>(0,1).normalized() * 0.20;
 }
 
 /* ********************************************************************************************** */
@@ -285,6 +285,8 @@ double start_goals [][7] = {
 	{ 1.15765 ,   -1.58036 ,   -1.57499 ,   0.959028, -0.00736767 ,   -1.35574 ,   -1.56166},
 	{1.77443, -1.76594,  1.61081,  1.29396, -2.99145, -1.27951,  1.84021}, 
 	{1.53664,  -1.7507,  1.56468, 0.886069, -3.01066, -1.45379,  1.50574},
+	{0.490885,  -1.28308,  -2.87051, 2.03524,   -0.186148,  -1.68552,   1.11042},
+	{0.410602, -1.7016, 3.07435, 1.54679, -0.343525, -1.69399, 0.463153}
  };
 
 /* ********************************************************************************************** */
@@ -302,7 +304,7 @@ int main (int argc, char* argv[]) {
 	world = loader.parseWorld("../../common/scenes/01-World-Robot.urdf");
 	
 	// Setup the start and goal nodes
-	const size_t case_id = 1;
+	const size_t case_id = 2;
 	Node start, goal;
 	for(size_t i = 0; i < 7; i++) {
 		start.left(i) = start_goals[2*case_id][i];

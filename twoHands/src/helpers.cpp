@@ -260,7 +260,7 @@ void getImu (double *imu, ach_channel_t& imuChan) {
 	somatic__vector__free_unpacked( imu_msg, &protobuf_c_system_allocator );
 
 	// Make the calls to extract the pitch and rate of extraction
-	*imu = -ssdmu_pitch(&imu_sample) + M_PI/2;				 
+	//*imu = -ssdmu_pitch(&imu_sample) + M_PI/2;				 
 }
 /* ********************************************************************************************* */
 

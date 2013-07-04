@@ -27,16 +27,14 @@ bool bothArms = 1;
 void armGoalsLeverDown (const Matrix4d& Twee, Matrix4d& TweeL, Matrix4d& TweeR) {
 
 	// Decide on the frame for the left hand
-	TweeL.topRightCorner<4,1>() += Twee.topLeftCorner<4,1>().normalized() * 0.23;
+	TweeL.topRightCorner<4,1>() -= Twee.topLeftCorner<4,1>().normalized() * 0.20;
 	TweeL.topLeftCorner<3,3>() =  Twee.topLeftCorner<3,3>() *
-		AngleAxis<double>(M_PI_2, Vector3d(0.0, 0.0, 1.0)).matrix() * 
-		AngleAxis<double>(M_PI_2, Vector3d(1.0, 0.0, 0.0)).matrix();
+		AngleAxis<double>(-M_PI_2, Vector3d(0.0, 0.0, 1.0)).matrix(); 
+
 
 	// Decide on the frame for the right hand given the left hand
 	TweeR = TweeL;
-	TweeR.topRightCorner<4,1>() -= TweeL.block<4,1>(0,2).normalized() * 0.15;
-	TweeR.topLeftCorner<3,3>() =  TweeL.topLeftCorner<3,3>() *
-		AngleAxis<double>(-M_PI, Vector3d(1.0, 0.0, 0.0)).matrix();
+	TweeR.topRightCorner<4,1>() -= TweeL.block<4,1>(0,1).normalized() * 0.20;
 }
 
 /* ********************************************************************************************* */
@@ -93,8 +91,8 @@ bool bothArmsIK (SkeletonDynamics* robot, const Matrix4d& Twee) {
 	// Get the end-effector goals for a specific task
 	Matrix4d TweeL = Twee, TweeR = Twee;
 	armGoalsLeverDown(Twee, TweeL, TweeR);
-	pmr(TweeL);
-	pmr(TweeR);
+	//pmr(TweeL);
+	//pmr(TweeR);
 
 	// Get the IK for the left arm
 	bool successL = singleArmIK(mWorld, robot, TweeL, false);

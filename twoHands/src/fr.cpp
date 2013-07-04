@@ -28,7 +28,7 @@ bool fr::plan (std::list <Node*>& path) {
 	const double goalRadiusSq = SQ(0.05);
 
 	// Sanity check start and goal configurations with the error bounds
-	epsilonSq = SQ(0.005);
+	epsilonSq = SQ(0.05);
 	Vector6d errorStart, errorGoal;
 	task_error(start.left, errorStart);
 	task_error(goal.left, errorGoal);

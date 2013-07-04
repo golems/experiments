@@ -25,16 +25,16 @@ bool singleArmIK (World* mWorld, SkeletonDynamics* robot, const Matrix4d& Twee, 
 	// Compute the inverse kinematics taking into account collisions
 	Matrix <double, 7, 1> theta;	
 	bool success = false;
-	double phi = rightArm ? 0.0 : M_PI;
+	double phi = rightArm ? 180.0 : 0.0;
 	size_t div = 180;
 	for(int i = 0; i < div; i++, phi += (2 * M_PI)/div) {
 
 		// Get an IK solution with this phi angle
 		// phi = 0.0;
 //		pm(relGoal);
-		cout << "Trying phi: " << phi << endl;
+		//cout << "Trying phi: " << phi << endl;
 		bool result = ik(relGoal, phi, theta);
-		cout << "Found possible result: " << theta.transpose() << endl;
+		//cout << "Found possible result: " << theta.transpose() << endl;
 
 		// Check for collision by setting the arm angles and making the call
 		if(result) {
@@ -46,8 +46,8 @@ bool singleArmIK (World* mWorld, SkeletonDynamics* robot, const Matrix4d& Twee, 
 			for(size_t i = 0; i < arm_ids.size(); i++) {
 				kinematics::Dof* dof = robot->getDof(arm_ids[i]);
 				if((theta(i) < dof->getMin()) || (theta(i) > dof->getMax())) {
-					printf("\t ... found solution but joint %lu (%lf) out of bounds [%lf, %lf]\n",	i + 1,
-						theta(i), dof->getMin(), dof->getMax());
+			//		printf("\t ... found solution but joint %lu (%lf) out of bounds [%lf, %lf]\n",	i + 1,
+			//			theta(i), dof->getMin(), dof->getMax());
 					continue;
 				}
 			}
@@ -55,7 +55,7 @@ bool singleArmIK (World* mWorld, SkeletonDynamics* robot, const Matrix4d& Twee, 
 			// Check for collisions
 			bool collision = mWorld->checkCollision(false);
 			if(collision) {
-				cout << "\t ... found solution but collision..." << endl;
+				//cout << "\t ... found solution but collision..." << endl;
 				continue;
 			}
 
@@ -63,9 +63,9 @@ bool singleArmIK (World* mWorld, SkeletonDynamics* robot, const Matrix4d& Twee, 
 				success = true;
 				vector <int> bla; for(size_t i = 0; i < 24; i++) bla.push_back(i);
 				cout << "q: " << robot->getConfig(bla).transpose() << endl;
-				printf("%s: ", rightArm ? "Right" : "Left");
-				pmr((robot->getNode(rightArm ? "rGripper" : "lGripper")->getWorldTransform()));
-				pv(theta);
+				//printf("%s: ", rightArm ? "Right" : "Left");
+				//pmr((robot->getNode(rightArm ? "rGripper" : "lGripper")->getWorldTransform()));
+				//pv(theta);
 				break;
 			}
 		}
