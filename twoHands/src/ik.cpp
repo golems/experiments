@@ -64,7 +64,7 @@ bool singleArmIK (World* mWorld, SkeletonDynamics* robot, const Matrix4d& Twee, 
 				vector <int> bla; for(size_t i = 0; i < 24; i++) bla.push_back(i);
 				cout << "q: " << robot->getConfig(bla).transpose() << endl;
 				//printf("%s: ", rightArm ? "Right" : "Left");
-				//pmr((robot->getNode(rightArm ? "rGripper" : "lGripper")->getWorldTransform()));
+				pmr((robot->getNode(rightArm ? "rGripper" : "lGripper")->getWorldTransform()));
 				//pv(theta);
 				break;
 			}

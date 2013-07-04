@@ -153,13 +153,13 @@ void boxLift_err_ground (const Vector7d& node, Vector6d& error) {
 
 	// The yz error is computed by assuming the point is already on the correct x value and then
 	// projecting it to the circle (we get the angle wrt to the center and move radius away from it)
-	double fx = 0.45, fy = 0.15, fz = 0.50, d = 0.20;
+	double fx = 0.252336, fy = 0.15, fz = 0.50, d = 0.20;
 	double angle = atan2(eePos(2) - fz, eePos(1) - fy);
 	double ry = d * cos(angle) + fy, rz = d * sin(angle) + fz;
 	Vector3d errPos = Vector3d(fx, ry, rz) - eePos;
 	
 	// Get the orientation constraint
-	Vector3d constRPY (angle, M_PI_2, 0.0);
+	Vector3d constRPY (-M_PI_2, angle-M_PI_2, -M_PI_2);
 	Matrix3d constOriM = math::eulerToMatrix(constRPY, math::XYZ);
 	Quaternion <double> constOri (constOriM); 
  
@@ -233,7 +233,7 @@ void lever_constraint (const Matrix4d& left, Matrix4d& right) {
 	right.block<4,1>(0,0) *= -1;
 	right.block<4,1>(0,2) *= -1;
 	right.topRightCorner<4,1>() += left.block<4,1>(0,2).normalized() * L8_Schunk;
-	right.topRightCorner<4,1>() += left.block<4,1>(0,1).normalized() * 0.20;
+	right.topRightCorner<4,1>() -= left.block<4,1>(0,1).normalized() * 0.20;
 }
 
 /* ********************************************************************************************** */
@@ -248,7 +248,7 @@ bool computeIK (Node& node, double phi) {
 
 	pv(node.left);
 	pmr(leftFrame);
-	wrench_constraint(leftFrame, rightFrame);
+	lever_constraint(leftFrame, rightFrame);
 	pmr(rightFrame);
 
 	// Get the relative goal
@@ -316,7 +316,7 @@ int main (int argc, char* argv[]) {
 	assert((computeIK(goal, 0.0)) && "Could not compute I.K. for the goal node");
 
 	// Create the fr-rrt planner
-	planner = new fr (world, r_id, start, goal, boxLift_err_ground, wrench_constraint);
+	planner = new fr (world, r_id, start, goal, boxLift_err_ground, lever_constraint);
 	
 	// Make the call
 	list <Node*> path;

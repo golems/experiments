@@ -25,7 +25,7 @@ bool fr::plan (std::list <Node*>& path) {
 
 	// Set the options
 	const double bias = 0.1;
-	const double goalRadiusSq = SQ(0.05);
+	const double goalRadiusSq = SQ(0.005);
 
 	// Sanity check start and goal configurations with the error bounds
 	epsilonSq = SQ(0.05);

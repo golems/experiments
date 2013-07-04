@@ -91,8 +91,8 @@ bool bothArmsIK (SkeletonDynamics* robot, const Matrix4d& Twee) {
 	// Get the end-effector goals for a specific task
 	Matrix4d TweeL = Twee, TweeR = Twee;
 	armGoalsLeverDown(Twee, TweeL, TweeR);
-	//pmr(TweeL);
-	//pmr(TweeR);
+	pmr(TweeL);
+	pmr(TweeR);
 
 	// Get the IK for the left arm
 	bool successL = singleArmIK(mWorld, robot, TweeL, false);
