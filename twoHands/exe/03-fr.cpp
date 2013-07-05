@@ -285,8 +285,9 @@ double start_goals [][7] = {
 	{ 1.15765 ,   -1.58036 ,   -1.57499 ,   0.959028, -0.00736767 ,   -1.35574 ,   -1.56166},
 	{1.77443, -1.76594,  1.61081,  1.29396, -2.99145, -1.27951,  1.84021}, 
 	{1.53664,  -1.7507,  1.56468, 0.886069, -3.01066, -1.45379,  1.50574},
-	{0.490885,  -1.28308,  -2.87051, 2.03524,   -0.186148,  -1.68552,   1.11042},
-	{0.410602, -1.7016, 3.07435, 1.54679, -0.343525, -1.69399, 0.463153}
+	{0.490885,  -1.28308,  -2.87051, 2.03524,   -0.186148,  -1.68552,   1.11042}, // lever start: 80
+	{0.410602, -1.7016, 3.07435, 1.54679, -0.343525, -1.69399, 0.463153}  // lever goal: 25
+//	{0.507678, -1.38226, -2.93301, 1.95762, -0.21144, -1.7176, 0.980887} // lever goal: 70
  };
 
 /* ********************************************************************************************** */
@@ -312,8 +313,8 @@ int main (int argc, char* argv[]) {
 	}
 	
 	// Perform I.K. for the start/goal nodes
-	assert((computeIK(start, 0.0)) && "Could not compute I.K. for the start node");
-	assert((computeIK(goal, 0.0)) && "Could not compute I.K. for the goal node");
+	assert((computeIK(start, 1.22173)) && "Could not compute I.K. for the start node");
+	assert((computeIK(goal, 0.174533)) && "Could not compute I.K. for the goal node");
 
 	// Create the fr-rrt planner
 	planner = new fr (world, r_id, start, goal, boxLift_err_ground, lever_constraint);

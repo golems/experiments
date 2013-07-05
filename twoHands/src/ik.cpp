@@ -25,7 +25,7 @@ bool singleArmIK (World* mWorld, SkeletonDynamics* robot, const Matrix4d& Twee, 
 	// Compute the inverse kinematics taking into account collisions
 	Matrix <double, 7, 1> theta;	
 	bool success = false;
-	double phi = rightArm ? 180.0 : 0.0;
+	double phi = rightArm ? 0.0 : 0.0;
 	size_t div = 180;
 	for(int i = 0; i < div; i++, phi += (2 * M_PI)/div) {
 
@@ -63,8 +63,9 @@ bool singleArmIK (World* mWorld, SkeletonDynamics* robot, const Matrix4d& Twee, 
 				success = true;
 				vector <int> bla; for(size_t i = 0; i < 24; i++) bla.push_back(i);
 				cout << "q: " << robot->getConfig(bla).transpose() << endl;
-				//printf("%s: ", rightArm ? "Right" : "Left");
+				printf("%s: ", rightArm ? "Right" : "Left");
 				pmr((robot->getNode(rightArm ? "rGripper" : "lGripper")->getWorldTransform()));
+				cout << "at phi : " << phi << endl;
 				//pv(theta);
 				break;
 			}

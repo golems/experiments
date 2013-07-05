@@ -14,9 +14,9 @@
 #include "fr.h"
 #include <fstream>
 
-#define MAX_NUM_NODES ((int) (1e5))
-#define MAX_NUM_PHIS 32
-#define PHI_RANGE (0.0 * M_PI / 180.0)
+#define MAX_NUM_NODES ((int) (3e3)) // ((1e5))
+#define MAX_NUM_PHIS 128 
+#define PHI_RANGE (30.0 * M_PI / 180.0)
 
 using namespace std;
 
@@ -25,10 +25,10 @@ bool fr::plan (std::list <Node*>& path) {
 
 	// Set the options
 	const double bias = 0.1;
-	const double goalRadiusSq = SQ(0.005);
+	const double goalRadiusSq = SQ(0.05);//SQ(0.005);
 
 	// Sanity check start and goal configurations with the error bounds
-	epsilonSq = SQ(0.05);
+	epsilonSq = SQ(0.5);//SQ(0.05)
 	Vector6d errorStart, errorGoal;
 	task_error(start.left, errorStart);
 	task_error(goal.left, errorGoal);
@@ -68,9 +68,8 @@ bool fr::plan (std::list <Node*>& path) {
 		if(!result) continue;
 
 		// Perform I.K. for the right arm and get the phi value. If not possible, repeat.
-		if(twoHands && !ikRight(nodes[nearest_id], newNode)) {
+		if(twoHands && !ikRight(nodes[nearest_id], newNode)) 
 			continue;
-		}
 
 		// Add to the tree
 		nodes[numNodes] = newNode;
@@ -110,8 +109,7 @@ bool fr::ikRight (const Node& nearestNode, Node& newNode) {
 	if(debug) pv(matToVec(leftFrame));
 	static Matrix4d rightFrame;
 	twoHandConstraint(leftFrame, rightFrame);
-	if(debug) pv(matToVec(rightFrame));
-	
+	if(debug) pv(matToVec(rightFrame));	
 	// Get the realtive goal
 	static Transform <double, 3, Affine> relGoal;
 	getWristInShoulder(robot, rightFrame, true, relGoal.matrix());
@@ -120,7 +118,7 @@ bool fr::ikRight (const Node& nearestNode, Node& newNode) {
 	Matrix <double, 7, 1> theta;	
 	for(size_t phi_idx = 0; phi_idx < MAX_NUM_PHIS; phi_idx++) {
 
-		// Select a phi
+		// Select a phi
 		double phi = nearestNode.phi + PHI_RANGE * ((((double) rand()) / RAND_MAX) - 0.5);
 		if(debug) cout << "trying phi: " << phi << endl;
 
@@ -133,12 +131,12 @@ bool fr::ikRight (const Node& nearestNode, Node& newNode) {
 			for(size_t i = 4; i < 17; i+=2) arm_ids.push_back(i + 6 + 1);  
 			robot->setConfig(arm_ids, theta);
 			bool collision = world->checkCollision(false);
-			if(collision) continue;
+			if(collision) continue; 
 
 			// Check if the right arm configuration is too far from nearest
 			Vector7d diff = theta - nearestNode.right;
 			double maxDiff = diff.lpNorm<Infinity>();
-			if(maxDiff > 0.5) continue;
+			if(maxDiff > 0.5) continue; 
 
 			// Add the node if no problems
 			newNode.phi = phi;
@@ -208,7 +206,7 @@ inline bool fr::constrainedLeft (const Vector7d& nearest, const Vector7d& target
 	dir /= distance;
 
 	// First create a sample by extending towards the target, ignoring the constraint	
-	const double deltaT = 0.001;
+	const double deltaT = 0.1; // 0.001
 	if(distance < deltaT) left = target;
 	else left = nearest + deltaT * dir;
 
