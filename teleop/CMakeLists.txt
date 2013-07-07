@@ -1,8 +1,8 @@
-# @author Can Erdogan
-# @date May 23, 2013
+# @author Jon Scholz
+# @date June 07, 2013
 
 cmake_minimum_required(VERSION 2.6)
-project(grippers)
+project(teleop)
 
 # ================================================================================================
 # Macro to check if a set has a particular value
@@ -34,7 +34,11 @@ endif()
 #link_libraries(amino protobuf-c ach ntcan ntcanopen filter pcio somatic stdc++)
 
 # Include Eigen
-include_directories(/usr/local/include/eigen3)
+#include_directories(/usr/local/include/eigen3)
+#list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+#find_package(Eigen3 REQUIRED)
+#include_directories(EIGEN3_INCLUDE_DIR)
+include_directories(/usr/include/eigen3)
 
 # Include the common directory of the experiments
 include_directories(../common/)
