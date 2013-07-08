@@ -4,19 +4,6 @@
 cmake_minimum_required(VERSION 2.6)
 project(balancing)
 
-# ================================================================================================
-# Macro to check if a set has a particular value
-
-MACRO(LIST_CONTAINS var value)
-  SET(${var})
-  FOREACH (value2 ${ARGN})
-    IF (${value} STREQUAL ${value2})
-      SET(${var} TRUE)
-    ENDIF (${value} STREQUAL ${value2})
-  ENDFOREACH (value2)
-ENDMACRO(LIST_CONTAINS)
-# ================================================================================================
-
 # Set the top level directory for use in the code
 add_definitions(-DTOP_LEVEL_PATH="${CMAKE_SOURCE_DIR}")
 
@@ -38,7 +25,7 @@ include_directories(/usr/local/include)
 include_directories(/usr/local/include/eigen3)
 
 # Include the project files
-include_directories(include)
+include_directories(src)
 include_directories(../common)
 
 # Collect the source, script and fortran files
@@ -55,14 +42,7 @@ foreach(script_src_file ${scripts_source})
 	get_filename_component(script_base ${script_src_file} NAME_WE)
 	message(STATUS "Adding script ${script_src_file} with base name ${script_base}" )
 	add_executable(${script_base} ${script_src_file})
-	
-	# Check if the target needs to be linked against the main library
-	LIST_CONTAINS(contains ${script_base} ${MainDependents})
-	if(contains)
-		target_link_libraries(${script_base} Main) 
-	endif(contains)
-
-	# Add the custom target so you can call "make name.run" and both compile and run the code
+	target_link_libraries(${script_base} Main) 
 	add_custom_target(${script_base}.run ${script_base} ${ARGN})
 endforeach(script_src_file)
 message(STATUS " ")

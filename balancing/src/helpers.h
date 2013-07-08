@@ -35,4 +35,5 @@
 void filterState(double dt, filter_kalman_t *kf, Eigen::VectorXd& q, Eigen::VectorXd& dq);
 
 /// Reads imu values from the ach channels and computes the imu values
-void getImu(double& _imu, double& _imuSpeed); 
+void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt, 
+		filter_kalman_t* kf);

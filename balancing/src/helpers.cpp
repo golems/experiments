@@ -7,6 +7,30 @@
 
 #include "helpers.h"
 
+/* ********************************************************************************************* *
+/// Gets initial wheel positions to be subtracted from all subsequent readings. This is because
+/// the initial values are to be treated as zeros.
+void getWheelInitial(double* _wheelInitial[]) {
+	
+	// Get the time to get the sensor values by
+	struct timespec currTime;
+	clock_gettime(CLOCK_MONOTONIC, &currTime);
+	struct timespec abstime = aa_tm_add(aa_tm_sec2timespec(1.0/30.0), currTime);
+	
+	// Reads amc position from the amc state channel
+	Somatic__MotorState* amc; int r;
+	assert(((amc = getMotorMessage(amcChan)) != NULL) && "Wheels call failed");
+
+	// Get imu position
+	double imu, imuSpeed;
+	getImu(imu, imuSpeed);
+
+	// Store in amcOffset the sum of amc-encoders and imu value. This is done to compensate for the
+	// effect of imu rotation in encoder readings.
+	*_wheelInitial[0] = amc->position->data[0]+imu;
+	*_wheelInitial[1] = amc->position->data[1]+imu;
+}
+
 /* ********************************************************************************************* */
 /// Filters the imu, wheel and waist readings 
 void filterState (double dt, filter_kalman_t* kf, Eigen::VectorXd& q, Eigen::VectorXd& dq) {
@@ -19,11 +43,13 @@ void filterState (double dt, filter_kalman_t* kf, Eigen::VectorXd& q, Eigen::Vec
 	if(firstIteration) { memcpy(kf->x, kf->z, sizeof(double)*8); firstIteration=0;}
 
 	double T = dt; // second
+
 	// Process matrix - fill every 9th value to 1 and every 18th starting from 8 to T.
 	for(size_t i = 0; i < 64; i += 9)
 		kf->A[i] = 1.0;
 	for(size_t i = 8; i < 64; i += 18)
 		kf->A[i] = T;
+
 	// Process noise covariance matrix
 	const double k1 = 2.0;
 	const double k1b = 5.0;
@@ -45,9 +71,11 @@ void filterState (double dt, filter_kalman_t* kf, Eigen::VectorXd& q, Eigen::Vec
 	kf->R[55] = (T*T*T)*k3*(1.0/2.0);
 	kf->R[62] = (T*T*T)*k3*(1.0/2.0);
 	kf->R[63] = (T*T)*k3;
+
 	// Measurement matrix - fill every 9th value to 1
 	for(size_t i = 0; i < 64; i += 9)
 		kf->C[i] = 1.0;
+
 	// Measurement noise covariance matrix
 	double imuCov = 1e-3;	//1e-3
 	kf->Q[0] = imuCov;	// IMU
@@ -69,7 +97,11 @@ void filterState (double dt, filter_kalman_t* kf, Eigen::VectorXd& q, Eigen::Vec
 
 /* ********************************************************************************************* */
 /// Computes the imu value from the imu readings
-void getImu (double& _imu, double& _imuSpeed) {
+void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt, 
+		filter_kalman_t* kf) {
+
+	// ======================================================================
+	// Get the readings
 
 	// Get the value
 	int r;
@@ -77,26 +109,40 @@ void getImu (double& _imu, double& _imuSpeed) {
 	clock_gettime(CLOCK_MONOTONIC, &currTime);
 	struct timespec abstime = aa_tm_add(aa_tm_sec2timespec(1.0/30.0), currTime);
 	Somatic__Vector *imu_msg = SOMATIC_WAIT_LAST_UNPACK(r, somatic__vector, 
-			&protobuf_c_system_allocator, IMU_CHANNEL_SIZE, &imuChan, &abstime );
+			&protobuf_c_system_allocator, IMU_CHANNEL_SIZE, imuChan, &abstime );
 	assert((imu_msg != NULL) && "Imu message is faulty!");
 
-	// Prepare the ssdmu structure 
-	ssdmu_sample_t imu_sample;
-	imu_sample.x  = imu_msg->data[0];
-	imu_sample.y  = imu_msg->data[1];
-	imu_sample.z  = imu_msg->data[2];
-	imu_sample.dP = imu_msg->data[3];
-	imu_sample.dQ = imu_msg->data[4];
-	imu_sample.dR = imu_msg->data[5];
+	// Get the imu position and velocity value from the readings (note imu mounted at 45 deg).
+	static const double mountAngle = -.7853981634;
+	double newX = imu_msg->data[0] * cos(mountAngle) - imu_msg->data[1] * sin(mountAngle);
+	_imu = atan2(newX, imu_msg->data[2]); 
+	_imuSpeed = imu_msg->data[3] * sin(mountAngle) + imu_msg->data[4] * cos(mountAngle);
 
 	// Free the unpacked message
 	somatic__vector__free_unpacked( imu_msg, &protobuf_c_system_allocator );
 
-	// Make the calls to extract the pitch and rate of extraction
-	_imu = ssdmu_pitch(&imu_sample); 
-	_imuSpeed = ssdmu_d_pitch(&imu_sample);
-				
+	// ======================================================================
+	// Filter the readings
+
+	// Setup the data
+	kf->z[0] = _imu, kf->z[1] = _imuSpeed;
+
+	// Setup the time-dependent process matrix
+	kf->A[0] = kf->A[3] = 1.0;
+	kf->A[2] = dt;
+
+	// Setup the process noise matrix
+	static const double k1 = 2.0;
+	static const double k1b = 5.0;
+	kf->R[0] = (dt*dt*dt*dt) * k1 * (1.0 / 4.0);
+	kf->R[1] = (dt*dt*dt) * k1 * (1.0 / 2.0);
+	kf->R[2] = (dt*dt*dt) * k1 * (1.0 / 2.0);
+	kf->R[3] = (dt*dt) * k1b;
+	
+	// First make a prediction of what the reading should have been, then correct it
+	filter_kalman_predict(kf);
+	filter_kalman_correct(kf);
+
+	// Set the values
+	_imu = kf->x[0], _imuSpeed = kf->x[1];
 }
-
-
-

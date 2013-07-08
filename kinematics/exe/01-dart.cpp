@@ -19,8 +19,11 @@ int main () {
 
 	// Create the world which has the robot definition
 	DartLoader dl;
-	simulation::World* world = dl.parseWorld("../../common/scenes/01-World-Robot.urdf");
+	simulation::World* world = dl.parseWorld("../../common/scenes/00-World-Test.urdf");
 	assert((world != NULL) && "Could not find the world");
+	std::cout << "com: " << world->getSkeleton(0)->getWorldCOM().transpose() << std::endl;
+
+	return 0 ;
 
 	// Get the robot pointer
 	dynamics::SkeletonDynamics* robot = world->getSkeleton(0);
