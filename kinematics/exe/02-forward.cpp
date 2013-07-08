@@ -2,7 +2,7 @@
  * @file forwardKinematics.cpp
  * @author Can Erdogan, Munzir Zafar
  * @date April 24, 2012
- * @briefs This file receives the position of the red dot detected from the
+ * @brief This file receives the position of the red dot detected from the
  * vision PC and predicts the loaction of the red dot by forward kinematics
  * and then compares the two to determine the accuracy of the forward 
  * kinematics.
