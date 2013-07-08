@@ -34,10 +34,12 @@ endif()
 link_libraries(amino protobuf-c ach ntcan ntcanopen ssdmu filter pcio somatic reflex stdc++ schkin)
 
 # Include Eigen
+include_directories(/usr/local/include)
 include_directories(/usr/local/include/eigen3)
 
 # Include the project files
 include_directories(include)
+include_directories(../common)
 
 # Collect the source, script and fortran files
 file(GLOB main_source "src/*.cpp" "src/*.c")

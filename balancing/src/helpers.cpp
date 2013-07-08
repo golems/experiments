@@ -5,22 +5,71 @@
  * @brief This file contains helper functions such as imu data retrieval and filtering...
  */
 
+#include "helpers.h"
+
 /* ********************************************************************************************* */
-/// Filters the imu (q2), wheel (q1_0 & q1_1) and waist (q3) position and velocities.
-void filterState (filter_kalman_t* kf, double& q1_0, double& dq1_0, double& q1_1, double& dq1_1, 
-		double& q2, double& dq2, double& q3, double& dq3) {
+/// Filters the imu, wheel and waist readings 
+void filterState (double dt, filter_kalman_t* kf, Eigen::VectorXd& q, Eigen::VectorXd& dq) {
 
 	// Set the data of the filter (note the wheel and imu positions are added).
-	kf->z[0] = q2; kf->z[1] = dq2;
-	kf->z[2] = q1_0 + q2; kf->z[3] = dq1_0 + dq2;
-	kf->z[4] = q1_1 + q2; kf->z[5] = dq1_1 + dq2;
-	kf->z[6] = q3; kf->z[7] = dq3;
+	for (int i = 0; i < 8; i++)  kf->z[i] = (i % 2) ? dq(5 + i/2) : q(5 + i/2);  
+	
+	// Filter the read values	
+	static bool firstIteration=1;
+	if(firstIteration) { memcpy(kf->x, kf->z, sizeof(double)*8); firstIteration=0;}
 
+	double T = dt; // second
+	// Process matrix - fill every 9th value to 1 and every 18th starting from 8 to T.
+	for(size_t i = 0; i < 64; i += 9)
+		kf->A[i] = 1.0;
+	for(size_t i = 8; i < 64; i += 18)
+		kf->A[i] = T;
+	// Process noise covariance matrix
+	const double k1 = 2.0;
+	const double k1b = 5.0;
+	const double k2 = 10.0;
+	const double k3 = 1.0;
+	kf->R[0] = (T*T*T*T)*k1*(1.0/4.0);
+	kf->R[1] = (T*T*T)*k1*(1.0/2.0);
+	kf->R[8] = (T*T*T)*k1*(1.0/2.0);
+	kf->R[9] = (T*T)*k1b;
+	kf->R[18] = (T*T*T*T)*k2*(1.0/4.0);
+	kf->R[19] = (T*T*T)*k2*(1.0/2.0);
+	kf->R[26] = (T*T*T)*k2*(1.0/2.0);
+	kf->R[27] = (T*T)*k2;
+	kf->R[36] = (T*T*T*T)*k2*(1.0/4.0);
+	kf->R[37] = (T*T*T)*k2*(1.0/2.0);
+	kf->R[44] = (T*T*T)*k2*(1.0/2.0);
+	kf->R[45] = (T*T)*k2;
+	kf->R[54] = (T*T*T*T)*k3*(1.0/4.0);
+	kf->R[55] = (T*T*T)*k3*(1.0/2.0);
+	kf->R[62] = (T*T*T)*k3*(1.0/2.0);
+	kf->R[63] = (T*T)*k3;
+	// Measurement matrix - fill every 9th value to 1
+	for(size_t i = 0; i < 64; i += 9)
+		kf->C[i] = 1.0;
+	// Measurement noise covariance matrix
+	double imuCov = 1e-3;	//1e-3
+	kf->Q[0] = imuCov;	// IMU
+	kf->Q[9] = imuCov;
+	kf->Q[18] = 0.0005; // AMC
+	kf->Q[27] = 0.02;
+	kf->Q[36] = 0.0005; // AMC
+	kf->Q[45] = 0.02;
+	kf->Q[54] = 0.05;   // Torso
+	kf->Q[63] = 0.001;
+
+	// Filter the noise	
+	filter_kalman_predict( kf );
+	filter_kalman_correct( kf );
+
+	// Save the output of the filter in the state structure
+	for( int i = 5, j = 0; i < 9; i++) { q(i) = kf->x[j++]; dq(i) = kf->x[j++]; }
 }
 
 /* ********************************************************************************************* */
 /// Computes the imu value from the imu readings
-double getImu () {
+void getImu (double& _imu, double& _imuSpeed) {
 
 	// Get the value
 	int r;
@@ -44,7 +93,9 @@ double getImu () {
 	somatic__vector__free_unpacked( imu_msg, &protobuf_c_system_allocator );
 
 	// Make the calls to extract the pitch and rate of extraction
-	return -ssdmu_pitch(&imu_sample) + M_PI_2;				 
+	_imu = ssdmu_pitch(&imu_sample); 
+	_imuSpeed = ssdmu_d_pitch(&imu_sample);
+				
 }
 
 
