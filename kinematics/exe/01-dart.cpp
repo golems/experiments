@@ -41,6 +41,8 @@ int main () {
 	kinematics::BodyNode* eeNode = robot->getNode("lGripper");
 
 	// Get the linear and angular jacobian of the left end-effector and print their sizes
+	// Note that because wheels in dart setup cannot affect the end-effector directly we have
+	// 24 - 7 (right arm) - 2 (wheels) = 15 dof in the jacobians.
 	Eigen::MatrixXd Jlin = eeNode->getJacobianLinear();
 	Eigen::MatrixXd Jang = eeNode->getJacobianAngular();
 	printf("\nJlin size: (%d, %d)\n", Jlin.rows(), Jlin.cols());

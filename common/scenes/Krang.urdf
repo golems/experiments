@@ -355,12 +355,12 @@
 		<axis xyz="0 0 -1" /> <limit effort="1000" lower="-3.1416" upper="3.1416" velocity="0.1" />
 	</joint>
 
-	<joint name="LMotorPlate1" type="prismatic"> <parent link="lGripper" /> <child link="lgPlate1" />
+	<joint name="LMotorPlate1" type="fixed"> <parent link="lGripper" /> <child link="lgPlate1" />
 		<origin xyz="-0.045 0.0 0.127" rpy="3.1416 0 0" />
 		<axis xyz="1 0 0" /> <limit effort="1000" lower="0.0" upper="0.022" velocity="0.1" />
 	</joint>
 
-	<joint name="LMotorPlate2" type="prismatic"> <parent link="lGripper" /> <child link="lgPlate2" />
+	<joint name="LMotorPlate2" type="fixed"> <parent link="lGripper" /> <child link="lgPlate2" />
 		<origin xyz="0.045 0.000 0.127" rpy="3.1416 0 3.1416" />
 		<axis xyz="1 0 0" /> <limit effort="1000" lower="0.0" upper="0.022" velocity="0.1" />
 	</joint>
