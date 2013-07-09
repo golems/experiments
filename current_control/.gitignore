@@ -1,0 +1,15 @@
+ToDo
+*.swo
+/build
+*.o
+.*.swp
+*.deb
+/debian
+/src/krang_arm.f
+/krangdfa.png
+/.deps
+/krang.dot
+/krang_dfa
+/src/krang_com.f
+/build/krang_dfa
+/build/krang-balance-hack
