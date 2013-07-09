@@ -3,6 +3,8 @@
 <!-- @author Can Erdogan -->
 <!-- @date May 10, 2013 -->
 <!-- @brief This file contains the .urdf definition for Krang. -->
+<!-- NOTE: The center of mass locations are taken from the MassTable by summing up the -->
+<!-- individual part values for the sections (which correspond to nodes here). -->
 <!-- TODO: Set the center of mass locations -->
 <!-- TODO: Set the correct masses. Note that the dae models have the brackets divided in two and -->
 <!-- connected to the middle motor for which we do not have measurements. -->
@@ -36,7 +38,7 @@
     <inertial>
       <mass value="86.5"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0"/>
+      <origin xyz="-0.00336451 0.107572 -0.00636184"/>
     </inertial>
 		<visual> <geometry> <mesh filename="base.dae" /> </geometry> </visual> 
 		<collision> 
@@ -51,7 +53,8 @@
     <inertial>
       <mass value="6.547"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0"/>
+			<!-- an offset of -0.02937 is added due to bad dae file and to align with base com -->
+      <origin xyz="-0.02937 0.178181 0.0917438"/>
     </inertial>
 		<visual> <geometry> <mesh filename="spine.dae" /> </geometry> </visual> 
 		<collision> 
@@ -66,7 +69,8 @@
     <inertial>
       <mass value="3.11"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0"/>
+			<!-- offseted with 0.0827 because the origin of the bracket is at the bottom -->
+      <origin xyz="0 0.07747 0.000158"/>
     </inertial>
 		<visual> <geometry> <mesh filename="bracket.dae" /> </geometry> </visual> 
 		<collision> 
@@ -81,7 +85,7 @@
     <inertial>
       <mass value="3.28"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0"/>
+      <origin xyz="0.0063626 -0.00725706 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L1.dae" /> </geometry> </visual> 
 		<collision> 
@@ -96,7 +100,7 @@
     <inertial>
       <mass value="3.76"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0"/>
+      <origin xyz="0.0101136 -0.15332 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L2.dae" /> </geometry> </visual> 
 		<collision> 
