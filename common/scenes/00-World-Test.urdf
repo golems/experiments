@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<world name="testWorld">
+	<include filename="testObject.urdf" model_name="object"/>
+	<entity model="object" name="Object"> <origin xyz="0 0 0.3" rpy="0 0 0"/> </entity>  
+</world> 

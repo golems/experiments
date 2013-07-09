@@ -178,7 +178,7 @@ void init() {
 
 	// Load the world
 	DartLoader dl;
-	mWorld = dl.parseWorld("../scenes/02-World-JInv.urdf");
+	mWorld = dl.parseWorld("../../common/scenes/02-World-JInv.urdf");
 	assert((mWorld != NULL) && "Could not find the world");
 
 	// ============================================================================
