@@ -16,6 +16,15 @@ if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
   message(FATAL_ERROR "In-source builds are not allowed. You may need to remove CMakeCache.txt.")
 endif()
 
+# Set the mass table path
+set(massTablePathVal "/home/cerdogan/Documents/Krang/Documentation/Design/Mass\ Table/MassProp.table" 
+	CACHE STRING "Path to the mass table in your system - should be in doc/krang.git/design/mass table")
+add_definitions(-DMASS_TABLE_PATH="${massTablePathVal}")
+
+
+# ================================================================================================
+# Include and link to libraries
+
 # Include Dart and Grip stuff
 include(simulation.cmake)
 
@@ -27,6 +36,9 @@ link_libraries(amino ntcan protobuf-c ach somatic stdc++ filter pcio)
 # Include Eigen
 include_directories(/usr/include/eigen3)
 include_directories(/usr/local/include/eigen3)
+
+# ================================================================================================
+# Build the codebase library and the executables
 
 # Include the project files
 include_directories(src)
