@@ -8,6 +8,7 @@ project(balancing)
 add_definitions(-DTOP_LEVEL_PATH="${CMAKE_SOURCE_DIR}")
 
 # Set the C99 standard for the C files
+set(CMAKE_INSTALL_PREFIX /usr)
 set(CMAKE_C_FLAGS --std=gnu99)
 
 # Guard against in-source builds
@@ -15,13 +16,16 @@ if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
   message(FATAL_ERROR "In-source builds are not allowed. You may need to remove CMakeCache.txt.")
 endif()
 
+# Include Dart and Grip stuff
+include(simulation.cmake)
+
 # Link to somatic, amino and ach
 # NOTE: Ideally we would like to 'find' these packages but for now, we assume they are either 
 # in /usr/lib or /usr/local/lib
-link_libraries(amino protobuf-c ach ntcan ntcanopen ssdmu filter pcio somatic reflex stdc++ schkin)
+link_libraries(amino ntcan protobuf-c ach somatic stdc++ filter pcio)
 
 # Include Eigen
-include_directories(/usr/local/include)
+include_directories(/usr/include/eigen3)
 include_directories(/usr/local/include/eigen3)
 
 # Include the project files
@@ -43,6 +47,8 @@ foreach(script_src_file ${scripts_source})
 	message(STATUS "Adding script ${script_src_file} with base name ${script_base}" )
 	add_executable(${script_base} ${script_src_file})
 	target_link_libraries(${script_base} Main) 
+	target_link_libraries(${script_base} ${GRIP_LIBRARIES} ${DART_LIBRARIES} ${DARTExt_LIBRARIES} ${wxWidgets_LIBRARIES}) 
 	add_custom_target(${script_base}.run ${script_base} ${ARGN})
 endforeach(script_src_file)
 message(STATUS " ")
+

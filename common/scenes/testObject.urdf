@@ -1,12 +1,14 @@
 <?xml version="1.0"?>
 <robot name="cylinder">
-  <link name="base_link">
+
+	<link name = "Base"> 
     <inertial>
-      <mass value="4.66"/>
-      <inertia ixx="0.10" ixy="2.4-05" ixz="0.0071" iyy="0.08" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0.0"/>
+      <mass value="1086.5"/>
+      <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
+      <origin xyz="0.2 0.1 0.1"/>
     </inertial>
-		<visual> <origin xyz="0.0 -0.0 0.02615" rpy="0.0 0.0 1.5708"/> <geometry> <box size="0.08 0.112 0.2025"/> </geometry> </visual> 
-		<collision> <origin xyz="0.0 -0.0 0.02615" rpy="0.0 0.0 1.5708"/> <geometry> <box size="0.08 0.112 0.2025"/> </geometry> </collision> 
-  </link>
+		<visual> <geometry> <mesh filename="Spine/Tube.dae" /> </geometry> </visual> 
+	</link>
+
+
 </robot>

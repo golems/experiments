@@ -17,7 +17,7 @@ endif()
 include(simulation.cmake)
 
 # Link to the timing library
-link_libraries(timing)
+# link_libraries(timing)
 
 # Link to somatic, amino and ach
 # NOTE: Ideally we would like to 'find' these packages but for now, we assume they are either 
