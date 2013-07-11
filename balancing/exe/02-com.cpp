@@ -1,5 +1,5 @@
 /**
- * @file 01-com.cpp
+ * @file 02-com.cpp
  * @author Can Erdogan, Peng Hou, Munzir Zafar
  * @date July 08, 2013
  * @brief This executable shows how to estimate the center of mass of the Krang and visualizes

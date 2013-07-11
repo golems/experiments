@@ -1,3 +1,12 @@
+/**
+ * @file 01-single-module.cpp
+ * @author Saul Reynolds-Haertle, Stewart Butler
+ * @date 2013-07-09
+ * @briefs This executable demonstrates simple current control of a
+ * single schunk module. It uses a pid controller to achieve positions
+ * and velocities and includes a curses UI for tuning gains easily.
+ */
+
 #include "helpers.h"
 #include "initModules.h"
 #include "motion.h"
