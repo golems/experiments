@@ -18,10 +18,10 @@
 #include <iomanip>
 #include <cmath>
 
+#include "current_control.cpp"
+
 // ################################################################################
 // constants
-
-#define PID_ERROR_WINDOW_SIZE 30
 
 bool do_curses = true;
 
@@ -46,23 +46,6 @@ typedef enum {
     JOYSTICK_CONTROLLING_RIGHT_SMALL,
     JOYSTICK_CONTROLLING_RIGHT_LARGE
 } joystick_controlling_t;
-
-typedef struct {
-    bool use_pos;
-    bool use_vel;
-
-    double pos_target;
-    double vel_target;
-
-    double K_p_p;
-    double K_p_d;
-    double K_v_p;
-    double K_v_d;
-    double pos_error_last;
-    double vel_error_last;
-    double pos_error_window[PID_ERROR_WINDOW_SIZE];
-    double vel_error_window[PID_ERROR_WINDOW_SIZE];
-} pid_state_t;
 
 // ################################################################################
 // global variables
@@ -255,6 +238,7 @@ int do_joystick(pid_state_t* lpids, pid_state_t* rpids) {
         js_controlling = JOYSTICK_CONTROLLING_RIGHT_LARGE;
     }
 
+    // and do stuff
     if (js_msg->buttons->data[1] && !last_js_msg->buttons->data[1]) {
         for (int i = 0; i < 7; i++) { lpids[i].K_v_p -= .1; rpids[i].K_v_p -= .1; }
     }
@@ -267,11 +251,6 @@ int do_joystick(pid_state_t* lpids, pid_state_t* rpids) {
     if (js_msg->buttons->data[2] && !last_js_msg->buttons->data[2]) {
         for (int i = 0; i < 7; i++) { lpids[i].K_v_d += .01; rpids[i].K_v_d += .01; }
     }
-
-    // if (js_msg->buttons->data[1] && !last_js_msg->buttons->data[1]) { for(int i = 0; i < 7; i++) K_v_p[i] -= .1; } // minus gains
-    // if (js_msg->buttons->data[3] && !last_js_msg->buttons->data[3]) { for(int i = 0; i < 7; i++) K_v_p[i] += .1; } // plus gains
-    // if (js_msg->buttons->data[0] && !last_js_msg->buttons->data[0]) { for(int i = 0; i < 7; i++) K_v_d[i] -= .01; } // minus gains
-    // if (js_msg->buttons->data[2] && !last_js_msg->buttons->data[2]) { for(int i = 0; i < 7; i++) K_v_d[i] += .01; } // plus gains
 
     if (js_msg->buttons->data[8] && !last_js_msg->buttons->data[8]) { // brakes!
         halted = !halted;
@@ -286,7 +265,6 @@ int do_joystick(pid_state_t* lpids, pid_state_t* rpids) {
     }
     if (js_msg->buttons->data[9] && !last_js_msg->buttons->data[9]) { somatic_sig_received = true; } // quit
 
-    // do what we want with the joystick message
     switch(js_controlling) {
     case JOYSTICK_CONTROLLING_LEFT_SMALL:
         for(int i = 0; i < 3; i++) {
@@ -322,60 +300,6 @@ int do_joystick(pid_state_t* lpids, pid_state_t* rpids) {
     last_js_msg = js_msg;
 
     return 0;
-}
-
-void do_init_pids(somatic_motor_t* mot, pid_state_t* pids) {
-    for(int i = 0; i < mot->n; i++) {
-        pids[i].use_pos = use_pos[i];
-        pids[i].use_vel = use_vel[i];
-        pids[i].pos_target = 0.0;
-        pids[i].vel_target = 0.0;
-        pids[i].pos_error_last = 0.0;
-        pids[i].vel_error_last = 0.0;
-        for(int j = 0; j < PID_ERROR_WINDOW_SIZE; j++) pids[i].pos_error_window[j] = 0.0;
-        for(int j = 0; j < PID_ERROR_WINDOW_SIZE; j++) pids[i].vel_error_window[j] = 0.0;
-        pids[i].pos_target = mot->pos[i];
-        
-        pids[i].K_p_p = init_K_p_p[i];
-        pids[i].K_p_d = init_K_p_d[i];
-        pids[i].K_v_p = init_K_v_p[i];
-        pids[i].K_v_d = init_K_v_d[i];
-    }
-}
-
-void update_pids(somatic_motor_t* mot, pid_state_t* pids, double* result) {
-    double p_p_value;
-    double p_d_value;
-    double v_p_value;
-    double v_d_value;
-
-    double pos_error;
-    double vel_error;
-
-    for(int i = 0; i < mot->n; i++) {
-        result[i] = 0;
-
-        if(pids[i].use_pos) {
-            pos_error = pids[i].pos_target - mot->pos[i];
-
-            p_p_value = pids[i].K_p_p * pos_error;
-            p_d_value = pids[i].K_p_d * (pos_error - pids[i].pos_error_last);
-
-            result[i] += p_p_value + p_d_value;
-
-            pids[i].pos_error_last = pos_error;
-        }
-        if (pids[i].use_vel) {
-            vel_error = pids[i].vel_target - mot->vel[i];
-
-            v_p_value = pids[i].K_v_p * vel_error;
-            v_d_value = pids[i].K_v_d * (vel_error - pids[i].vel_error_last);
-
-            result[i] += v_p_value + v_d_value;
-
-            pids[i].vel_error_last = vel_error;
-        }
-    }
 }
 
 // ################################################################################
@@ -422,6 +346,21 @@ int main( int argc, char **argv ) {
     somatic_motor_update(&daemon_cx, &rlwa);
     do_init_pids(&llwa, lpids);
     do_init_pids(&rlwa, rpids);
+    for(int i = 0; i < 7; i++) {
+        lpids[i].K_p_p = init_K_p_p[i];
+        lpids[i].K_p_d = init_K_p_d[i];
+        lpids[i].K_v_p = init_K_v_p[i];
+        lpids[i].K_v_d = init_K_v_d[i];
+        lpids[i].use_pos = use_pos[i];
+        lpids[i].use_vel = use_vel[i];
+        rpids[i].K_p_p = init_K_p_p[i];
+        rpids[i].K_p_d = init_K_p_d[i];
+        rpids[i].K_v_p = init_K_v_p[i];
+        rpids[i].K_v_d = init_K_v_d[i];
+        rpids[i].use_pos = use_pos[i];
+        rpids[i].use_vel = use_vel[i];
+    }
+
 
     // main loop
     while(!somatic_sig_received) {
