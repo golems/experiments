@@ -33,9 +33,6 @@ double init_K_p_d[] = {0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0};
 double init_K_v_p[] = {1.0,   1.0,  1.0,  1.0,  1.0,  1.0,  1.0};
 double init_K_v_d[] = {0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0};
 
-// double init_pos_limits[] = {2*M_PI/3, 2*M_PI/3, 2*M_PI/3, 2*M_PI/3, 2*M_PI/3, 2*M_PI/3, 2*M_PI/3};
-// double init_vel_limits[] = {1.0,      1.0,      1.0,      1.0,      1.0,      1.0,      1.0};
-
 double joint_vel_command_scale = 1.0;
 double joint_cur_command_scale = 8.0;
 
@@ -56,9 +53,6 @@ typedef struct {
 
     double pos_target;
     double vel_target;
-
-    // double pos_limit;
-    // double vel_limit;
 
     double K_p_p;
     double K_p_d;
@@ -346,9 +340,6 @@ void do_init_pids(somatic_motor_t* mot, pid_state_t* pids) {
         pids[i].K_p_d = init_K_p_d[i];
         pids[i].K_v_p = init_K_v_p[i];
         pids[i].K_v_d = init_K_v_d[i];
-
-        // pids[i].pos_limit = init_pos_limits[i];
-        // pids[i].vel_limit = init_vel_limits[i];
     }
 }
 
@@ -363,13 +354,6 @@ void update_pids(somatic_motor_t* mot, pid_state_t* pids, double* result) {
 
     for(int i = 0; i < mot->n; i++) {
         result[i] = 0;
-
-        // if (fabs(pids[i].pos_target) > fabs(pids[i].pos_limit)) {
-        //     pids[i].pos_target = copysign(pids[i].pos_limit, pids[i].pos_target);
-        // }
-        // if (fabs(pids[i].vel_target) > fabs(pids[i].vel_limit)) {
-        //     pids[i].vel_target = copysign(pids[i].vel_limit, pids[i].vel_target);
-        // }
 
         if(pids[i].use_pos) {
             pos_error = pids[i].pos_target - mot->pos[i];
