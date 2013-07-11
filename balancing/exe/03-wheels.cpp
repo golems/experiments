@@ -31,7 +31,7 @@ typedef Vector4d State;								///< The pos/vel of the left/right wheels: qL, qR
 void updateReference (double js_forw, double js_spin, double dt, Vector4d& refState) {
 
 	// Set the velocities taking into account the forward and spin axis values
-	static const double kMaxForwVel = 2.0, kMaxSpinVel = 2.0;
+	static const double kMaxForwVel = 2.0, kMaxSpinVel = 3.0;
 	refState(2) = kMaxForwVel * js_forw + kMaxSpinVel * js_spin;
 	refState(3) = kMaxForwVel * js_forw - kMaxSpinVel * js_spin;
 
@@ -51,7 +51,7 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 	if(!(ACH_OK == r || ACH_MISSED_FRAME == r) || (js_msg == NULL)) return false;
 
 	// Set the values for the axis
-	js_forw = js_msg->axes->data[1];
+	js_forw = -js_msg->axes->data[1];
 	js_spin = js_msg->axes->data[2];
 	return true;
 }
@@ -70,11 +70,13 @@ void run() {
 	Vector4d refState, state;
 
 	// Unless an interrupt or terminate message is received, process the new message
+	cout << "start..." << endl;
 	size_t c_ = 0;
 	struct timespec t_now, t_prev = aa_tm_now();
 	while(!somatic_sig_received) {
 
-		bool debug = (c_++ % 10 == 0);
+		bool debug = (c_++ % 1 == 0);
+		debug = false;
 
 		// Get the current time and compute the time difference and update the prev. time
 		t_now = aa_tm_now();						
@@ -97,7 +99,7 @@ void run() {
 		if(debug) cout << "refState:" << refState.transpose() << endl;
 		
 		// Compute the necessary current inputs to the wheels with the current and reference states
-		static const double Kp = 0.0, Kd = 20.0; 
+		static const double Kp = 0.0, Kd = 10.0; 
 		double u [2];
 		u[0] = -Kp * (state(0) - refState(0)) -Kd * (state(2) - refState(2));
 		u[1] = -Kp * (state(1) - refState(1)) -Kd * (state(3) - refState(3));
@@ -105,7 +107,6 @@ void run() {
 
 		// Set the motor velocities
 		somatic_motor_cmd(&daemon_cx, &amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, u, 2, NULL);
-		usleep(1e3);
 	}
 
 	// Send the stoppig event
