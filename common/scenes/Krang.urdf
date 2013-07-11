@@ -3,6 +3,8 @@
 <!-- @author Can Erdogan -->
 <!-- @date May 10, 2013 -->
 <!-- @brief This file contains the .urdf definition for Krang. -->
+<!-- NOTE: The center of mass locations are taken from the MassTable by summing up the -->
+<!-- individual part values for the sections (which correspond to nodes here). -->
 <!-- TODO: Set the center of mass locations -->
 <!-- TODO: Set the correct masses. Note that the dae models have the brackets divided in two and -->
 <!-- connected to the middle motor for which we do not have measurements. -->
@@ -34,9 +36,9 @@
 
 	<link name = "Base"> 
     <inertial>
-      <mass value="86.5"/>
+      <mass value="81.856"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0"/>
+      <origin xyz="-0.00336451 0.107572 -0.00636184"/>
     </inertial>
 		<visual> <geometry> <mesh filename="base.dae" /> </geometry> </visual> 
 		<collision> 
@@ -49,9 +51,10 @@
 
 	<link name = "Spine"> 
     <inertial>
-      <mass value="6.547"/>
+      <mass value="7.022"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0"/>
+			<!-- an offset of -0.02937 is added due to bad dae file and to align with base com -->
+      <origin xyz="-0.02937 0.178181 0.0917438"/>
     </inertial>
 		<visual> <geometry> <mesh filename="spine.dae" /> </geometry> </visual> 
 		<collision> 
@@ -64,24 +67,40 @@
 
 	<link name = "Bracket"> 
     <inertial>
-      <mass value="3.11"/>
+      <mass value="10.17"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0"/>
+			<!-- offseted with 0.0827 because the origin of the bracket is at the bottom -->
+      <origin xyz="0 0.080606 -0.00314267"/>
     </inertial>
 		<visual> <geometry> <mesh filename="bracket.dae" /> </geometry> </visual> 
 		<collision> 
-			<origin xyz="0.0012875 0.0971525 -0.0280530"/>
+			<origin xyz="0.0012875 0.0582 -0.0280530"/>
       <geometry>
-        <box size="0.2815 0.30791 0.22611"/>
+        <box size="0.2815 0.23 0.22611"/>
+      </geometry>
+		</collision> 
+	</link>
+
+	<link name = "Kinect"> 
+    <inertial>
+      <mass value="0.705"/>
+      <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
+      <origin xyz="0.0 -0.04 -0.028"/>
+    </inertial>
+		<visual> <geometry> <mesh filename="Kinect/Kinect.dae" /> </geometry> </visual> 
+		<collision> 
+			<origin xyz="0.0 -0.0251 -0.0185"/>
+      <geometry>
+        <box size="0.28 0.07 0.063"/>
       </geometry>
 		</collision> 
 	</link>
 
 	<link name = "L1"> 
     <inertial>
-      <mass value="3.28"/>
+      <mass value="3.836"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0"/>
+      <origin xyz="0.0063626 -0.00725706 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L1.dae" /> </geometry> </visual> 
 		<collision> 
@@ -94,9 +113,9 @@
 
 	<link name = "L2"> 
     <inertial>
-      <mass value="3.76"/>
+      <mass value="2.385"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0"/>
+      <origin xyz="0.0101136 -0.15332 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L2.dae" /> </geometry> </visual> 
 		<collision> 
@@ -109,9 +128,9 @@
 
 	<link name = "L3"> 
     <inertial>
-      <mass value="2.435"/>
+      <mass value="2.306"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0"/>
+      <origin xyz="0.0071222 -0.00803823 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L3.dae" /> </geometry> </visual> 
 		<collision> 
@@ -124,9 +143,9 @@
 
 	<link name = "L4"> 
     <inertial>
-      <mass value="2.356"/>
+      <mass value="1.477"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0"/>
+      <origin xyz="0.0115211 -0.1255 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L4.dae" /> </geometry> </visual> 
 		<collision> 
@@ -139,9 +158,9 @@
 
 	<link name = "L5"> 
     <inertial>
-      <mass value="1.517"/>
+      <mass value="1.369"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0"/>
+      <origin xyz="0.00705037 -0.00747172 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L5.dae" /> </geometry> </visual> 
 		<collision> 
@@ -154,9 +173,9 @@
 
 	<link name = "L6"> 
     <inertial>
-      <mass value="1.428"/>
+      <mass value="1.47"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0"/>
+      <origin xyz="0.0105523 -0.117163 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L6.dae" /> </geometry> </visual> 
 		<collision> 
@@ -169,9 +188,10 @@
 
 	<link name = "lGripper"> 
     <inertial>
-      <mass value="1.206"/>
+      <mass value="2.3"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0"/>
+			<!-- An addition of 4.05 cms from the end of Schunk gripper to space between two halves of ft -->
+      <origin xyz="0 0 0.1055"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L7.dae" /> </geometry> </visual> 
 		<collision> <origin xyz="0.0 -0.0 0.02615" rpy="0.0 0.0 1.5708"/> <geometry> <box size="0.08 0.112 0.2025"/> </geometry> </collision> 
@@ -187,9 +207,9 @@
 
 	<link name = "R1"> 
     <inertial>
-      <mass value="3.28"/>
+      <mass value="3.836"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0"/>
+      <origin xyz="0.0063626 -0.00725706 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L1.dae" /> </geometry> </visual> 
 		<collision> 
@@ -202,9 +222,9 @@
 
 	<link name = "R2"> 
     <inertial>
-      <mass value="3.76"/>
+      <mass value="2.385"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0"/>
+      <origin xyz="0.0101136 -0.15332 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L2.dae" /> </geometry> </visual> 
 		<collision> 
@@ -217,9 +237,9 @@
 
 	<link name = "R3"> 
     <inertial>
-      <mass value="2.435"/>
+      <mass value="2.306"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0"/>
+      <origin xyz="0.0071222 -0.00803823 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L3.dae" /> </geometry> </visual> 
 		<collision> 
@@ -232,9 +252,9 @@
 
 	<link name = "R4"> 
     <inertial>
-      <mass value="2.356"/>
+      <mass value="1.477"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0"/>
+      <origin xyz="0.0115211 -0.1255 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L4.dae" /> </geometry> </visual> 
 		<collision> 
@@ -247,9 +267,9 @@
 
 	<link name = "R5"> 
     <inertial>
-      <mass value="1.517"/>
+      <mass value="1.369"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0"/>
+      <origin xyz="0.00705037 -0.00747172 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L5.dae" /> </geometry> </visual> 
 		<collision> 
@@ -262,9 +282,9 @@
 
 	<link name = "R6"> 
     <inertial>
-      <mass value="1.428"/>
+      <mass value="1.47"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0"/>
+      <origin xyz="0.0105523 -0.117163 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L6.dae" /> </geometry> </visual> 
 		<collision> 
@@ -277,9 +297,10 @@
 
 	<link name = "rGripper"> 
     <inertial>
-      <mass value="1.206"/>
+      <mass value="2.3"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0 0 0"/>
+			<!-- An addition of 4.05 cms from the end of Schunk gripper to space between two halves of ft -->
+      <origin xyz="0 0 0.1055"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L7.dae" /> </geometry> </visual> 
 		<collision> <origin xyz="0.0 -0.0 0.02615" rpy="0.0 0.0 1.5708"/> <geometry> <box size="0.08 0.112 0.2025"/> </geometry> </collision> 
@@ -292,6 +313,7 @@
 	<link name = "rgPlate2">
 		<visual> <geometry> <mesh filename="Schunk/gripperPlate.dae" /> </geometry> </visual>
 	</link> 	
+
 
 	<!-- ======================================================================================================== -->
 	<!-- ============================================ Joints ==================================================== -->
@@ -317,6 +339,11 @@
 		<!-- <origin xyz = "-0.0285 0.584 0.1088" rpy="0 3.1416 0" /> -->
 		<origin xyz = "-0.0285 0.443 0.1088" rpy="0 3.1416 0" />
 		<axis xyz="0 -1 0" /> <limit effort="1000" lower="-0.8" upper="0.8" velocity="0.1" />
+	</joint>
+
+	<joint name="JKinect" type="revolute"> <parent link="Bracket" /> <child link="Kinect" />
+		<origin xyz = "-0.001 0.1805 -0.1120" rpy="3.1416 0 0" />
+		<axis xyz="1 0 0" /> <limit effort="1000" lower="-3.1416" upper="3.1416" velocity="0.1" />
 	</joint>
 
 	<joint name="LJ1" type="revolute"> <parent link="Bracket" /> <child link="L1" />

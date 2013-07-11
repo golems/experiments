@@ -38,6 +38,17 @@ void SimTab::GRIPEventSimulationBeforeTimestep() {
 /// Visualizes the robot path
 void Timer::Notify() {
 
+	if(mWorld == NULL) return;
+	cout << endl;
+	dynamics::SkeletonDynamics* robot = mWorld->getSkeleton(0);
+	cout << "Skeleton com: " << robot->getWorldCOM().transpose() << ", mass: " << robot->getMass() << ", numNodes: " << robot->getNumNodes() << endl;
+	kinematics::BodyNode* node = mWorld->getSkeleton(0)->getNode("Base");
+	cout << "Base com: " << node->getWorldCOM().transpose() << ", mass: " << node->getMass() << endl;
+	node = mWorld->getSkeleton(0)->getNode("Spine");
+	cout << "Spine com: " << node->getWorldCOM().transpose() << ", mass: " << node->getMass() << endl;
+	Start(0.5 * 1e3);	
+	return;
+
 	// Draw the skeleton
 	static size_t path_idx = 0;
 	mWorld->getSkeleton(0)->setConfig(dofs, path[path_idx]);	
@@ -97,11 +108,13 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	SetSizer(sizerFull);
 
 	// Load the schunk scene automatically
+	// frame->DoLoad("../../common/scenes/00-World-Test.urdf");
 	frame->DoLoad("../../common/scenes/01-World-Robot.urdf");
 
 	// Return immediately if just want to see a scene and not a path
 	if(justVisualizeScene) return;
 
+/*
 	// Read the data file
 	readFile();
 
@@ -109,6 +122,7 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	SkeletonDynamics* robot = mWorld->getSkeleton(0);
 	for(size_t i = 0; i < 24; i++) dofs.push_back(i);
 	robot->setConfig(dofs, path[0]);
+*/
 
 	// Create the timer to notify the function that draws the robot at multiple configurations
 	timer = new Timer();
