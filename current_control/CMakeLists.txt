@@ -75,5 +75,5 @@ endforeach(script_src_file)
 message(STATUS " ")
 
 # Include the tests
-enable_testing()
-add_subdirectory(tests)
+#enable_testing()
+#add_subdirectory(tests)
