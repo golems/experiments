@@ -76,7 +76,6 @@ void run() {
 	while(!somatic_sig_received) {
 
 		bool debug = (c_++ % 1 == 0);
-		debug = false;
 
 		// Get the current time and compute the time difference and update the prev. time
 		t_now = aa_tm_now();						
