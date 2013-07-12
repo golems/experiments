@@ -20,6 +20,13 @@
 #include "balancing.h"
 #include "Dynamics.h"
 
+/*
+ two fix:
+ 1- reset amc
+ 2- reset digital out when out of balancing
+ 3- make sure you set the offset in initialization
+ 4- compensate for imu position in the wheel readings
+*/
 
 /* ********************************************************************************************* */
 // Global variables
@@ -512,7 +519,7 @@ void controlWheels(double dt) {
 
 			// Control Law
 			double offset;
-			double u = ((KP_TH * error_th) + (KD_TH * derror_th)) + ((KD_WH *derror_wh) + (KP_WH * error_wh));
+			double u = (( + ((KD_WH *derror_wh) + (KP_WH * error_wh));
 			if(state.mode == KRANG_MODE_BALANCE) { 
 				offset = KD_WH_LR * state.js_lr;
 			} else {

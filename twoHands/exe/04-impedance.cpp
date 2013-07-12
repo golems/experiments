@@ -99,8 +99,8 @@ void runArm(bool leftArm, const Vector7d& pathGoal) {
 
 	// Check that the current values are not being too much, give a warning if so
 	for(size_t i = 0; i < 7; i++) {
-		if(fabs(arm->lwa.cur[i]) > 10.0) {
-			printf("\t\tDANGER: Mod. %d [%s] curr. over 10A: %lf, exitting!\n", i, 
+		if(fabs(arm->lwa.cur[i]) > 14.0) {
+			printf("\t\tDANGER: Mod. %d [%s] curr. over 14A: %lf, exitting!\n", i, 
 				leftArm ? "l" : "r", arm->lwa.cur[i]);
 			destroy();
 			exit(0);
@@ -140,12 +140,15 @@ void run() {
 			pathGoalRight(i) = path[path_idx](right_arm_ids[i]);
 		}
 
+		pv(pathGoalLeft);
+		pv(pathGoalRight);
+
 		// Update the motor positions with the latest goal positions
 		if(larm != NULL) runArm(true, pathGoalLeft);
 		if(rarm != NULL) runArm(false, pathGoalRight);
 
 		// Check if reached the goal; stop if reached the end
-		double errorTolerance = goInit ? 1e-3 : 1e-1;
+		double errorTolerance = goInit ? 1e-3 : 1e-3;
 		double errorLeft = larm ? (pathGoalLeft - eig7(larm->lwa.pos)).norm() : 0.0;
 		double errorRight = rarm ? (pathGoalRight - eig7(rarm->lwa.pos)).norm() : 0.0;
 		if((errorLeft < errorTolerance) && (errorRight < errorTolerance)) path_idx--;
