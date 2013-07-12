@@ -107,6 +107,7 @@ void Timer::Notify() {
 	// Get the center of mass and balancing angle (theta), and write it to the gui
 	char buf [256];
 	Vector3d com = robot->getWorldCOM();
+	com(2) -= 0.264;
 	double theta = atan2(com(0), com(2));
 	sprintf(buf, "com (cm): (%lf, %lf, %lf)\n\nbalancing angle (deg): %lf", 100.0 * com(0), 
 		100.0 * com(1), 100.0 * com(2), (theta / M_PI) * 180.0);
