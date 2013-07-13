@@ -63,10 +63,10 @@ void getData (filter_kalman_t* kf, double dt) {
 
 	// Get the data from the motors
 	int r;
-	Somatic__MotorState *waist, *leftArm, *rightArm;
-	assert(((waist = getMotorMessage(waistChan)) != NULL) && "Waist call failed");
-	assert(((leftArm = getMotorMessage(leftArmChan)) != NULL) && "leftArm call failed");
-	assert(((rightArm = getMotorMessage(rightArmChan)) != NULL) && "rightArm call failed");
+	Somatic__MotorState *waist = NULL, *leftArm = NULL, *rightArm = NULL;
+	while(waist == NULL) waist = getMotorMessage(waistChan);
+	while(leftArm == NULL) leftArm = getMotorMessage(leftArmChan);
+	while(rightArm == NULL) rightArm = getMotorMessage(rightArmChan);
 	
 	// Get the data from imu 
 	double imu, imuSpeed;
