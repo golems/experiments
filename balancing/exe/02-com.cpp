@@ -63,10 +63,10 @@ void getData (filter_kalman_t* kf, double dt) {
 
 	// Get the data from the motors
 	int r;
-	Somatic__MotorState *waist, *leftArm, *rightArm;
-	assert(((waist = getMotorMessage(waistChan)) != NULL) && "Waist call failed");
-	assert(((leftArm = getMotorMessage(leftArmChan)) != NULL) && "leftArm call failed");
-	assert(((rightArm = getMotorMessage(rightArmChan)) != NULL) && "rightArm call failed");
+	Somatic__MotorState *waist = NULL, *leftArm = NULL, *rightArm = NULL;
+	while(waist == NULL) waist = getMotorMessage(waistChan);
+	while(leftArm == NULL) leftArm = getMotorMessage(leftArmChan);
+	while(rightArm == NULL) rightArm = getMotorMessage(rightArmChan);
 	
 	// Get the data from imu 
 	double imu, imuSpeed;
@@ -107,6 +107,7 @@ void Timer::Notify() {
 	// Get the center of mass and balancing angle (theta), and write it to the gui
 	char buf [256];
 	Vector3d com = robot->getWorldCOM();
+	com(2) -= 0.264;
 	double theta = atan2(com(0), com(2));
 	sprintf(buf, "com (cm): (%lf, %lf, %lf)\n\nbalancing angle (deg): %lf", 100.0 * com(0), 
 		100.0 * com(1), 100.0 * com(2), (theta / M_PI) * 180.0);
@@ -151,7 +152,7 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	// Initialize this daemon (program!)
 	somatic_d_opts_t dopt;
 	memset(&dopt, 0, sizeof(dopt)); // zero initialize
-	dopt.ident = "01-com";
+	dopt.ident = "02-com";
 	somatic_d_init( &daemon_cx, &dopt );
 
 	// Initialize the channels to the sensors
