@@ -17,3 +17,10 @@ An interpretation of the system is just a circular spring. Holding it and pullin
 We are at 300, 55 now. With Munzir's crazy shaking, we need to stabilize the system by hand. As we decrease from 55 to 40, we have seen disturbance rejection to such shaking gets better and system stabilizes by itself within 3-4 seconds.
 
 35 seems to be better (can and munzir) for disturbance but not so much for settling time. 40 seems better.
+
+---------------------------- TORSO MODULE ADDITION ----------------------------------
+
+With 300, 40, we saw a lot of overshoot and the spring was too tough. So, we decreased to 260, 40.
+
+Increasing kd helps with overshoots but shakes are observed.
+

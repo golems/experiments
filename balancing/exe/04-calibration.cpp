@@ -129,11 +129,6 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 			SOMATIC_GET_LAST_UNPACK( r, somatic__joystick, &protobuf_c_system_allocator, 4096, &js_chan );
 	if(!(ACH_OK == r || ACH_MISSED_FRAME == r) || (js_msg == NULL)) return false;
 
-	// Set the values for the axis
-	double* x = &(js_msg->axes->data[0]);
-	js_forw = -x[1];
-	js_spin = 0.0; //x[2];
-
 	// Change the gains with the given joystick input
 	double deltaTH = 0.2;					// deltaX = 0.02;
 	int64_t* b = &(js_msg->buttons->data[0]);
@@ -141,6 +136,16 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 		if(b[i] == 1)
 			K(i % 2) += ((i < 2) ? deltaTH : -deltaTH);
 	
+	// Ignore the joystick statements for the arm control 
+	if((b[4] == 1) || (b[5] == 1) || (b[6] == 1) || (b[7] == 1)) {
+		js_forw = js_spin = 0.0;
+		return true;
+	}
+
+	// Set the values for the axis
+	double* x = &(js_msg->axes->data[0]);
+	js_forw = -x[1];
+	js_spin = 0.0; 
 	return true;
 }
 
