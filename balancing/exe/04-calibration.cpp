@@ -132,13 +132,14 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 	// Set the values for the axis
 	double* x = &(js_msg->axes->data[0]);
 	js_forw = -x[1];
-	js_spin = x[2];
+	js_spin = 0.0; //x[2];
 
 	// Change the gains with the given joystick input
-	double deltaTH = 0.5, deltaX = 0.02;
+	double deltaTH = 0.2;					// deltaX = 0.02;
 	int64_t* b = &(js_msg->buttons->data[0]);
 	for(size_t i = 0; i < 4; i++)
-		if(b[i] == 1) K(i) += (x[4] * ((i < 2) ? deltaTH : deltaX));
+		if(b[i] == 1)
+			K(i % 2) += ((i < 2) ? deltaTH : -deltaTH);
 	
 	return true;
 }
@@ -167,7 +168,8 @@ void run() {
 
 	// Initially the reference position and velocities are zero (don't move!)
 	Vector6d refState, state;
-	K << 550.0, 110.0, 3.0, 10.0, 15.0, 15.0;
+	refState << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
+	state << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
 
 	// Unless an interrupt or terminate message is received, process the new message
 	cout << "start..." << endl;
@@ -182,30 +184,30 @@ void run() {
 		double dt = (double)aa_tm_timespec2sec(aa_tm_sub(t_now, t_prev));	
 		t_prev = t_now;
 
+		if(debug) cout << "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv\n" << endl;
 		// Get the current state and ask the user if they want to start
 		getState(state, dt);
-		if(debug) pv(state);
-		if(debug) printf("\nbalancing angle (deg): %lf\n", state(0) / M_PI * 180.0);
+		if(debug) printf("balancing angle (deg): %lf\n", state(0) / M_PI * 180.0);
 		
 		// Get the joystick input for the js_forw and js_spin axes
 		double js_forw = 0.0, js_spin = 0.0;
 		bool gotInput = false;
 		while(!gotInput) gotInput = getJoystickInput(js_forw, js_spin);
-		if(debug) printf("Gains: <%7.3lf, %7.3lf, %7.3lf, %7.3lf\n", K(0), K(1), K(2), K(3));
+		if(debug) printf("K: <%7.3lf, %7.3lf, %7.3lf, %7.3lf\n", K(0), K(1), K(2), K(3));
 
 		// Determine the reference values for x and psi
 		updateReference(js_forw, js_spin, dt, refState);
-		if(debug) pv(refState);
+		if(debug) cout << "refState: " << refState.transpose() << endl;
+		if(debug) cout << "state: " << state.transpose() << endl;
 		
 		// Compute the error term between reference and current, and weight with gains (spin separate)
 		Vector6d error = state - refState;
 		double u = K.topLeftCorner<4,1>().dot(error.topLeftCorner<4,1>());
-		double u_spin = K.bottomLeftCorner<2,1>().dot(error.bottomLeftCorner<2,1>());
-		if(debug) printf("u: %lf, u_spin: %lf\n", u, u_spin);
+		double u_spin = -K.bottomLeftCorner<2,1>().dot(error.bottomLeftCorner<2,1>());			// - on purpose here 
+		if(debug) printf("u: %lf, u_spin: %lf, uL: %lf, uR: %lf\n", u, u_spin, u + u_spin, u - u_spin);
 
 		// Compute the input for left and right wheels
 		double input [2] = {u + u_spin, u - u_spin};
-		if(debug) printf("input: (%lf, %lf)\n", input[0], input[1]);
 
 		// Set the motor velocities
 		if(start) 
@@ -237,12 +239,6 @@ void init() {
 	int r = ach_open(&js_chan, "joystick-data", NULL);
 	aa_hard_assert(r == ACH_OK, "Ach failure '%s' on opening Joystick channel (%s, line %d)\n", 
 		ach_result_to_string(static_cast<ach_status_t>(r)), __FILE__, __LINE__);
-
-	// Initialize kalman filter for the imu and set the measurement and meas. noise matrices
-	kf = new filter_kalman_t;
-	filter_kalman_init(kf, 2, 0, 2);
-	kf->C[0] = kf->C[3] = 1.0;
-	kf->Q[0] = kf->Q[3] = 1e-3;
 
 	// =======================================================================
 	// Initialize the motors
@@ -287,6 +283,14 @@ void init() {
 	aa_fcpy(amc.pos_offset, pos_offset, 2);
 	usleep(1e5);
 
+	// Initialize kalman filter for the imu and set the measurement and meas. noise matrices
+	// Also, set the initial reading to the current imu reading to stop moving from 0 to current
+	kf = new filter_kalman_t;
+	filter_kalman_init(kf, 2, 0, 2);
+	kf->C[0] = kf->C[3] = 1.0;
+	kf->Q[0] = kf->Q[3] = 1e-3;
+	kf->x[0] = imu, kf->x[1] = imuSpeed;
+
 	// =======================================================================
 	// Create a thread to wait for user input to begin balancing
 
@@ -320,7 +324,7 @@ void destroy() {
 
 /* ******************************************************************************************** */
 /// The main thread
-int main() {
+int main(int argc, char* argv[]) {
 
 	// Load the world and the robot
 	DartLoader dl;
@@ -328,6 +332,13 @@ int main() {
 	assert((world != NULL) && "Could not find the world");
 	robot = world->getSkeleton(0);
 
+	// Read the gains from the command line
+	assert(argc == 7 && "Where is my gains for th, x and spin?");
+	K << atof(argv[1]), atof(argv[2]), atof(argv[3]), atof(argv[4]), atof(argv[5]), atof(argv[6]);
+	cout << "K: " << K.transpose() << "\nPress enter: " << endl;
+	getchar();
+
+	// Initialize, run, destroy
 	init();
 	run();
 	destroy();

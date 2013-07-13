@@ -1,0 +1,19 @@
+KP_th  KD_th KP_x	KD_x
+
+465.0, 90.0, 3.0, 13.0, 15.0, 15.0; 
+300.0, 60.0, 3.0, 13.0, 15.0, 15.0;	// decrease passion - more relaxed result - slower oscillations
+475.0, 112.0, 3.0, 13.0, 15.0, 15.0;	// change inertia in matlab from 10 to 15, more passion than 1
+436.0, 60.0, 1.0, 7.0, 15.0, 15.0;	// change inertia in matlab from 10 to 5, Q changed to identity from Q(3-4,3-4) = 10, much less passionate but still unstable
+300.0, 60.0, 3.0, 10.0, 15.0, 15.0;	// trying the gains from the old krang controller, first it was not as good, maybe a bit better than 6 (can's), second time it was quite good
+
+Started playing around 300, 60, 3, 10
+1- Going up to kp_th=340, we saw a consistent increase in shakes but still stable
+2- Observed that if we don't wait for imu to settle with kalman, it does not work. Just fixed it but didn't help!
+
+Trying 275, 55, 3, 10: It was bad once, then it was good twice.
+
+An interpretation of the system is just a circular spring. Holding it and pulling away from the 0, and feeling the force on the hand while keeping track of the balancing angle, should give us an expectation of what we have the spring strength to be. With this in mind, basing off on our random feelings, we decided to increase Kp_TH to 300.0. 
+
+We are at 300, 55 now. With Munzir's crazy shaking, we need to stabilize the system by hand. As we decrease from 55 to 40, we have seen disturbance rejection to such shaking gets better and system stabilizes by itself within 3-4 seconds.
+
+35 seems to be better (can and munzir) for disturbance but not so much for settling time. 40 seems better.
