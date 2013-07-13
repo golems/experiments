@@ -68,6 +68,7 @@ void run() {
 
 	// Initially the reference position and velocities are zero (don't move!)
 	Vector4d refState, state;
+	refState << 0.0, 0.0, 0.0, 0.0;
 
 	// Unless an interrupt or terminate message is received, process the new message
 	cout << "start..." << endl;
@@ -76,7 +77,6 @@ void run() {
 	while(!somatic_sig_received) {
 
 		bool debug = (c_++ % 1 == 0);
-		debug = false;
 
 		// Get the current time and compute the time difference and update the prev. time
 		t_now = aa_tm_now();						
@@ -99,7 +99,7 @@ void run() {
 		if(debug) cout << "refState:" << refState.transpose() << endl;
 		
 		// Compute the necessary current inputs to the wheels with the current and reference states
-		static const double Kp = 0.0, Kd = 10.0; 
+		static const double Kp = 2.0, Kd = 12.0; 
 		double u [2];
 		u[0] = -Kp * (state(0) - refState(0)) -Kd * (state(2) - refState(2));
 		u[1] = -Kp * (state(1) - refState(1)) -Kd * (state(3) - refState(3));
@@ -107,6 +107,7 @@ void run() {
 
 		// Set the motor velocities
 		somatic_motor_cmd(&daemon_cx, &amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, u, 2, NULL);
+		usleep(1e3);
 	}
 
 	// Send the stoppig event

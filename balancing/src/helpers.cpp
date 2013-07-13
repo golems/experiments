@@ -21,8 +21,8 @@ Eigen::MatrixXd fix (const Eigen::MatrixXd& mat) {
 /* ******************************************************************************************** */
 // Setup the indices for the motor groups
 
-int left_arm_ids_a [7] = {10, 12, 14, 16, 18, 20, 22}; 
-int right_arm_ids_a [7] = {11, 13, 15, 17, 19, 21, 23}; 
+int left_arm_ids_a [7] = {11, 13, 15, 17, 19, 21, 23}; 
+int right_arm_ids_a [7] = {12, 14, 16, 18, 20, 22, 24}; 
 int imuWaist_ids_a [2] = {5, 8};
 vector <int> left_arm_ids (left_arm_ids_a, left_arm_ids_a + 7);						
 vector <int> right_arm_ids (right_arm_ids_a, right_arm_ids_a + 7);	
@@ -144,6 +144,9 @@ void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt,
 
 	// ======================================================================
 	// Filter the readings
+
+	// Skip if a filter is not provided
+	if(kf == NULL) return;
 
 	// Setup the data
 	kf->z[0] = _imu, kf->z[1] = _imuSpeed;
