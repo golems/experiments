@@ -41,12 +41,7 @@
       <origin xyz="-0.00336451 0.107572 -0.00636184"/>
     </inertial>
 		<visual> <geometry> <mesh filename="base.dae" /> </geometry> </visual> 
-		<collision> 
-			<origin xyz="0.00225 0.2097395 0.006300"/>
-      <geometry>
-        <box size="0.7165 0.71048 0.32860"/>
-      </geometry>
-		</collision> 
+		<collision> <origin xyz="0.00225 0.2097395 0.006300"/> <geometry> <box size="0.7165 0.71048 0.32860"/> </geometry> </collision> 
 	</link>
 
 	<link name = "Spine"> 
@@ -57,12 +52,7 @@
       <origin xyz="-0.02937 0.285314 0.0974926"/>
     </inertial>
 		<visual> <geometry> <mesh filename="spine.dae" /> </geometry> </visual> 
-		<collision> 
-			<origin xyz="-0.026 0.230150 0.053887"/>
-      <geometry>
-        <box size="0.2340 0.59430 0.24097"/>
-      </geometry>
-		</collision> 
+		<collision> <origin xyz="-0.026 0.230150 0.053887"/> <geometry> <box size="0.2340 0.59430 0.24097"/> </geometry> </collision> 
 	</link>
 
 	<link name = "Bracket"> 
@@ -73,12 +63,7 @@
       <origin xyz="0 0.080606 -0.00314267"/>
     </inertial>
 		<visual> <geometry> <mesh filename="bracket.dae" /> </geometry> </visual> 
-		<collision> 
-			<origin xyz="0.0012875 0.0582 -0.0280530"/>
-      <geometry>
-        <box size="0.2815 0.23 0.22611"/>
-      </geometry>
-		</collision> 
+		<collision> <origin xyz="0.0012875 0.0582 -0.0280530"/> <geometry> <box size="0.2815 0.23 0.22611"/> </geometry> </collision> 
 	</link>
 
 	<link name = "Kinect"> 
@@ -88,12 +73,7 @@
       <origin xyz="0.0 -0.04 -0.028"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Kinect/Kinect.dae" /> </geometry> </visual> 
-		<collision> 
-			<origin xyz="0.0 -0.0251 -0.0185"/>
-      <geometry>
-        <box size="0.28 0.07 0.063"/>
-      </geometry>
-		</collision> 
+		<collision> <origin xyz="0.0 -0.0251 -0.0185"/> <geometry> <box size="0.28 0.07 0.063"/> </geometry> </collision> 
 	</link>
 
 	<link name = "L1"> 
@@ -103,12 +83,7 @@
       <origin xyz="0.0063626 -0.00725706 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L1.dae" /> </geometry> </visual> 
-		<collision> 
-			<origin xyz="0.015 -0.080866 0.0"/>
-      <geometry>
-        <box size="0.16 0.29367 0.13188"/>
-      </geometry>
-		</collision> 
+		<collision> <origin xyz="0.015 -0.080866 0.0"/> <geometry> <box size="0.16 0.29367 0.13188"/> </geometry> </collision> 
 	</link>
 
 	<link name = "L2"> 
@@ -118,12 +93,7 @@
       <origin xyz="0.0101136 -0.15332 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L2.dae" /> </geometry> </visual> 
-		<collision> 
-			<origin xyz="0.017042 -0.058309 0.0"/>
-			<geometry>
-				<box size="0.14591 0.24658 0.13"/>
-			</geometry>
-		</collision> 
+		<collision> <origin xyz="0.017042 -0.058309 0.0"/> <geometry> <box size="0.14591 0.24658 0.13"/> </geometry> </collision> 
 	</link>
 
 	<link name = "L3"> 
@@ -133,12 +103,7 @@
       <origin xyz="0.0071222 -0.00803823 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L3.dae" /> </geometry> </visual> 
-		<collision> 
-			<origin xyz="0.014000 -0.075113 0.0"/>
-			<geometry>
-				<box size="0.13800 0.26217 0.11189"/>
-			</geometry>
-		</collision> 
+		<collision> <origin xyz="0.014000 -0.075113 0.0"/> <geometry> <box size="0.13800 0.26217 0.11189"/> </geometry> </collision> 
 	</link>
 
 	<link name = "L4"> 
@@ -148,12 +113,7 @@
       <origin xyz="0.0115211 -0.1255 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L4.dae" /> </geometry> </visual> 
-		<collision> 
-			<origin xyz="0.018200 -0.052050 0.0"/>
-			<geometry>
-				<box size="0.12960 0.2141 0.11"/>
-			</geometry>
-		</collision> 
+		<collision> <origin xyz="0.018200 -0.052050 0.0"/> <geometry> <box size="0.12960 0.2141 0.11"/> </geometry> </collision> 
 	</link>
 
 	<link name = "L5"> 
@@ -163,12 +123,7 @@
       <origin xyz="0.00705037 -0.00747172 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L5.dae" /> </geometry> </visual> 
-		<collision> 
-			<origin xyz="0.0145115 -0.0571105 0.0000425"/>
-			<geometry>
-				<box size="0.117977 0.204179 0.089915"/>
-			</geometry>
-		</collision> 
+		<collision> <origin xyz="0.0145115 -0.0571105 0.0000425"/> <geometry> <box size="0.117977 0.204179 0.089915"/> </geometry> </collision> 
 	</link>
 
 	<link name = "L6"> 
@@ -178,12 +133,7 @@
       <origin xyz="0.0105523 -0.117163 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L6.dae" /> </geometry> </visual> 
-		<collision> 
-			<origin xyz="0.0175015 -0.0481615 0.0"/>
-			<geometry>
-				<box size="0.111977 0.185277 0.089"/>
-			</geometry>
-		</collision> 
+		<collision> <origin xyz="0.0175015 -0.0481615 0.0"/> <geometry> <box size="0.111977 0.185277 0.089"/> </geometry> </collision> 
 	</link>
 
 	<link name = "lGripper"> 
@@ -212,12 +162,7 @@
       <origin xyz="0.0063626 -0.00725706 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L1.dae" /> </geometry> </visual> 
-		<collision> 
-			<origin xyz="0.015 -0.080866 0.0"/>
-      <geometry>
-        <box size="0.16 0.29367 0.13188"/>
-      </geometry>
-		</collision> 
+		<collision> <origin xyz="0.015 -0.080866 0.0"/> <geometry> <box size="0.16 0.29367 0.13188"/> </geometry> </collision> 
 	</link>
 
 	<link name = "R2"> 
@@ -227,12 +172,7 @@
       <origin xyz="0.0101136 -0.15332 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L2.dae" /> </geometry> </visual> 
-		<collision> 
-			<origin xyz="0.017042 -0.058309 0.0"/>
-			<geometry>
-				<box size="0.14591 0.24658 0.13"/>
-			</geometry>
-		</collision> 
+		<collision> <origin xyz="0.017042 -0.058309 0.0"/> <geometry> <box size="0.14591 0.24658 0.13"/> </geometry> </collision> 
 	</link>
 
 	<link name = "R3"> 
@@ -242,12 +182,7 @@
       <origin xyz="0.0071222 -0.00803823 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L3.dae" /> </geometry> </visual> 
-		<collision> 
-			<origin xyz="0.014000 -0.075113 0.0"/>
-			<geometry>
-				<box size="0.13800 0.26217 0.11189"/>
-			</geometry>
-		</collision> 
+		<collision> <origin xyz="0.014000 -0.075113 0.0"/> <geometry> <box size="0.13800 0.26217 0.11189"/> </geometry> </collision> 
 	</link>
 
 	<link name = "R4"> 
@@ -257,12 +192,7 @@
       <origin xyz="0.0115211 -0.1255 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L4.dae" /> </geometry> </visual> 
-		<collision> 
-			<origin xyz="0.018200 -0.052050 0.0"/>
-			<geometry>
-				<box size="0.12960 0.2141 0.11"/>
-			</geometry>
-		</collision> 
+		<collision> <origin xyz="0.018200 -0.052050 0.0"/> <geometry> <box size="0.12960 0.2141 0.11"/> </geometry> </collision> 
 	</link>
 
 	<link name = "R5"> 
@@ -272,12 +202,7 @@
       <origin xyz="0.00705037 -0.00747172 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L5.dae" /> </geometry> </visual> 
-		<collision> 
-			<origin xyz="0.0145115 -0.0571105 0.0000425"/>
-			<geometry>
-				<box size="0.117977 0.204179 0.089915"/>
-			</geometry>
-		</collision> 
+		<collision> <origin xyz="0.0145115 -0.0571105 0.0000425"/> <geometry> <box size="0.117977 0.204179 0.089915"/> </geometry> </collision> 
 	</link>
 
 	<link name = "R6"> 
@@ -287,12 +212,7 @@
       <origin xyz="0.0105523 -0.117163 0"/>
     </inertial>
 		<visual> <geometry> <mesh filename="Schunk/L6.dae" /> </geometry> </visual> 
-		<collision> 
-			<origin xyz="0.0175015 -0.0481615 0.0"/>
-			<geometry>
-				<box size="0.111977 0.185277 0.089"/>
-			</geometry>
-		</collision> 
+		<collision> <origin xyz="0.0175015 -0.0481615 0.0"/> <geometry> <box size="0.111977 0.185277 0.089"/> </geometry> </collision> 
 	</link>
 
 	<link name = "rGripper"> 
