@@ -51,10 +51,10 @@
 
 	<link name = "Spine"> 
     <inertial>
-      <mass value="7.022"/>
+      <mass value="10.302"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
 			<!-- an offset of -0.02937 is added due to bad dae file and to align with base com -->
-      <origin xyz="-0.02937 0.178181 0.0917438"/>
+      <origin xyz="-0.02937 0.285314 0.0974926"/>
     </inertial>
 		<visual> <geometry> <mesh filename="spine.dae" /> </geometry> </visual> 
 		<collision> 
