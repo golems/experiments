@@ -152,7 +152,7 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	// Initialize this daemon (program!)
 	somatic_d_opts_t dopt;
 	memset(&dopt, 0, sizeof(dopt)); // zero initialize
-	dopt.ident = "01-com";
+	dopt.ident = "02-com";
 	somatic_d_init( &daemon_cx, &dopt );
 
 	// Initialize the channels to the sensors
