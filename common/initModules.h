@@ -9,6 +9,8 @@
 
 #pragma once
 
+#include <unistd.h>
+
 #include <somatic.h>
 #include <somatic/daemon.h>
 #include <somatic.pb-c.h>
@@ -51,6 +53,28 @@ void initGripper (somatic_d_t& daemon_cx, somatic_motor_t& gripper, const char* 
 	somatic_motor_update(&daemon_cx, &gripper);
 	somatic_motor_cmd(&daemon_cx, &gripper, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 1, NULL);
 	usleep(1e5);
+}
+
+/* ********************************************************************************************* */
+/// Initializes the torso motor
+void initTorso (somatic_d_t& daemon_cx, somatic_motor_t& torso) {
+
+	// Initialize the arm with the daemon context, channel names and # of motors
+	somatic_motor_init(&daemon_cx, &torso, 1, "torso-cmd", "torso-state");
+	usleep(1e5);
+
+	// Set the min/max values for valid and limits values
+	double** limits [] = {
+		&torso.pos_valid_min, &torso.vel_valid_min, 
+		&torso.pos_limit_min, &torso.pos_limit_min, 
+		&torso.pos_valid_max, &torso.vel_valid_max, 
+		&torso.pos_limit_max, &torso.pos_limit_max};
+	for(size_t i = 0; i < 4; i++) aa_fset(*limits[i], -1024.1, 1);
+	for(size_t i = 4; i < 8; i++) aa_fset(*limits[i], 1024.1, 1);
+
+	// Update and reset them
+	somatic_motor_update(&daemon_cx, &torso);
+	somatic_motor_cmd(&daemon_cx, &torso, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 1, NULL);
 }
 
 /* ********************************************************************************************* */
