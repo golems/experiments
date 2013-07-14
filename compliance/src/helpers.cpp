@@ -96,8 +96,8 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuCha
 		bool left){
 
 	// Set up the index vectors
-	int right_arm_ids_a [] = {11, 13, 15, 17, 19, 21, 23};
-	int left_arm_ids_a [] = 	{10, 12, 14, 16, 18, 20, 22};
+	int left_arm_ids_a [] = {11, 13, 15, 17, 19, 21, 23};
+	int right_arm_ids_a [] = 	{12, 14, 16, 18, 20, 22, 24};
 	int * arm_ids_a = left ? left_arm_ids_a : right_arm_ids_a;
 	for(size_t i = 0; i < 7; i++) arm_ids.push_back(arm_ids_a[i]);
 	imuWaist_ids.push_back(5);	
