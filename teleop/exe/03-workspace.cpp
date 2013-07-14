@@ -1,24 +1,9 @@
 /**
- * @file 04-gripVis.cpp
- * @author Can Erdogan
- * @date June 18, 2013
- * @brief This file demonstrates how to visualize the motion of the arms in grip.
- * NOTE Although I wanted to change this, we had to make the GRIP/wxWidget the main program
- * (the surrounding thread) and send data within a timer... This could be bad if for some reason
- * visualization halts and we want to stop the arms right then.
- */
-
-
-/*
-
-reads liberty channel (eventually joystick too), and maps to 
-jointspace using jacobian.
-
-TODO:
- * add toggle for which device to read (js,liberty)
- * add flag or mapping between liberty channels and multiple arms
- *
-
+ * @file 03-workspace.cpp
+ * @author Jon Scholz
+ * @date July 12, 2013
+ * @brief This file demonstrates how to visualize the motion of the arms in grip,
+ * under workspace control from a joystick or liberty UI device
  */
 
 #define protected public
@@ -27,14 +12,9 @@ TODO:
 #include "simTab.h"
 #include "GRIPApp.h"
 
-#include "somatic.h"
-#include "somatic/daemon.h"
-#include <somatic.pb-c.h>
-#include <somatic/motor.h>
-#include <ach.h>
-
+#include "channel.h"
+#include "liberty_client.h"
 #include <math/UtilsRotation.h>
-//#include <simulation/World.h>
 
 using namespace std;
 using namespace Eigen;
@@ -42,24 +22,18 @@ using namespace dynamics;
 
 /* ********************************************************************************************* */
 
+// somatic globals
+somatic_d_t daemon_cx;
+somatic_motor_t llwa;
+somatic_motor_t rlwa;
+
 // UI Globals
-/** Events */
+/* Events */
 enum DynamicSimulationTabEvents {
 	id_button_ResetScene= 8100,
 	id_button_ResetLiberty= 8101,
 	id_button_ResetArms= 8102,
 };
-
-// Channel variables
-uint8_t *achbuf;
-size_t n_achbuf = 1024;
-size_t frame_size;
-size_t indent = 0;
-
-somatic_d_t daemon_cx;
-ach_channel_t liberty_chan;
-somatic_motor_t llwa;
-somatic_motor_t rlwa;
 
 // control globals
 static bool motor_mode = 0;
@@ -116,50 +90,16 @@ bool getEffectorPoses(simulation::World* world, MatrixXd &ee_left, MatrixXd &ee_
 }
 
 /*
- * Queries liberty ach channel for current liberty channels 1 and 2,
- * and converts them to MatrixXd transforms.
+ * Obtains arm configurations from dart world
  */
-bool getLibertyPoses(MatrixXd &lib1, MatrixXd &lib2) {
-	// get liberty data
-	int r = 0;
-	Somatic__Liberty *ls_msg = SOMATIC_GET_LAST_UNPACK( r, somatic__liberty,
-			&protobuf_c_system_allocator,
-			4096, &liberty_chan );
-
-	if(!(ACH_OK == r || ACH_MISSED_FRAME == r) || (ls_msg == NULL)) return -1;
-
-	// stack sensors into a single array for indexing
-	Somatic__Vector* sensors[] = {ls_msg->sensor1, ls_msg->sensor2, ls_msg->sensor3, ls_msg->sensor4,
-			ls_msg->sensor5, ls_msg->sensor6, ls_msg->sensor7, ls_msg->sensor8};
-
-	MatrixXd *lib_transforms[] = {&lib1, &lib2};
-	// pack liberty data into arrowConfs
-	for (int i=0; i < 2; ++i) {
-		Somatic__Vector* sensor = sensors[i];
-		VectorXd pos(3);
-		for (int j=0; j < 3; j++) pos[j] = sensor->data[j];
-		lib_transforms[i]->topRightCorner<3,1>() = pos;
-
-		// convert quat to rotation matrix
-		Eigen::Quaternion<double> rotQ(&sensor->data[3]);
-		Matrix3d rotM(rotQ);
-		lib_transforms[i]->topLeftCorner<3,3>() = rotM;
-
-		// set lower right corner just to be safe
-		(*lib_transforms[i])(3,3) = 1.0;
-	}
-
-	// Free the liberty message
-	somatic__liberty__free_unpacked(ls_msg, &protobuf_c_system_allocator);
-
-	return 0;
-}
-
 void getArmConfigs(const simulation::World* world, VectorXd &qL, VectorXd &qR) {
 	qL = world->getSkeleton("Krang")->getConfig(armIDsL);
 	qR = world->getSkeleton("Krang")->getConfig(armIDsR);
 }
 
+/*
+ * Obtains arm configs from somatic channel
+ */
 void getArmConfigs(VectorXd &qL, VectorXd &qR) {
 //	somatic_motor_update(&daemon_cx, &llwa);
 //	for(size_t i = 0; i < 7; i++) vals(i) = llwa.pos[i];
@@ -168,6 +108,9 @@ void getArmConfigs(VectorXd &qL, VectorXd &qR) {
 //	mWorld->getSkeleton(krang_id)->setConfig(arm_ids, vals);
 }
 
+/*
+ *sets arm configs in the dart world
+ */
 void setArmConfigs(const simulation::World* world, VectorXd &qL, VectorXd &qR) {
 	world->getSkeleton("Krang")->setConfig(armIDsL, qL);
 	world->getSkeleton("Krang")->setConfig(armIDsR, qR);
@@ -175,19 +118,6 @@ void setArmConfigs(const simulation::World* world, VectorXd &qL, VectorXd &qR) {
 
 
 /************************ Initialization **************************/
-void ach_init(ach_channel_t* chan, char* chan_name, size_t n_achbuf) {
-	// Set up the buffer
-	achbuf = AA_NEW_AR(uint8_t,  n_achbuf );
-
-	// Open the given channel
-	int r = ach_open( chan, chan_name, NULL );
-	aa_hard_assert( ACH_OK == r, "Couldn't open channel %s\n", chan_name );
-	r = ach_flush( chan );
-	aa_hard_assert( ACH_OK == r, "Couldn't flush channel\n");
-
-	// Set the interrupt handler
-	somatic_sighandler_simple_install();
-}
 
 
 /*
@@ -211,22 +141,26 @@ void initialize_transforms(simulation::World* world) {
 	getEffectorPoses(world, T_eel_init, T_eer_init);
 
 	// grab pose of liberty channels 1 and 2
-	getLibertyPoses(T_lib1_init, T_lib2_init);
+	MatrixXd *Tlibs[] = {&T_lib1_init, &T_lib2_init};
+	getLibertyPoses(Tlibs, 2, NULL);
 
 	// set the effector goal poses to their current states
 	T_eeL_goal = T_eel_init;
 	T_eeR_goal = T_eer_init;
 }
 
+/*
+ *
+ */
 void initialize_configs(simulation::World* world) {
-	//TODO define initialize pose configs?
-	qdotL = VectorXd(7);
-	qdotR = VectorXd(7);
-
 	static const int idL[] = {11, 13, 15, 17, 19, 21, 23};
 	static const int idR[] = {12, 14, 16, 18, 20, 22, 24};
 	armIDsL = vector<int>(idL, idL + sizeof(idL)/sizeof(idL[0]));
 	armIDsR = vector<int>(idR, idR + sizeof(idR)/sizeof(idR[0]));
+
+	//TODO initialize pose configs?
+	qdotL = VectorXd(7);
+	qdotR = VectorXd(7);
 }
 
 /*
@@ -246,6 +180,9 @@ void computeEffectorGoalPoses(const MatrixXd &eel_init, const MatrixXd &eer_init
 	eer_goal = eer_init * lib2_delta;
 }
 
+/*
+ *
+ */
 void setGoalSkelConfigs(MatrixXd &T_eel_goal, MatrixXd &T_eer_goal) {
 	MatrixXd *goal_transforms[] = {&T_eel_goal, &T_eer_goal};
 	dynamics::SkeletonDynamics* skeletons[] = {mWorld->getSkeleton("g1"), mWorld->getSkeleton("g2")};
@@ -262,7 +199,9 @@ void setGoalSkelConfigs(MatrixXd &T_eel_goal, MatrixXd &T_eer_goal) {
 	}
 }
 
-/// Given a workspace velocity, returns the joint space velocity
+/*
+ * Given a workspace velocity, returns the joint space velocity
+ */
 VectorXd workToJointVelocity (kinematics::BodyNode* eeNode, const VectorXd& xdot) {
 
 	// Get the Jacobian towards computing joint-space velocities
@@ -283,6 +222,9 @@ VectorXd workToJointVelocity (kinematics::BodyNode* eeNode, const VectorXd& xdot
 	return qdot;
 }
 
+/*
+ *
+ */
 void computeJointVelocities(simulation::World* world, MatrixXd &eel_cur,
 		MatrixXd &eer_cur, MatrixXd &eel_goal, MatrixXd &eer_goal,
 		VectorXd &qdotl, VectorXd &qdotr) {
@@ -327,12 +269,15 @@ void fakeArmMovement(VectorXd &qL, VectorXd &qR, VectorXd &qdotL, VectorXd &qdot
 }
 
 /* ********************************************************************************************* */
-/// Picks a random configuration for the robot, moves it, does f.k. for the right and left 
-/// end-effectors, places blue and green boxes for their locations and visualizes it all
+/*
+ * Picks a random configuration for the robot, moves it, does f.k. for the right and left
+ * end-effectors, places blue and green boxes for their locations and visualizes it all
+ */
 void Timer::Notify() {
 	// get current poses
 	getEffectorPoses(mWorld, T_eeL_cur, T_eeR_cur);
-	getLibertyPoses(T_lib1_cur, T_lib2_cur);
+	MatrixXd *Tlibs[] = {&T_lib1_cur, &T_lib2_cur};
+	getLibertyPoses(Tlibs, 2, NULL);
 
 	// compute new goal pose
 	computeEffectorGoalPoses(T_eel_init, T_eer_init, T_lib1_init, T_lib2_init,
@@ -400,11 +345,14 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	// Initialize this daemon (program!)
 	somatic_d_opts_t dopt;
 	memset(&dopt, 0, sizeof(dopt)); // zero initialize
-	dopt.ident = "02-liberty-display";
+	dopt.ident = "03-workspace";
 	somatic_d_init(&daemon_cx, &dopt);
 
+	// Set the interrupt handler
+	somatic_sighandler_simple_install();
+
 	// Initialize the ach channel for liberty
-	ach_init(&liberty_chan, "liberty", n_achbuf);
+	ach_init(&liberty_chan, "liberty", achbuf_liberty, n_achbuf_liberty);
 
 	// Send a message; set the event code and the priority
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
@@ -442,7 +390,8 @@ void SimTab::OnButton(wxCommandEvent & evt) {
 	}
 
 	case id_button_ResetLiberty: {
-		getLibertyPoses(T_lib1_init, T_lib2_init);
+		MatrixXd *Tlibs[] = {&T_lib1_init, &T_lib2_init};
+		getLibertyPoses(Tlibs, 2, NULL);
 		break;
 	}
 
