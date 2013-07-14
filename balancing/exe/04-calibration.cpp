@@ -51,7 +51,7 @@ void run() {
 		double js_forw = 0.0, js_spin = 0.0;
 		bool gotInput = false;
 		while(!gotInput) gotInput = getJoystickInput(js_forw, js_spin);
-		if(debug) printf("K: <%7.3lf, %7.3lf, %7.3lf, %7.3lf\n", K(0), K(1), K(2), K(3));
+		if(debug) printf("K_bal: <%7.3lf, %7.3lf, %7.3lf, %7.3lf\n", K_bal(0), K_bal(1), K_bal(2), K_bal(3));
 
 		// Determine the reference values for x and psi
 		updateReference(js_forw, js_spin, dt, refState);
@@ -60,8 +60,8 @@ void run() {
 		
 		// Compute the error term between reference and current, and weight with gains (spin separate)
 		Vector6d error = state - refState;
-		double u = K.topLeftCorner<4,1>().dot(error.topLeftCorner<4,1>());
-		double u_spin = -K.bottomLeftCorner<2,1>().dot(error.bottomLeftCorner<2,1>());			// - on purpose here 
+		double u = K_bal.topLeftCorner<4,1>().dot(error.topLeftCorner<4,1>());
+		double u_spin = -K_bal.bottomLeftCorner<2,1>().dot(error.bottomLeftCorner<2,1>());			// - on purpose here 
 		if(debug) printf("u: %lf, u_spin: %lf, uL: %lf, uR: %lf\n", u, u_spin, u + u_spin, u - u_spin);
 
 		// Compute the input for left and right wheels
@@ -192,8 +192,8 @@ int main(int argc, char* argv[]) {
 
 	// Read the gains from the command line
 	assert(argc == 7 && "Where is my gains for th, x and spin?");
-	K << atof(argv[1]), atof(argv[2]), atof(argv[3]), atof(argv[4]), atof(argv[5]), atof(argv[6]);
-	cout << "K: " << K.transpose() << "\nPress enter: " << endl;
+	K_bal << atof(argv[1]), atof(argv[2]), atof(argv[3]), atof(argv[4]), atof(argv[5]), atof(argv[6]);
+	cout << "K_bal: " << K_bal.transpose() << "\nPress enter: " << endl;
 	getchar();
 
 	// Initialize, run, destroy

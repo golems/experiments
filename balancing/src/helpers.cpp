@@ -110,7 +110,7 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 	int64_t* b = &(js_msg->buttons->data[0]);
 	for(size_t i = 0; i < 4; i++)
 		if(b[i] == 1)
-			K(i % 2) += ((i < 2) ? deltaTH : -deltaTH);
+			K_bal(i % 2) += ((i < 2) ? deltaTH : -deltaTH);
 	
 	// Ignore the joystick statements for the arm control 
 	if((b[4] == 1) || (b[5] == 1) || (b[6] == 1) || (b[7] == 1)) {

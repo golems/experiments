@@ -109,7 +109,6 @@ void controlRobotiq() {
 
 		// Write the command line command and execute it
 		char buf [256];
-		cout << x[3] << endl;
 		if((b[4 + i] == 1) && (fabs(x[3]) > 0.05))  {
 			sprintf(buf, "robotiq_cmd b gp%x -c %cgripper-cmd", val, i ? 'r' : 'l');
 			printf("'%s'\n", buf);

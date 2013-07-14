@@ -69,21 +69,28 @@ void run() {
 		double js_forw = 0.0, js_spin = 0.0;
 		bool gotInput = false;
 		while(!gotInput) gotInput = getJoystickInput(js_forw, js_spin);
-		if(debug) printf("K: <%7.3lf, %7.3lf, %7.3lf, %7.3lf\n", K(0), K(1), K(2), K(3));
 
 		// Determine the reference values for x and psi
 		updateReference(js_forw, js_spin, dt, refState);
 		if(debug) cout << "refState: " << refState.transpose() << endl;
 		if(debug) cout << "state: " << state.transpose() << endl;
 		
-		// Compute the error term between reference and current, and weight with gains (spin separate)
+		// Choose the balancing or standing up control based on the imu angle
+		Vector6d K;
+		if(state(0) < -1.3) {
+			K = K_stand;
+			if(debug) cout << "Standing up mode: " << K.transpose() << endl;
+		}
+		else {
+			K = K_bal;
+			if(debug) cout << "Balancing mode: " << K.transpose() << endl;
+		}
+
+		// Compute the error term between reference and current, and weight with gains (no spin)
 		Vector6d error = state - refState;
 		double u = K.topLeftCorner<4,1>().dot(error.topLeftCorner<4,1>());
-		double u_spin = -K.bottomLeftCorner<2,1>().dot(error.bottomLeftCorner<2,1>());			// - on purpose here 
-		if(debug) printf("u: %lf, u_spin: %lf, uL: %lf, uR: %lf\n", u, u_spin, u + u_spin, u - u_spin);
-
-		// Compute the input for left and right wheels
-		double input [2] = {u + u_spin, u - u_spin};
+		double input [2] = {u, u};
+		if(debug) printf("u: %lf\n", u);
 
 		// Set the motor velocities
 		if(start) 
@@ -208,10 +215,13 @@ int main(int argc, char* argv[]) {
 	assert((world != NULL) && "Could not find the world");
 	robot = world->getSkeleton(0);
 
-	// Read the gains from the command line
+	// Fix the gains for the balancing
+	K_bal << 250.0, 45.0, 3.0, 10.0, 3.0, 7.0;
+
+	// Read the standing up gains from the command line
 	assert(argc == 7 && "Where is my gains for th, x and spin?");
-	K << atof(argv[1]), atof(argv[2]), atof(argv[3]), atof(argv[4]), atof(argv[5]), atof(argv[6]);
-	cout << "K: " << K.transpose() << "\nPress enter: " << endl;
+	K_stand << atof(argv[1]), atof(argv[2]), atof(argv[3]), atof(argv[4]),atof(argv[5]),atof(argv[6]);
+	cout << "K_stand: " << K_stand.transpose() << "\nPress enter: " << endl;
 	getchar();
 
 	// Initialize, run, destroy
