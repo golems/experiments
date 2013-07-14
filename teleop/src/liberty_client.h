@@ -8,11 +8,11 @@
 #ifndef LIBERTY_CLIENT_H_
 #define LIBERTY_CLIENT_H_
 
-#include "somatic.h"
-#include "somatic/daemon.h"
+#include <somatic.h>
 #include <somatic.pb-c.h>
-#include <somatic/motor.h>
-#include <ach.h>
+#include <Eigen/Dense>
+
+#include "channel.h"
 
 // Channel variables
 uint8_t *achbuf_liberty;

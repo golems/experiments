@@ -8,8 +8,11 @@
 #ifndef CHANNEL_H_
 #define CHANNEL_H_
 
+
 #include <amino.h>
 #include <ach.h>
+#include <somatic.h>
+#include <somatic.pb-c.h>
 
 void ach_init(ach_channel_t* chan, char* chan_name, uint8_t *achbuf, size_t n_achbuf) {
 	// Set up the buffer
