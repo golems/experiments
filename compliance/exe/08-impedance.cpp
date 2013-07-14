@@ -41,7 +41,7 @@ Vector6d offset;							///< the offset we are going to decrease from raw reading
 vector <Vector7d, aligned_allocator<Vector7d> > traj;	///< The traj to follow in joint space pos
 bool useLeftArm = true;				///< The indicator that the left arm will be used for this program
 
-const int r_id = 0;
+const int krang_id = 0;
 
 /* ******************************************************************************************** */
 /// Given a wrench, computes the joint space velocities so that wrench is minimized 
@@ -49,7 +49,7 @@ void wrenchToJointVels (const Vector6d& wrench, Vector7d& dq) {
 
 	// Get the Jacobian towards computing joint-space velocities
 	const char* nodeName = useLeftArm ? "lGripper" : "rGripper";
-	static kinematics::BodyNode* eeNode = world->getSkeleton(r_id)->getNode(nodeName);
+	static kinematics::BodyNode* eeNode = world->getSkeleton(krang_id)->getNode(nodeName);
 	MatrixXd Jlin = eeNode->getJacobianLinear().topRightCorner<3,7>();
 	MatrixXd Jang = eeNode->getJacobianAngular().topRightCorner<3,7>();
 	MatrixXd J (6,7);
