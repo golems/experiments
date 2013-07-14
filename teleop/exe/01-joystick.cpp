@@ -15,7 +15,10 @@
 somatic_d_t daemon_cx;
 ach_channel_t js_chan;				
 ach_channel_t state_chan;
+ach_channel_t waistCmdChan;
 somatic_motor_t llwa, rlwa, torso;
+
+Somatic__WaistCmd *waistDaemonCmd = somatic_waist_cmd_alloc();		///< The waist command
 
 char* b;
 double* x;
@@ -70,6 +73,30 @@ void controlArms () {
 }
 
 /* ********************************************************************************************* */
+/// Handles the joystick commands for the waist module
+void controlWaist() {
+
+	// Set the mode we want to send to the waist daemon
+	Somatic__WaistMode waistMode;
+	if(x[5] < -0.9) waistMode = SOMATIC__WAIST_MODE__MOVE_FWD;
+	else if(x[5] > 0.9) waistMode = SOMATIC__WAIST_MODE__MOVE_REV;
+	else waistMode = SOMATIC__WAIST_MODE__STOP;
+
+	// Send message to the krang-waist daemon
+	somatic_waist_cmd_set(waistDaemonCmd, waistMode);
+	int r = SOMATIC_PACK_SEND(&waistCmdChan, somatic__waist_cmd, waistDaemonCmd);
+	if(ACH_OK != r) fprintf(stderr, "Couldn't send message: %s\n", 
+		ach_result_to_string(static_cast<ach_status_t>(r)));
+}
+
+/* ********************************************************************************************* */
+/// Control the Robotiq hands - button 5 or 6 sets left/right, axis 3 sets the direction
+void controlRobotiq() {
+
+	// 
+}
+
+/* ********************************************************************************************* */
 /// Continuously process the joystick data and sets commands to the modules
 void run() {
 
@@ -87,11 +114,15 @@ void run() {
 		controlArms();
 
 		// Control the torso
-		double dq [] = {1.0};
+		double dq [] = {x[4] / 7.0};
 		somatic_motor_cmd(&daemon_cx, &torso, VELOCITY, dq, 1, NULL);
-
-		if(fabs(x[4]) > 0.1) somatic_motor_cmd(&daemon_cx, &torso, VELOCITY, &(x[4]), 1, NULL);
 	
+		// Control the waist
+		controlWaist();
+
+		// Control the robotiq hands
+		controlHands();
+
 		// Free buffers allocated during this cycle
 		aa_mem_region_release(&daemon_cx.memreg);	
 	}
@@ -127,6 +158,15 @@ void init () {
 
 /* ********************************************************************************************* */
 void destroy() {
+
+	// Halt the waist modules
+	static Somatic__WaistCmd *waistDaemonCmd=somatic_waist_cmd_alloc();
+	somatic_waist_cmd_set(waistDaemonCmd, SOMATIC__WAIST_MODE__STOP);
+	somatic_metadata_set_time_now(waistDaemonCmd->meta);
+	somatic_metadata_set_until_duration(waistDaemonCmd->meta, .1);
+	ach_status_t r = SOMATIC_PACK_SEND( &waistCmdChan, somatic__waist_cmd, waistDaemonCmd );
+	if(ACH_OK != r) fprintf(stderr, "Couldn't send message: %s\n", ach_result_to_string(r));
+	somatic_d_channel_close(&daemon_cx, &waistCmdChan);
 
 	// Halt the Schunk modules
 	somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
