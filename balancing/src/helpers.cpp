@@ -7,7 +7,14 @@
 
 #include "helpers.h"
 
+using namespace Eigen;
 using namespace std;
+
+/* ******************************************************************************************** */
+// Constants for the robot kinematics
+
+const double wheelRadius = 10.5; 							///< Radius of krang wheels in inches
+const double distanceBetweenWheels = 27.375; 	///< Distance Between krang's wheels in inches 
 
 /* ******************************************************************************************** */
 Eigen::MatrixXd fix (const Eigen::MatrixXd& mat) {
@@ -28,93 +35,107 @@ vector <int> left_arm_ids (left_arm_ids_a, left_arm_ids_a + 7);
 vector <int> right_arm_ids (right_arm_ids_a, right_arm_ids_a + 7);	
 vector <int> imuWaist_ids (imuWaist_ids_a, imuWaist_ids_a + 2);		
 
-/* ********************************************************************************************* *
-/// Gets initial wheel positions to be subtracted from all subsequent readings. This is because
-/// the initial values are to be treated as zeros.
-void getWheelInitial(double* _wheelInitial[]) {
-	
-	// Get the time to get the sensor values by
-	struct timespec currTime;
-	clock_gettime(CLOCK_MONOTONIC, &currTime);
-	struct timespec abstime = aa_tm_add(aa_tm_sec2timespec(1.0/30.0), currTime);
-	
-	// Reads amc position from the amc state channel
-	Somatic__MotorState* amc; int r;
-	assert(((amc = getMotorMessage(amcChan)) != NULL) && "Wheels call failed");
+/* ******************************************************************************************** */
+/// Updates the dart robot representation
+void updateDart (double imu) {
 
-	// Get imu position
+	// Update imu and waist values
+	double waist_val = (waist.pos[0] - waist.pos[1]) / 2.0;
+	Vector2d imuWaist_vals (-imu + M_PI_2, waist_val);
+	robot->setConfig(imuWaist_ids, imuWaist_vals);
+
+	// Update the robot state
+	Vector7d larm_vals = eig7(llwa.pos), rarm_vals = eig7(rlwa.pos);
+	robot->setConfig(left_arm_ids, larm_vals);
+	robot->setConfig(right_arm_ids, rarm_vals);
+}
+
+/* ******************************************************************************************** */
+/// Get the joint values from the encoders and the imu and compute the center of mass as well 
+void getState(Vector6d& state, double dt) {
+
+	// Read imu
 	double imu, imuSpeed;
-	getImu(imu, imuSpeed);
+	getImu(&imuChan, imu, imuSpeed, dt, kf); 
 
-	// Store in amcOffset the sum of amc-encoders and imu value. This is done to compensate for the
-	// effect of imu rotation in encoder readings.
-	*_wheelInitial[0] = amc->position->data[0]+imu;
-	*_wheelInitial[1] = amc->position->data[1]+imu;
+	// Read Motors 
+	somatic_motor_update(&daemon_cx, &amc);
+	somatic_motor_update(&daemon_cx, &waist);
+	somatic_motor_update(&daemon_cx, &llwa);
+	somatic_motor_update(&daemon_cx, &rlwa);
+
+	// Update the dart robot representation and get the center of mass (decrease height of wheel)
+	updateDart(imu);
+	Vector3d com = robot->getWorldCOM();
+	com(2) -= 0.264;
+
+	// Update the state (note for amc we are reversing the effect of the motion of the upper body)
+	state(0) = atan2(com(0), com(2));
+	state(1) = imuSpeed;
+	state(2) = (amc.pos[0] + amc.pos[1])/2.0 + imu;
+	state(3) = (amc.vel[0] + amc.vel[1])/2.0 + imuSpeed;
+	state(4) = wheelRadius * (amc.pos[0] - amc.pos[1]) / distanceBetweenWheels;
+	state(5) = wheelRadius * (amc.vel[0] - amc.vel[1]) / distanceBetweenWheels;
+}
+
+/* ******************************************************************************************** */
+/// Update reference left and right wheel pos/vel from joystick data where dt is last iter. time
+void updateReference (double js_forw, double js_spin, double dt, Vector6d& refState) {
+
+	// First, set the balancing angle and velocity to zeroes
+	refState(0) = refState(1) = 0.0;
+
+	// Set the distance and heading velocities using the joystick input
+	static const double kMaxForwVel = 2.0, kMaxSpinVel = 3.0;
+	refState(3) = kMaxForwVel * js_forw;
+	refState(5) = kMaxSpinVel * js_spin;
+
+	// Integrate the reference positions with the current reference velocities
+	refState(2) += dt * refState(3);
+	refState(4) += dt * refState(5);
+}
+
+/* ******************************************************************************************** */
+/// Returns the values of axes 1 (left up/down) and 2 (right left/right) in the joystick 
+bool getJoystickInput(double& js_forw, double& js_spin) {
+
+	// Get the message and check output is OK.
+	int r = 0;
+	Somatic__Joystick *js_msg = 
+			SOMATIC_GET_LAST_UNPACK( r, somatic__joystick, &protobuf_c_system_allocator, 4096, &js_chan );
+	if(!(ACH_OK == r || ACH_MISSED_FRAME == r) || (js_msg == NULL)) return false;
+
+	// Change the gains with the given joystick input
+	double deltaTH = 0.2;					// deltaX = 0.02;
+	int64_t* b = &(js_msg->buttons->data[0]);
+	for(size_t i = 0; i < 4; i++)
+		if(b[i] == 1)
+			K_bal(i % 2) += ((i < 2) ? deltaTH : -deltaTH);
+	
+	// Ignore the joystick statements for the arm control 
+	if((b[4] == 1) || (b[5] == 1) || (b[6] == 1) || (b[7] == 1)) {
+		js_forw = js_spin = 0.0;
+		return true;
+	}
+
+	// Set the values for the axis
+	double* x = &(js_msg->axes->data[0]);
+	js_forw = -x[1];
+	js_spin = 0.0; 
+	return true;
 }
 
 /* ********************************************************************************************* */
-/// Filters the imu, wheel and waist readings 
-void filterState (double dt, filter_kalman_t* kf, Eigen::VectorXd& q, Eigen::VectorXd& dq) {
-
-	// Set the data of the filter (note the wheel and imu positions are added).
-	for (int i = 0; i < 8; i++)  kf->z[i] = (i % 2) ? dq(5 + i/2) : q(5 + i/2);  
-	
-	// Filter the read values	
-	static bool firstIteration=1;
-	if(firstIteration) { memcpy(kf->x, kf->z, sizeof(double)*8); firstIteration=0;}
-
-	double T = dt; // second
-
-	// Process matrix - fill every 9th value to 1 and every 18th starting from 8 to T.
-	for(size_t i = 0; i < 64; i += 9)
-		kf->A[i] = 1.0;
-	for(size_t i = 8; i < 64; i += 18)
-		kf->A[i] = T;
-
-	// Process noise covariance matrix
-	const double k1 = 2.0;
-	const double k1b = 5.0;
-	const double k2 = 10.0;
-	const double k3 = 1.0;
-	kf->R[0] = (T*T*T*T)*k1*(1.0/4.0);
-	kf->R[1] = (T*T*T)*k1*(1.0/2.0);
-	kf->R[8] = (T*T*T)*k1*(1.0/2.0);
-	kf->R[9] = (T*T)*k1b;
-	kf->R[18] = (T*T*T*T)*k2*(1.0/4.0);
-	kf->R[19] = (T*T*T)*k2*(1.0/2.0);
-	kf->R[26] = (T*T*T)*k2*(1.0/2.0);
-	kf->R[27] = (T*T)*k2;
-	kf->R[36] = (T*T*T*T)*k2*(1.0/4.0);
-	kf->R[37] = (T*T*T)*k2*(1.0/2.0);
-	kf->R[44] = (T*T*T)*k2*(1.0/2.0);
-	kf->R[45] = (T*T)*k2;
-	kf->R[54] = (T*T*T*T)*k3*(1.0/4.0);
-	kf->R[55] = (T*T*T)*k3*(1.0/2.0);
-	kf->R[62] = (T*T*T)*k3*(1.0/2.0);
-	kf->R[63] = (T*T)*k3;
-
-	// Measurement matrix - fill every 9th value to 1
-	for(size_t i = 0; i < 64; i += 9)
-		kf->C[i] = 1.0;
-
-	// Measurement noise covariance matrix
-	double imuCov = 1e-3;	//1e-3
-	kf->Q[0] = imuCov;	// IMU
-	kf->Q[9] = imuCov;
-	kf->Q[18] = 0.0005; // AMC
-	kf->Q[27] = 0.02;
-	kf->Q[36] = 0.0005; // AMC
-	kf->Q[45] = 0.02;
-	kf->Q[54] = 0.05;   // Torso
-	kf->Q[63] = 0.001;
-
-	// Filter the noise	
-	filter_kalman_predict( kf );
-	filter_kalman_correct( kf );
-
-	// Save the output of the filter in the state structure
-	for( int i = 5, j = 0; i < 9; i++) { q(i) = kf->x[j++]; dq(i) = kf->x[j++]; }
+/// Sets a global variable ('start') true if the user presses 's'
+void *kbhit(void *) {
+	char input;
+	while(true){ 
+		input=cin.get(); 
+		if(input=='s') break;
+	}
+	start = true;
 }
+
 
 /* ********************************************************************************************* */
 /// Computes the imu value from the imu readings
