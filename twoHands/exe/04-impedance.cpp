@@ -23,7 +23,7 @@ ach_channel_t imuChan;
 ach_channel_t waistChan;				
 Arm* larm = NULL, * rarm = NULL;	///< Arm descriptors with ft chan, somatic_motor_t and ft offset
 vector <VectorXd> path;       ///< The path that the robot will execute
-const int r_id = 0;						///< The robot id in the simulation world
+const int krang_id = 0;						///< The robot id in the simulation world
 bool goInit = false;
 
 /* ******************************************************************************************** */

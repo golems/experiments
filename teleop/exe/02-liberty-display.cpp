@@ -47,7 +47,7 @@ void ach_init(ach_channel_t* chan, char* chan_name, size_t n_achbuf) {
     aa_hard_assert( ACH_OK == r, "Couldn't open channel %s\n", chan_name );
     r = ach_flush( chan );
     aa_hard_assert( ACH_OK == r, "Couldn't flush channel\n");
-    
+
     // Set the interrupt handler
     somatic_sighandler_simple_install();
 }
@@ -60,11 +60,10 @@ void Timer::Notify() {
     // get liberty data
     int r = 0;
     Somatic__Liberty *ls_msg = SOMATIC_GET_LAST_UNPACK( r, somatic__liberty, 
-							 &protobuf_c_system_allocator, 
-	4096, &liberty_chan );
+							&protobuf_c_system_allocator, 
+							4096, &liberty_chan );
     if(!(ACH_OK == r || ACH_MISSED_FRAME == r) || (ls_msg == NULL)) return;
 
-    
     // stack sensors into a single array for indexing
     Somatic__Vector* sensors[] = {ls_msg->sensor1, ls_msg->sensor2, ls_msg->sensor3, ls_msg->sensor4,
 				  ls_msg->sensor5, ls_msg->sensor6, ls_msg->sensor7, ls_msg->sensor8};
@@ -86,7 +85,7 @@ void Timer::Notify() {
 	    arrowConf[j] = rotV[j-3];
 
 	vector <int> conf_ids;
-	for(size_t i = 0; i < 6; i++) conf_ids.push_back(i);
+	for(size_t k = 0; k < 6; k++) conf_ids.push_back(k);
 	mWorld->getSkeleton(i)->setConfig(conf_ids, arrowConf);
     }
 
@@ -95,7 +94,6 @@ void Timer::Notify() {
 
     // Restart the timer for the next start
     viewer->DrawGLScene();
-    Start(0.005 * 1e4);	
 }
 
 /* ********************************************************************************************* */
@@ -104,18 +102,14 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 
     // ============================================================================
     // Initialize grip stuff
-
-    sizerFull = new wxBoxSizer(wxHORIZONTAL);
-    wxBoxSizer* sizerFull = new wxBoxSizer (wxHORIZONTAL);
     viewer->camRadius = 3.0;
     viewer->worldV += Vector3d(0.0, 0.0, -0.7);
     viewer->UpdateCamera();
-    SetSizer(sizerFull);
     frame->DoLoad("../../common/scenes/04-World-Liberty.urdf");
 
     // Create the timer to notify the function that draws the robot at multiple configurations
     timer = new Timer();
-    timer->Start(0.001);	
+    timer->Start(0.005 * 1e4);
 
     // ============================================================================
     // Initialize this daemon (program!)
@@ -129,7 +123,8 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 
     // Send a message; set the event code and the priority
     somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
-		    SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
+    SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
+
 }
 
 /* ********************************************************************************************* */
@@ -145,6 +140,12 @@ SimTab::~SimTab() {
 
 /* ********************************************************************************************* */
 void SimTab::GRIPEventSimulationBeforeTimestep() {}
+
+/* ********************************************************************************************* */
+void SimTab::OnButton(wxCommandEvent &evt) {}
+
+/* ********************************************************************************************* */
+void SimTab::OnSlider(wxCommandEvent &evt) {}
 
 /* ********************************************************************************************* */
 // Handler for events

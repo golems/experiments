@@ -30,9 +30,9 @@ fr* planner;
 /// Performs forward kinematics and returns the position and orientation (quaternion) of the
 /// left end-effector
 void forward (const Vector7d& node, Vector3d& eePos, Quaternion <double>& eeOri) {
-	world->getSkeleton(r_id)->setConfig(left_idx, node);
-	world->getSkeleton(r_id)->setConfig(imuWaist_ids, Vector2d(1.857-3.0 * M_PI_2, (5.0 / 6) * M_PI));
-	kinematics::BodyNode* eeNode = world->getSkeleton(r_id)->getNode("lGripper");
+	world->getSkeleton(krang_id)->setConfig(left_idx, node);
+	world->getSkeleton(krang_id)->setConfig(imuWaist_ids, Vector2d(1.857-3.0 * M_PI_2, (5.0 / 6) * M_PI));
+	kinematics::BodyNode* eeNode = world->getSkeleton(krang_id)->getNode("lGripper");
 	MatrixXd eeTransform = eeNode->getWorldTransform();
 	eePos = eeTransform.topRightCorner<3,1>();
 	eeOri = Quaternion <double> (eeTransform.topLeftCorner<3,3>());
@@ -241,9 +241,9 @@ void lever_constraint (const Matrix4d& left, Matrix4d& right) {
 bool computeIK (Node& node, double phi) {
 
 	// Perform forward kinematics and determine where the right frame should be
-	world->getSkeleton(r_id)->setConfig(left_idx, node.left);
-	world->getSkeleton(r_id)->setConfig(imuWaist_ids, Vector2d(1.857-3.0 * M_PI_2, (5.0 / 6) * M_PI));
-	Matrix4d leftFrame = world->getSkeleton(r_id)->getNode("lGripper")->getWorldTransform(), 
+	world->getSkeleton(krang_id)->setConfig(left_idx, node.left);
+	world->getSkeleton(krang_id)->setConfig(imuWaist_ids, Vector2d(1.857-3.0 * M_PI_2, (5.0 / 6) * M_PI));
+	Matrix4d leftFrame = world->getSkeleton(krang_id)->getNode("lGripper")->getWorldTransform(), 
 		rightFrame;
 
 	pv(node.left);
@@ -253,7 +253,7 @@ bool computeIK (Node& node, double phi) {
 
 	// Get the relative goal
 	static Transform <double, 3, Affine> relGoal;
-	getWristInShoulder(world->getSkeleton(r_id), rightFrame, true, relGoal.matrix());
+	getWristInShoulder(world->getSkeleton(krang_id), rightFrame, true, relGoal.matrix());
 	pm(relGoal);
 
 	// Perform IK
@@ -317,7 +317,7 @@ int main (int argc, char* argv[]) {
 	assert((computeIK(goal, 0.174533)) && "Could not compute I.K. for the goal node");
 
 	// Create the fr-rrt planner
-	planner = new fr (world, r_id, start, goal, boxLift_err_ground, lever_constraint);
+	planner = new fr (world, krang_id, start, goal, boxLift_err_ground, lever_constraint);
 	
 	// Make the call
 	list <Node*> path;
