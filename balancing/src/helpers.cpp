@@ -192,3 +192,133 @@ void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt,
 	// Set the values
 	_imu = kf->x[0], _imuSpeed = kf->x[1];
 }
+
+/* ******************************************************************************************** */
+void computeExternal (const Vector6d& input, SkeletonDynamics& robot, Vector6d& external, bool left) {
+
+	// Get the point transform wrench due to moving the affected position from com to sensor origin
+	// The transform is an identity with the bottom left a skew symmetric of the point translation
+	Matrix6d pTcom_sensor = MatrixXd::Identity(6,6); 
+	pTcom_sensor.bottomLeftCorner<3,3>() << 0.0, -s2com(2), s2com(1), s2com(2), 0.0, -s2com(0), 
+		-s2com(1), s2com(0), 0.0;
+
+	// Get the rotation between the world frame and the sensor frame by setting the arm values
+	// and the imu/waist values
+	const char* nodeName = left ? "lGripper" : "rGripper";
+	Matrix3d Rsw = robot.getNode(nodeName)->getWorldTransform().topLeftCorner<3,3>().transpose();
+//	vector <int> dofs;
+//	for(size_t i = 0; i < 25; i++) dofs.push_back(i);
+//	if(myDebug) cout << "\nq in computeExternal: " << robot.getConfig(dofs).transpose() << endl;
+	
+	// Create the wrench with computed rotation to change the frame from the world to the sensor
+	Matrix6d pSsensor_world = MatrixXd::Identity(6,6); 
+	pSsensor_world.topLeftCorner<3,3>() = Rsw;
+	pSsensor_world.bottomRightCorner<3,3>() = Rsw;
+
+	// Get the weight vector (note that we use the world frame for gravity so towards -y)
+	// static const double eeMass = 0.169;	// kg - ft extension
+	Vector6d weightVector_in_world;
+	weightVector_in_world << 0.0, 0.0, -eeMass * 9.81, 0.0, 0.0, 0.0;
+	
+	// Compute what the force and torque should be without any external values by multiplying the 
+	// position and rotation transforms with the expected effect of the gravity 
+	Vector6d wrenchWeight = pTcom_sensor * pSsensor_world * weightVector_in_world;
+
+	// Remove the effect from the sensor value and convert the wrench into the world frame
+	external = input - wrenchWeight;
+	external = pSsensor_world.transpose() * external;	
+}
+
+/* ******************************************************************************************** */
+void computeOffset (double imu, double waist, const somatic_motor_t& lwa, const Vector6d& raw, 
+		SkeletonDynamics& robot, Vector6d& offset, bool left) {
+
+	// Get the point transform wrench due to moving the affected position from com to sensor origin
+	// The transform is an identity with the bottom left a skew symmetric of the point translation
+	Matrix6d pTcom_sensor = MatrixXd::Identity(6,6); 
+	pTcom_sensor.bottomLeftCorner<3,3>() << 0.0, -s2com(2), s2com(1), s2com(2), 0.0, -s2com(0), 
+		-s2com(1), s2com(0), 0.0;
+
+	// Get the rotation between the world frame and the sensor frame. 
+	robot.setConfig(imuWaist_ids, Vector2d(-imu + M_PI_2, waist));
+	robot.setConfig(left ? left_arm_ids : right_arm_ids, Map <Vector7d> (lwa.pos));
+	const char* nodeName = left ? "lGripper" : "rGripper";
+	Matrix3d R = robot.getNode(nodeName)->getWorldTransform().topLeftCorner<3,3>().transpose();
+	cout << "Transform : "<< endl << R << endl;
+	vector <int> dofs;
+	for(size_t i = 0; i < 25; i++) dofs.push_back(i);
+	cout << "\nq in computeExternal: " << robot.getConfig(dofs).transpose() << endl;
+
+	// Create the wrench with computed rotation to change the frame from the bracket to the sensor
+	Matrix6d pSsensor_bracket = MatrixXd::Identity(6,6); 
+	pSsensor_bracket.topLeftCorner<3,3>() = R;
+	pSsensor_bracket.bottomRightCorner<3,3>() = R;
+	
+	// Get the weight vector (note that we use the bracket frame for gravity so towards -y)
+	Vector6d weightVector_in_bracket;
+	weightVector_in_bracket << 0.0, 0.0, -eeMass * 9.81, 0.0, 0.0, 0.0;
+	
+	// Compute what the force and torque should be without any external values by multiplying the 
+	// position and rotation transforms with the expected effect of the gravity 
+	Vector6d expectedFT = pTcom_sensor * pSsensor_bracket * weightVector_in_bracket;
+	pv(raw);
+	pv(expectedFT);
+
+	// Compute the difference between the actual and expected f/t values
+	offset = expectedFT - raw;
+	pv(offset);
+}
+
+/* ******************************************************************************************* */
+// Compute the wrench on the wheel as an effect of t he wrench acting on the sensor
+void computeWheelWrench(const Vector6d& wrenchSensor, SkeletonDynamics& robot, Vector6d& wheelWrench, bool left) {
+	
+	// Get the position vector of the sensor with respect to the wheels
+	const char* nodeName = left ? "lGripper" : "rGripper";
+	Vector3d Tws = robot.getNode(nodeName)->getWorldTransform().topRightCorner<3,1>();
+	if(myDebug) cout << Tws.transpose() << endl;
+
+	// Get the wrench shift operator to move the wrench from sensor origin to the wheel axis
+	// TODO: This shifting is to the origin of the world frame in dart. It works now because it is not 
+	// being updated by the amc encoders. We need to shift the wrench to a frame having origin at the 
+	// wheel axis.
+	vector<int> idx;
+	idx.push_back(2);
+	VectorXd zOffset = robot.getConfig(idx);
+	Tws(2) -= zOffset(0); // Height of the wheel axis in the scene file (not in reality)
+	Matrix6d pTsensor_wheel = MatrixXd::Identity(6,6);
+	pTsensor_wheel.bottomLeftCorner<3,3>() << 0.0, -Tws(2), Tws(1), Tws(2), 0.0, -Tws(0),
+		-Tws(1), Tws(0), 0.0;
+
+	// Shift the wrench from the sensor origin to the wheel axis
+	wheelWrench = pTsensor_wheel * wrenchSensor;
+}
+
+
+
+/* ********************************************************************************************* */
+bool getFT (somatic_d_t& daemon_cx, ach_channel_t& ft_chan, Vector6d& data) {
+
+	// Check if there is anything to read
+	int result;
+	size_t numBytes = 0;
+	struct timespec abstimeout = aa_tm_future(aa_tm_sec2timespec(.001));
+	uint8_t* buffer = (uint8_t*) somatic_d_get(&daemon_cx, &ft_chan, &numBytes, &abstimeout, 
+		ACH_O_LAST, &result);
+
+	// Return if there is nothing to read
+	if(numBytes == 0) return false;
+
+	// Read the message with the base struct to check its type
+	Somatic__BaseMsg* msg = somatic__base_msg__unpack(&(daemon_cx.pballoc), numBytes, buffer);
+	if((msg->meta == NULL) || !msg->meta->has_type) return false;
+	if(msg->meta->type != SOMATIC__MSG_TYPE__FORCE_MOMENT) return false;
+
+	// Read the force-torque message and write it into the vector
+	Somatic__ForceMoment* ftMessage = somatic__force_moment__unpack(&(daemon_cx.pballoc), 
+		numBytes, buffer);
+	for(size_t i = 0; i < 3; i++) data(i) = ftMessage->force->data[i]; 
+	for(size_t i = 0; i < 3; i++) data(i+3) = ftMessage->moment->data[i]; 
+	return true;
+}
+
