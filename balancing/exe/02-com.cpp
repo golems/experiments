@@ -37,20 +37,12 @@ using namespace dynamics;
 #define getMotorMessage(x) (SOMATIC_WAIT_LAST_UNPACK( r, somatic__motor_state, \
 	&protobuf_c_system_allocator, 1024, &x, &abstime))
 
-/* ******************************************************************************************** */
-// Communication and filtering
+struct timespec t_now, t_prev;	///< for timing each iteration
+wxStaticText* text;							///< the text box to show the com value
 
-filter_kalman_t *kf;					///< the kalman filter to smooth the imu readings
-somatic_d_t daemon_cx;				///< the daemon properties
-ach_channel_t imuChan;				///< the state channel to listen to imu data
 ach_channel_t waistChan;			///< the state channel for the waist module
 ach_channel_t leftArmChan;		///< the state channel for the left arm modules
 ach_channel_t rightArmChan;		///< the state channel for the right arm modules
-
-SkeletonDynamics* robot;			///< the robot representation in dart
-struct timespec t_now, t_prev;///< for timing each iteration
-
-wxStaticText* text;						///< the text box to show the com value
 
 /* ********************************************************************************************* */
 /// Gets the data from the channels

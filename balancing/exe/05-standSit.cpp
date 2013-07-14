@@ -1,16 +1,34 @@
 /**
- * @file 04-balancing.cpp
- * @author Munzir Zafar, Can Erdogan
- * @date July 11, 2013
- * @brief This demonstration shows the balancing of the robot while following the position
- * and velocity commands set by the joystick.
+ * @file 05-standSit.cpp
+ * @author Can Erdogan
+ * @date July 14, 2013
+ * @brief This demonstration shows the stand up and sit down process of Krang.
  * NOTE We are using a Vector6d to represent the state which has: th, th. x, x., psi, psi.
  * where . is the derivative, th is the imu angle, x is the distance along the heading and
  * psi is the heading angle.
+ * NOTE We are not using psi in this angle but for generality, we will keep it.
  */
+
+#include <iostream>
+#include <pthread.h>
+#include <unistd.h>
+
+#include <somatic.h>
+#include <somatic/daemon.h>
+#include <somatic.pb-c.h>
+#include <somatic/motor.h>
+#include <filter.h>
+#include <ach.h>
+
+#include <dynamics/SkeletonDynamics.h>
+#include <robotics/parser/dart_parser/DartLoader.h>
+#include <simulation/World.h>
+
+#include <Eigen/Dense>
 
 #include "helpers.h"
 
+using namespace Eigen;
 using namespace std;
 using namespace dynamics;
 

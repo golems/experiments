@@ -8,6 +8,8 @@
 #pragma once
 
 #include <Eigen/Dense>
+
+#include <dirent.h>
 #include <iostream>
 #include <string>
 #include <stdlib.h>
@@ -16,26 +18,45 @@
 #include <stdint.h>
 #include <unistd.h>
 
-#include <amino.h>
-#include <ach.h>
-#include <dirent.h>
 #include <somatic.h>
 #include <somatic/daemon.h>
 #include <somatic.pb-c.h>
 #include <somatic/motor.h>
+#include <ach.h>
 
 #include <filter.h>
 #include <imud.h>
 #include <pciod.h>
 
-#include "Dynamics.h"
+#include <dynamics/SkeletonDynamics.h>
+#include <robotics/parser/dart_parser/DartLoader.h>
+#include <simulation/World.h>
 
 using namespace Eigen;
+using namespace dynamics;
 
 /* ******************************************************************************************** */
 typedef Matrix<double, 6, 1> Vector6d;			///< A typedef for convenience to contain f/t values
 typedef Matrix<double, 7, 1> Vector7d;			///< A typedef for convenience to contain joint values
 typedef Matrix<double, 6, 6> Matrix6d;			///< A typedef for convenience to contain wrenches
+
+/* ******************************************************************************************** */
+// Globals for imu, motors and joystick
+
+filter_kalman_t *kf;					///< the kalman filter to smooth the imu readings
+ach_channel_t imuChan;				///< the state channel to listen to imu data
+somatic_d_t daemon_cx;				///< The properties of this "daemon"
+somatic_motor_t amc; 					///< The interface to the wheel motor group
+somatic_motor_t waist;
+somatic_motor_t llwa;
+somatic_motor_t rlwa;
+ach_channel_t js_chan;				///< The ach channel to the joystick daemon
+
+simulation::World* world;			///< the world representation in dart
+SkeletonDynamics* robot;			///< the robot representation in dart
+
+bool start = false;						///< Giving time to the user to get the robot in balancing angle
+Vector6d K;										///< The gains for the controller
 
 /* ******************************************************************************************** */
 // The arm indices to set/get configurations from dart
@@ -50,8 +71,20 @@ Eigen::MatrixXd fix (const Eigen::MatrixXd& mat);
 /* ******************************************************************************************** */
 // Helper functions
 
-/// Filters the imu, wheel and waist readings
-void filterState(double dt, filter_kalman_t *kf, Eigen::VectorXd& q, Eigen::VectorXd& dq);
+/// Sets a global variable ('start') true if the user presses 's'
+void *kbhit(void *);
+
+/// Returns the values of axes 1 (left up/down) and 2 (right left/right) in the joystick 
+bool getJoystickInput(double& js_forw, double& js_spin);
+
+/// Update reference left and right wheel pos/vel from joystick data where dt is last iter. time
+void updateReference (double js_forw, double js_spin, double dt, Vector6d& refState);
+
+/// Get the joint values from the encoders and the imu and compute the center of mass as well 
+void getState(Vector6d& state, double dt);
+
+/// Updates the dart robot representation
+void updateDart (double imu);
 
 /// Reads imu values from the ach channels and computes the imu values
 void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt, 
