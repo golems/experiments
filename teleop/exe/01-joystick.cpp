@@ -8,6 +8,9 @@
 
 #include "initModules.h"
 #include "motion.h"
+#include <iostream>
+
+using namespace std;
 
 #define VELOCITY SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY
 
@@ -20,8 +23,8 @@ somatic_motor_t llwa, rlwa, torso;
 
 Somatic__WaistCmd *waistDaemonCmd = somatic_waist_cmd_alloc();		///< The waist command
 
-char* b;
-double* x;
+char b [10];
+double x [6];
 
 /* ********************************************************************************************* */
 /// Reads the joystick data into global variables 'b' and 'x'
@@ -37,20 +40,17 @@ void readJoystick() {
 	for(size_t i = 0; i < 10; i++) 
 		b[i] = js_msg->buttons->data[i] ? 1 : 0;
 	memcpy(x, js_msg->axes->data, sizeof(x));
-	
+
 	// Free the joystick message
 	somatic__joystick__free_unpacked(js_msg, &protobuf_c_system_allocator);
 }
 
 /* ********************************************************************************************* */
-/// Controls the torso module with the 8-pad left/right b
-void controlTorso() {
-	
-}
-
-/* ********************************************************************************************* */
 /// Controls the arms
 void controlArms () {
+
+	// Return if the x[3] is being used for robotiq hands
+	if(fabs(x[3]) > 0.2) return;
 
 	// Check the b for each arm and apply velocities accordingly
 	// For left: 4 or 6, for right: 5 or 7, lower arm button is smaller (4 or 5)
@@ -91,9 +91,31 @@ void controlWaist() {
 
 /* ********************************************************************************************* */
 /// Control the Robotiq hands - button 5 or 6 sets left/right, axis 3 sets the direction
+/// TODO: Find a better joystick to command mapping. The results are not very intuitive.
 void controlRobotiq() {
 
-	// 
+	// Return if x[2] is being used for the L7/R7 motors
+	if(fabs(x[2]) > 0.2) return;
+
+	// Skip some loops
+	static int counter = 0;
+	if(counter++ % 20 != 0) return;
+
+	// For each hand, check if the button is pressed and if so give the command
+	for(size_t i = 0; i < 2; i++) {
+
+		// Turn the axis value between [-1, 1], to [0,255] - if 0, do nothing.
+		int val = fmax(0, fmin(255, ((x[3] + 1.0) / 2.0) * 256));
+
+		// Write the command line command and execute it
+		char buf [256];
+		cout << x[3] << endl;
+		if((b[4 + i] == 1) && (fabs(x[3]) > 0.05))  {
+			sprintf(buf, "robotiq_cmd b gp%x -c %cgripper-cmd", val, i ? 'r' : 'l');
+			printf("'%s'\n", buf);
+			system(buf);
+		}
+	}
 }
 
 /* ********************************************************************************************* */
@@ -116,15 +138,16 @@ void run() {
 		// Control the torso
 		double dq [] = {x[4] / 7.0};
 		somatic_motor_cmd(&daemon_cx, &torso, VELOCITY, dq, 1, NULL);
-	
+
 		// Control the waist
 		controlWaist();
 
 		// Control the robotiq hands
-		controlHands();
+		controlRobotiq();
 
 		// Free buffers allocated during this cycle
 		aa_mem_region_release(&daemon_cx.memreg);	
+		usleep(1e4);
 	}
 
 	// Send the stoppig event
@@ -135,10 +158,6 @@ void run() {
 /* ********************************************************************************************* */
 void init () {
 	
-	// Initialize space for the button and axes
-	b = new char [10];
-	x = new double [6];
-
 	// Initialize this daemon (program!)
 	somatic_d_opts_t dopt;
 	memset(&dopt, 0, sizeof(dopt)); // zero initialize
@@ -154,6 +173,9 @@ void init () {
 	int r = ach_open(&js_chan, "joystick-data", NULL);
 	aa_hard_assert(r == ACH_OK, "Ach failure '%s' on opening Joystick channel (%s, line %d)\n", 
 		ach_result_to_string(static_cast<ach_status_t>(r)), __FILE__, __LINE__);
+
+	// Initialize the waist channel
+	somatic_d_channel_open(&daemon_cx, &waistCmdChan, "waistd-cmd", NULL);
 }
 
 /* ********************************************************************************************* */
