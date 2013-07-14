@@ -106,11 +106,12 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 	if(!(ACH_OK == r || ACH_MISSED_FRAME == r) || (js_msg == NULL)) return false;
 
 	// Change the gains with the given joystick input
-	double deltaTH = 0.2;					// deltaX = 0.02;
+	double deltaTH = 0.2, deltaX = 0.02;
 	int64_t* b = &(js_msg->buttons->data[0]);
-	for(size_t i = 0; i < 4; i++)
-		if(b[i] == 1)
-			K_bal(i % 2) += ((i < 2) ? deltaTH : -deltaTH);
+	for(size_t i = 0; i < 4; i++) {
+		if((b[5] == 0) && (b[i] == 1)) K_bal(i % 2) += ((i < 2) ? deltaTH : -deltaTH);
+		else if((b[5] == 1) && (b[i] == 1)) K_bal((i % 2) + 2) += ((i < 2) ? deltaX : -deltaX);
+	}
 	
 	// Ignore the joystick statements for the arm control 
 	if((b[4] == 1) || (b[5] == 1) || (b[6] == 1) || (b[7] == 1)) {
@@ -120,7 +121,7 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 
 	// Set the values for the axis
 	double* x = &(js_msg->axes->data[0]);
-	js_forw = -x[1];
+	js_forw = -x[1] / 2.0;
 	js_spin = 0.0; 
 	return true;
 }

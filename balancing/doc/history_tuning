@@ -24,3 +24,16 @@ With 300, 40, we saw a lot of overshoot and the spring was too tough. So, we dec
 
 Increasing kd helps with overshoots but shakes are observed.
 
+------------------- ARMS FORWARD WITH STANDING UP 6 deg ------------
+
+250 45/50 lead to shaking after stand up. 250 38 worked. 
+
+However, now we see a moving forward due to low x gains, the robot moves forward when standing up. We increased the gains from (3,10) to (7,10) which decreased the overshoot but now there is shaking.
+
+11 stopped to oscillations in x direction and half a foot motion is acceptable.
+
+CHanging from (7,9) to (15,15) did not seem affect the dx in beginning too much (2 cm).
+
+Observed that Kp and Kd (?) for x should be negative. -25 kp with balancing off seems semi sufficient to control when kd is 0.0.
+
+We ended up using 250 38 4 10 3 7 for the video 07/14th, time 11 am.

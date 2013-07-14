@@ -51,7 +51,7 @@ void run() {
 		double js_forw = 0.0, js_spin = 0.0;
 		bool gotInput = false;
 		while(!gotInput) gotInput = getJoystickInput(js_forw, js_spin);
-		if(debug) printf("K_bal: <%7.3lf, %7.3lf, %7.3lf, %7.3lf\n", K_bal(0), K_bal(1), K_bal(2), K_bal(3));
+		if(debug) cout << "K_bal: " << K_bal.transpose() << endl;
 
 		// Determine the reference values for x and psi
 		updateReference(js_forw, js_spin, dt, refState);
