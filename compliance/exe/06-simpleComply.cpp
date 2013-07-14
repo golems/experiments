@@ -39,7 +39,7 @@ somatic_motor_t llwa;
 Vector6d offset;							///< the offset we are going to decrease from raw readings
 bool useLeftArm = true;				///< The indicator that the left arm will be used for this program
 
-const int r_id = 0;
+const int krang_id = 0;
 
 /* ******************************************************************************************** */
 /// Given a wrench, computes the joint space velocities so that wrench is minimized 
@@ -47,7 +47,7 @@ void wrenchToJointVels (const Vector6d& wrench, Vector7d& dq) {
 
 	// Get the Jacobian towards computing joint-space velocities
 	const char* nodeName = useLeftArm ? "lGripper" : "rGripper";
-	static kinematics::BodyNode* eeNode = world->getSkeleton(r_id)->getNode(nodeName);
+	static kinematics::BodyNode* eeNode = world->getSkeleton(krang_id)->getNode(nodeName);
 	MatrixXd Jlin = eeNode->getJacobianLinear().topRightCorner<3,7>();
 	MatrixXd Jang = eeNode->getJacobianAngular().topRightCorner<3,7>();
 	MatrixXd J (6,7);
@@ -92,7 +92,7 @@ void run() {
 		// Update the arm position in dart with the real arm positions
 		somatic_motor_update(&daemon_cx, &llwa);
 		for(size_t i = 0; i < 7; i++) vals(i) = llwa.pos[i];
-		world->getSkeleton(r_id)->setConfig(arm_ids, vals);
+		world->getSkeleton(krang_id)->setConfig(arm_ids, vals);
 
 		// Get imu/waist data
 		getImu(&imu, imuChan);
@@ -107,7 +107,7 @@ void run() {
 		Vector6d ideal = raw + offset;
 
 		// Compute the external forces from ideal readings and move it to bracket frame
-		computeExternal(imu, waist, llwa, ideal, *(world->getSkeleton(r_id)), external, useLeftArm);
+		computeExternal(imu, waist, llwa, ideal, *(world->getSkeleton(krang_id)), external, useLeftArm);
 
 		// Threshold the values - 4N for forces, 0.4Nm for torques
 		if((external.topLeftCorner<3,1>().norm() < 7) && 

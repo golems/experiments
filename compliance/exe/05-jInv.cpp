@@ -32,7 +32,7 @@ using namespace simulation;
 	llwa.pos[3] << ", " << llwa.pos[4] << ", " << llwa.pos[5] << ", " << llwa.pos[6] << endl);
 
 #define NUM_GOALS 3
-const size_t r_id = 4;
+const size_t krang_id = 4;
 
 /* ********************************************************************************************* */
 somatic_d_t daemon_cx;
@@ -124,10 +124,10 @@ void run() {
 		for(size_t i = 0; i < 7; i++) vals(i) = llwa.pos[i];
 		vector <int> arm_ids;
 		for(size_t i = 4; i < 17; i+=2) arm_ids.push_back(i + 6);  
-		mWorld->getSkeleton(r_id)->setConfig(arm_ids, vals);
+		mWorld->getSkeleton(krang_id)->setConfig(arm_ids, vals);
 		
 		// Get the workspace velocity
-		kinematics::BodyNode* eeNode = mWorld->getSkeleton(r_id)->getNode("lgPlate1");
+		kinematics::BodyNode* eeNode = mWorld->getSkeleton(krang_id)->getNode("lgPlate1");
 		VectorXd xdot;
 		bool reached = workVelocity(mWorld, eeNode, currGoal, xdot);
 		if(reached) {
