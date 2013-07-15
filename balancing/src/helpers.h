@@ -31,9 +31,14 @@
 #include <dynamics/SkeletonDynamics.h>
 #include <robotics/parser/dart_parser/DartLoader.h>
 #include <simulation/World.h>
+#include <initModules.h>
+#include <kinematics/BodyNode.h>
+#include <math/UtilsRotation.h>
 
 using namespace Eigen;
 using namespace dynamics;
+
+bool myDebug;
 
 /* ******************************************************************************************** */
 typedef Matrix<double, 6, 1> Vector6d;			///< A typedef for convenience to contain f/t values
@@ -51,11 +56,14 @@ somatic_motor_t waist;
 somatic_motor_t llwa;
 somatic_motor_t rlwa;
 ach_channel_t js_chan;				///< The ach channel to the joystick daemon
+ach_channel_t left_ft_chan;				///< The ach channel to the left ft 
+ach_channel_t right_ft_chan;				///< The ach channel to the right ft
 
 simulation::World* world;			///< the world representation in dart
 SkeletonDynamics* robot;			///< the robot representation in dart
 
 bool start = false;						///< Giving time to the user to get the robot in balancing angle
+bool complyTorque = false;
 Vector6d K_bal;								///< The gains for the balancing controller
 Vector6d K_stand;							///< The gains for the standing controller
 
@@ -70,6 +78,12 @@ extern std::vector <int> imuWaist_ids;			///< Ids for waist/imu
 Eigen::MatrixXd fix (const Eigen::MatrixXd& mat);
 
 /* ******************************************************************************************** */
+// Constants for end-effector wrench estimation
+
+static const double eeMass = 2.3 + 0.169 + 0.000;			///< The mass of the robotiq end-effector
+static const Vector3d s2com (0.0, -0.008, 0.091); // 0.065 robotiq itself, 0.026 length of ext + 2nd
+
+/* ******************************************************************************************** */
 // Helper functions
 
 /// Sets a global variable ('start') true if the user presses 's'
@@ -82,7 +96,7 @@ bool getJoystickInput(double& js_forw, double& js_spin);
 void updateReference (double js_forw, double js_spin, double dt, Vector6d& refState);
 
 /// Get the joint values from the encoders and the imu and compute the center of mass as well 
-void getState(Vector6d& state, double dt);
+void getState(Vector6d& state, double dt, Vector3d* com = NULL);
 
 /// Updates the dart robot representation
 void updateDart (double imu);
@@ -90,6 +104,19 @@ void updateDart (double imu);
 /// Reads imu values from the ach channels and computes the imu values
 void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt, 
 		filter_kalman_t* kf);
+
+/// Reads FT data from ach channels
+bool getFT (somatic_d_t& daemon_cx, ach_channel_t& ft_chan, Vector6d& data);
+
+/// Computes the offset due to the weights of the end-effector in the FT sensor readings
+void computeOffset (double imu, double waist, const somatic_motor_t& lwa, const Vector6d& raw, 
+		SkeletonDynamics& robot, Vector6d& offset, bool left);
+
+/// Givent the raw FT data, gives the wrench in the world frame acting on the FT sensor
+void computeExternal (const Vector6d& input, SkeletonDynamics& robot, Vector6d& external, bool left);
+
+/// Given the wrench at the FT sensor givers the wrench on the wheels
+void computeWheelWrench(const Vector6d& wrenchSensor, SkeletonDynamics& robot, Vector6d& wheelWrench, bool left);
 
 /* ******************************************************************************************** */
 // Useful macros
