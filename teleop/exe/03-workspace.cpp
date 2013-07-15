@@ -18,6 +18,7 @@
 
 #include <math/UtilsRotation.h>
 
+#include "initModules.h"
 #include "liberty_client.h"
 #include "joystick_client.h"
 
@@ -86,13 +87,13 @@ vector<int> armIDsR;
  * Converts a 4x4 homogeneous transform to a 6D euler.
  * Conversion convention corresponds to Grip's ZYX
  */
-VectorXd transformToEuler(const MatrixXd &T) {
+VectorXd transformToEuler(const MatrixXd &T, math::RotationOrder _order = math::XYZ) { // math::XYZ
 	// extract translation
 	Vector3d posV = T.topRightCorner<3,1>();
 
 	// convert rotmat to euler
 	Matrix3d rotM = T.topLeftCorner<3,3>();
-	Vector3d rotV = math::matrixToEuler(rotM, math::XYZ);  // math::ZYX for spacenav!?
+	Vector3d rotV = math::matrixToEuler(rotM, _order);  // math::ZYX for spacenav!?
 
 	// pack into a 6D config vector
 	VectorXd V(6);
@@ -100,7 +101,7 @@ VectorXd transformToEuler(const MatrixXd &T) {
 	return V;
 }
 
-MatrixXd eulerToTransform(const VectorXd &V) {
+MatrixXd eulerToTransform(const VectorXd &V, math::RotationOrder _order = math::XYZ) { // math::XYZ
 	// extract translation
 	Vector3d posV; posV << V[0], V[1], V[2];
 
@@ -108,7 +109,7 @@ MatrixXd eulerToTransform(const VectorXd &V) {
 	Vector3d rotV; rotV << V[3], V[4], V[5];
 
 	// convert rotmat to euler
-	Matrix3d rotM = math::eulerToMatrix(rotV, math::XYZ);  // math::ZYX for spacenav!?
+	Matrix3d rotM = math::eulerToMatrix(rotV, _order);  // math::ZYX for spacenav!?
 
 	// pack into a 4x4 matrix
 	MatrixXd T(4,4);
@@ -179,13 +180,13 @@ void initialize_configs(simulation::World* world) {
 /*
  * use this one when you want to interpret UI input as velocities
  */
-void updateEffectorGoalFromUI(MatrixXd &goalM, MatrixXd &ui_curM, VectorXd &goalE, double gain = 0.003) {
-	goalE = transformToEuler(goalM);
-	VectorXd ui_curE(6);
-	ui_curE = transformToEuler(ui_curM);
-	goalE += (ui_curE * gain); // update goal in Euler space
-	goalM = eulerToTransform(goalE); // update matrix representation
-}
+//void updateEffectorGoalFromUI(MatrixXd &goalM, MatrixXd &ui_curM, VectorXd &goalE, double gain = 0.003) {
+//	goalE = transformToEuler(goalM);
+//	VectorXd ui_curE(6);
+//	ui_curE = transformToEuler(ui_curM);
+//	goalE += (ui_curE * gain); // update goal in Euler space
+//	goalM = eulerToTransform(goalE); // update matrix representation
+//}
 
 /* ********************************************************************************************* */
 /// Given the two goal 4x4 transformation for the arrows, draw them
@@ -287,7 +288,8 @@ void fakeArmMovement(VectorXd &qL, VectorXd &qR, VectorXd &qdotL, VectorXd &qdot
 
 /* ********************************************************************************************* */
 /// Returns the goal configuration for the end-effector using spacenav
-void updateGoalFromSpnavVels(kinematics::BodyNode *ee_node, MatrixXd& goal, double scale = 0.1) {
+void updateGoalFromSpnavVels(kinematics::BodyNode *ee_node, MatrixXd& goal,
+		dynamics::SkeletonDynamics *goal_skel = NULL, double scale = 0.1) {
 
 	// Get the goal configuration from the spacenav
 	Vector6d goalConfig;
@@ -305,12 +307,18 @@ void updateGoalFromSpnavVels(kinematics::BodyNode *ee_node, MatrixXd& goal, doub
 	Matrix3d errOriM = errOriQ.matrix();
 	goalConfig.bottomLeftCorner<3,1>() = math::matrixToEuler(errOriM, math::XYZ);
 
+	// update goal transform from config representation
+	goal = eulerToTransform(goalConfig);
 
 	// Update the dart data structure and set the goal
-	vector <int> obj_idx;
-	for(int i = 0; i < 6; i++) obj_idx.push_back(i);
-	mWorld->getSkeleton("g1")->setConfig(obj_idx, goalConfig);
-	goal = mWorld->getSkeleton("g1")->getNode("link_0")->getWorldTransform();
+	if (goal_skel != NULL) {
+		vector <int> obj_idx;
+		for(int i = 0; i < 6; i++) obj_idx.push_back(i);
+		goal_skel->setConfig(obj_idx, goalConfig);
+		goal = goal_skel->getNode("link_0")->getWorldTransform();
+		//cout << "goal from dart: " << goal << endl;
+		//cout << "goal from conversion" << eulerToTransform(goalConfig) << endl;
+	}
 }
 
 /* ********************************************************************************************* */
@@ -318,16 +326,22 @@ void updateGoalFromSpnavVels(kinematics::BodyNode *ee_node, MatrixXd& goal, doub
 /// end-effectors, places blue and green boxes for their locations and visualizes it all
 void Timer::Notify() {
 
+	// update robot state from ach if we're controlling the actual robot
+	if (motor_mode) {
+
+	}
+
+
 	// Grab effector node pointer to compute the task space error and the Jacobian
 	kinematics::BodyNode *eeL_node = mWorld->getSkeleton("Krang")->getNode("lGripper");
 	cout <<"left pos: "<< eeL_node->getWorldTransform().topRightCorner<3,1>().transpose() << endl;
 
 	// Get the goal configuration from spacenav
-	updateGoalFromSpnavVels(eeL_node, T_eeL_goal);
+	updateGoalFromSpnavVels(eeL_node, T_eeL_goal, mWorld->getSkeleton("g1"), 0.1);
 	
 	// Set goal arrow configurations from the grip interface
-	T_eeL_goal = mWorld->getSkeleton("g1")->getNode("link_0")->getWorldTransform();
-	cout << "\ngoal pos: " << T_eeL_goal.topRightCorner<3,1>().transpose() << endl;
+//	T_eeL_goal = mWorld->getSkeleton("g1")->getNode("link_0")->getWorldTransform();
+//	cout << "\ngoal pos: " << T_eeL_goal.topRightCorner<3,1>().transpose() << endl;
 
 
 	// Compute workspace velocity from goal errors
@@ -339,8 +353,16 @@ void Timer::Notify() {
 	VectorXd qdotL = workToJointVelocity(eeL_node, xdotL);
 	cout << "qdot L: " << qdotL.transpose() << endl;
 
-	// Move the arms with a small delta using the computed velocities
-	if(xdotL.norm() > 1e-2) fakeArmMovement(qL, qR, qdotL, qdotL);
+	// dispatch joint velocities to arms
+	if (motor_mode) {
+		// send to motors
+
+	} else {
+		// Move the arms with a small delta using the computed velocities
+		if(xdotL.norm() > 1e-2)
+			fakeArmMovement(qL, qR, qdotL, qdotL);
+
+	}
 
 	// Visualize the arm motion
 	viewer->DrawGLScene();
@@ -415,6 +437,13 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	initJoystick();
 	T_eeL_goal = Matrix4d(4,4); //< left effector goal transform
 
+	// Initialize the arms
+	if (motor_mode) {
+		initArm(daemon_cx, llwa, "llwa");
+		initArm(daemon_cx, rlwa, "rlwa");
+	}
+
+
 	// Initialize primary transforms
 	usleep(1e5); // give ach time to initialize, or init transforms will be bogus
 	// initialize_transforms(mWorld);
@@ -424,6 +453,13 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 
 /* ********************************************************************************************* */
 SimTab::~SimTab() {
+
+	// halt the arms
+	if (motor_mode) {
+		somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
+		somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
+	}
+
 	// Send the stopping event
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
 			SOMATIC__EVENT__CODES__PROC_STOPPING, NULL, NULL);
