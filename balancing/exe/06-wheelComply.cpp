@@ -85,6 +85,7 @@ void run () {
 	double time = 0.0;
 	Vector6d externalWrench;
 	Vector3d com;
+	double lastU = 0.0;
 	while(!somatic_sig_received) {
 
 		bool debug = false & (c_++ % 20 == 0);
@@ -116,13 +117,14 @@ void run () {
 		// Compute the error term between reference and current, and weight with gains (spin separate)
 		if(debug) cout << "K_bal: " << K_bal.transpose() << endl;
 		Vector6d error = state - refState;
+		printf("%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n", externalWrench(0), lastU, amc.cur[0], amc.cur[1],  state(0), refState(0), error(0), time);			// do not move this line!
 		double u = K_bal.topLeftCorner<4,1>().dot(error.topLeftCorner<4,1>());
 		if(debug) printf("u: %lf\n", u);
 
 		// Compute the input for left and right wheels
 		double input [2] = {u, u};
-		somatic_motor_update(&daemon_cx, &amc);
-		printf("%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n", externalWrench(0), u, amc.cur[0], amc.cur[1],  state(0), refState(0), error(0), time);
+		lastU = u;
+	//	somatic_motor_update(&daemon_cx, &amc);
 
 		// Set the motor velocities
 		if(start) {
