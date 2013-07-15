@@ -11,7 +11,6 @@
 using namespace std;
 using namespace dynamics;
 
-
 /* ******************************************************************************************** */
 // Offset values for FT sensing
 
@@ -40,13 +39,15 @@ void getExternalWrench (Vector6d& external) {
 }
 
 /* ******************************************************************************************** */
-/// Computes the reference imu value from center of mass, total mass and the felt wrenches.
+/// Computes the reference balancing angle from center of mass, total mass and the felt wrenches.
 /// The idea is that we want to set the balancing angle so that the torque due to the external 
 /// force/torques and those due to the mass of the robot cancel each other out. 
 /// Let com_x be the x component of the desired com such that com_x * mass * gravity = external
 /// torque. Now, given that we know com, we can compute its distance from the origin, and then
 /// compute the z component. The atan2(x,z) is the desired angle.
-void computeImuRef(const Vector3d& com, double externalTorque, double& refImu) {
+void computeBalAngleRef(const Vector3d& com, double externalTorque, double& refImu) {
+
+	cout << "com: " << com.transpose() << endl;
 
 	// Compute the x component of the desired com
 	static const double totalMass = 142.66;
@@ -56,9 +57,10 @@ void computeImuRef(const Vector3d& com, double externalTorque, double& refImu) {
 	// and then computing the z from x component
 	double normSq = com(0) * com(0) + com(2) * com(2);
 	double com_z = sqrt(normSq - com_x * com_x);
-	
+	printf("reference: (%lf, -, %lf)\n", com_x, com_z);
+
 	// Compute the expected balancing angle	
-	refImu = atan2(com_z, com_x);
+	refImu = atan2(com_x, com_z);
 }
 
 /* ******************************************************************************************** */
@@ -92,14 +94,18 @@ void run () {
 
 		// Get the current state and ask the user if they want to start
 		getState(state, dt, &com);
+		cout << "\ntheta: " << state(0) << endl;
 
 		// Get the wrench on the wheel due to external force
 		getExternalWrench(externalWrench);
-		cout << "\ntorque: " << externalWrench(4) << endl << endl;
+		cout << "torque: " << externalWrench(4) << endl;
 		
-		// Compute the imu reference value using the center of mass, total mass and felt wrench.
-		computeImuRef(com, externalWrench(4), refState(0));
-		cout << "imu ref: " << refState(0) << endl;
+		// Compute the balancing angle reference using the center of mass, total mass and felt wrench.
+		computeBalAngleRef(com, externalWrench(4), refState(0));
+		cout << "balancing angle (th_ref): " << refState(0) << endl;
+		cout << "error: " << (state(0) - refState(0)) * (180.0 / M_PI) << endl;
+
+		usleep(1e4);
 	}
 
 	// Send the stoppig event
