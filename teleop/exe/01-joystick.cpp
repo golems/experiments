@@ -53,8 +53,8 @@ double presetArmConfs [][7] = {
   { -1.102,  0.589,  0.000,  1.339,  0.000,  0.959,  0.000},
   {  0.843,  1.680,  0.000, -1.368,  0.000, -1.794,  0.000},
   { -0.843, -1.680,  0.000,  1.368,  0.000,  1.794,  0.000},
-  {  0.938, -1.037,  0.000, -1.640,  0.000,  0.601, -1.578},
-  { -0.938,  1.037,  0.000,  1.640,  0.000, -0.601,  1.578}
+  {  1.030, -1.165,  0.000, -1.136,  0.000,  0.791,  0.000},
+  { -1.530,  1.165,  0.000,  1.136,  0.000, -0.791,  0.000},
 };
 
 /* ********************************************************************************************* */
@@ -70,7 +70,7 @@ void controlArms () {
 
 		// Check if the button is pressed for the arm configuration is pressed, if so send pos commands
 		bool noConfs = true;
-		for(size_t i = 0; i < 3; i++) {
+		for(size_t i = 0; i < 4; i++) {
 			if(b[i] == 1) {
 				somatic_motor_cmd(&daemon_cx, &llwa, POSITION, presetArmConfs[2*i], 7, NULL);
 				somatic_motor_cmd(&daemon_cx, &rlwa, POSITION, presetArmConfs[2*i+1], 7, NULL);
