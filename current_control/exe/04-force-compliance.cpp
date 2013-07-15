@@ -1,4 +1,15 @@
-#include "current_control.h"
+/**
+ * @file 04-force-compliance.cpp
+ * @author Saul Reynolds-Haertle
+ *         Stewart Butler
+ * @date 2013-07-13
+
+ * @briefs This executable demonstrates current-controlled force
+ * compliance, like compliance/06-simplyComply but with current
+ * controls.
+ */
+
+#include "current_control.cpp"
 #include <stdio.h>
 #include <iostream>
 #include <fstream>
@@ -40,7 +51,7 @@ void run();
 void init();
 void destroy();
 
-#define DISPLAY_VECTOR(VEC) std::cout << std::setw(20) << std::left << #VEC; for(int i = 0; i < VEC.size(); i++) std::cout << std::setw(12) << VEC[i]; std::cout << std::endl;
+#define DISPLAY_VECTOR(VEC) std::cout << std::setw(25) << std::left << #VEC; for(int i = 0; i < VEC.size(); i++) std::cout << std::setw(12) << VEC[i]; std::cout << std::endl;
 
 // ################################################################################
 // ################################################################################
@@ -64,6 +75,8 @@ simulation::World* world;
 dynamics::SkeletonDynamics* krang;
 kinematics::BodyNode* end_effector_node;
 
+pid_state_t rpids[7];
+
 // ################################################################################
 // ################################################################################
 // CONSTANTS
@@ -71,12 +84,21 @@ kinematics::BodyNode* end_effector_node;
 // ################################################################################
 
 // whether we actually send commands
-bool do_send_cmds = false;
+bool do_send_cmds = true;
+
+// PID controller values
+bool use_pos[] = {true, true, true, true, true, true, true};
+bool use_vel[] = {true, true, true, true, true, true, true};
+
+double init_K_p_p[] = {15.0,  15.0, 15.0, 12.0, 15.0,  7.0,  7.0};
+double init_K_p_d[] = {0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0};
+double init_K_v_p[] = {1.0,   1.0,  1.0,  1.0,  1.0,  1.0,  1.0};
+double init_K_v_d[] = {0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0};
 
 // indices of joints in DART
 int rarm_ids_initializer[] = {12, 14, 16, 18, 20, 22, 24};
-int waist_ids_initializer[] = {5};
-int imu_ids_initializer[] = {8};
+int waist_ids_initializer[] = {8};
+int imu_ids_initializer[] = {5};
 std::vector<int> rarm_ids;
 std::vector<int> waist_ids;
 std::vector<int> imu_ids;
@@ -87,11 +109,11 @@ int ft_init_iters = 100;
 int imu_init_iters = 500;
 
 // position of schunk gripper's com in end effector frame of reference
-// 0.0683 schunk itself, 0.026 length of ext + 2nd
-static const Eigen::Vector3d schunk_gripper_com_vector(0.0, 0.0, 0.09);
+// 0.065 robotiq itself, 0.026 length of ext + 2nd
+static const Eigen::Vector3d schunk_gripper_com_vector(0.0, -0.008, 0.091);
 
 // mass of the end effector
-double end_effector_mass = 1.6 + 0.169 + 0.000;
+double end_effector_mass = 2.3 + 0.169 + 0.000;
 
 // name of our end effector node
 char* end_effector_node_name = "rGripper";
@@ -105,7 +127,7 @@ double compliance_threshold_force = 4.0;
 double compliance_threshold_torque = .4;
 
 // how many times per second to print information to the screen
-double display_freq = 20.0;
+double display_freq = 1.0;
 
 // #############################################################################
 // #############################################################################
@@ -166,21 +188,21 @@ Eigen::Vector6d compute_ft_offset(const Eigen::Vector6d& raw_ft_reading) {
     Eigen::Matrix3d ee_rotation = ee_world_transform.topLeftCorner<3,3>().transpose();
 	
     // Create the wrench with computed rotation to change the frame
-    // from the bracket to the sensor.
-    Eigen::Matrix6d wrenchrotate_sensor_bracket = Eigen::MatrixXd::Identity(6,6);
-    wrenchrotate_sensor_bracket.topLeftCorner<3,3>() = ee_rotation;
-    wrenchrotate_sensor_bracket.bottomRightCorner<3,3>() = ee_rotation;
+    // from the world to the sensor.
+    Eigen::Matrix6d wrenchrotate_sensor_world = Eigen::MatrixXd::Identity(6,6);
+    wrenchrotate_sensor_world.topLeftCorner<3,3>() = ee_rotation;
+    wrenchrotate_sensor_world.bottomRightCorner<3,3>() = ee_rotation;
 	
     // Get the weight vector (note that we use the world frame for
     // gravity so towards -y)
     Eigen::Vector6d end_effector_weight_in_world;
-    end_effector_weight_in_world << 0.0, 0.0, end_effector_mass * -9.81, 0.0, 0.0, 0.0;
+    end_effector_weight_in_world << 0.0, end_effector_mass * -9.81, 0.0, 0.0, 0.0, 0.0;
 	
     // Compute what the force and torque should be without any external values by multiplying the 
     // position and rotation transforms with the expected effect of the gravity 
-    Eigen::Vector6d expected_ft_reading = transform_eecom_sensor * wrenchrotate_sensor_bracket * end_effector_weight_in_world;
+    Eigen::Vector6d expected_ft_reading = transform_eecom_sensor * wrenchrotate_sensor_world * end_effector_weight_in_world;
 
-    DISPLAY_VECTOR(expected_ft_reading);
+    // DISPLAY_VECTOR(expected_ft_reading);
 
     // Compute the difference between the actual and expected f/t
     // values and return the result
@@ -213,12 +235,14 @@ Eigen::Vector6d compute_external_force(const Eigen::Vector6d& input) {
     // Get the weight vector (note that we use the world frame for
     // gravity so towards -y)
     Eigen::Vector6d end_effector_weight_in_world;
-    end_effector_weight_in_world << 0.0, 0.0, end_effector_mass * -9.81, 0.0, 0.0, 0.0;
+    end_effector_weight_in_world << 0.0, end_effector_mass * -9.81, 0.0, 0.0, 0.0, 0.0;
 	
     // Compute what the force and torque should be without any
     // external values by multiplying the position and rotation
     // transforms with the expected effect of the gravity
     Eigen::Vector6d expected_ft_reading = transform_eecom_sensor * wrenchrotate_sensor_world * end_effector_weight_in_world;
+
+    // DISPLAY_VECTOR(expected_ft_reading);
 
     // Remove the effect from the sensor value, convert the wrench
     // into the world frame, and return the result
@@ -287,7 +311,7 @@ Eigen::Vector6d get_ft() {
 void update_motor_state() {
     // Read the waist's state and update the averaged waist position
     somatic_motor_update(&daemon_cx, &waist);
-    waist_angle = (waist.pos[0] + waist.pos[1]) / 2.0;
+    waist_angle = (waist.pos[0] - waist.pos[1]) / 2.0;
 
     // read the arm
     somatic_motor_update(&daemon_cx, &rlwa);
@@ -328,10 +352,11 @@ void run() {
     // loop variables
     double last_ft_update_time = gettime();
     double last_display_time = gettime();
+    double last_pid_time = gettime();
     double now;
     
     // tell the user we're going
-    std::cout << "running!" << std::endl;
+    std::cout << std::endl << "running!" << std::endl;
     
     while(!somatic_sig_received) {
         // update our time
@@ -347,7 +372,14 @@ void run() {
         // because those functions block until they've gotten data.
         if (now - last_ft_update_time > 1.0 / ft_update_freq) {
             last_ft_update_time = now;
-            imu_angle = get_imu();
+            // imu_angle = get_imu();
+
+            if (now - last_display_time > 1.0 / display_freq) {
+                std::cout << std::setprecision(5);
+                DISPLAY_VECTOR(r_ft_raw);
+                DISPLAY_VECTOR(r_ft_corrected);
+            }
+
             r_ft_raw = get_ft();
             r_ft_corrected = r_ft_raw + r_ft_offset;
         }
@@ -376,20 +408,35 @@ void run() {
             r_arm_vels = wrench_to_joint_vels(r_ft_external);
         }
 
-        if (now - last_display_time > 1.0 / 20.0) {
+        if (now - last_display_time > 1.0 / display_freq) {
             last_display_time = now;
             std::cout << std::setprecision(5);
 
-            DISPLAY_VECTOR(r_ft_raw);
-            DISPLAY_VECTOR(r_ft_corrected);
             DISPLAY_VECTOR(r_ft_external);
             DISPLAY_VECTOR(r_arm_vels);
+            std::cout << std::endl;
         }
 
         // now we figure out where to go
         // TODO: convert vels to currents
         if (do_send_cmds) {
-            somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, r_arm_vels.data(), 7, NULL);
+            // cheating way: just send velocity command
+            // somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, r_arm_vels.data(), 7, NULL);
+
+            // simple way: integrate velocity to get position, then
+            // use PID on current to achieve position and velocity.
+            for(int i = 0; i < 7; i++) {
+                rpids[i].vel_target = r_arm_vels[i];
+                rpids[i].pos_target += (now - last_pid_time) * r_arm_vels[i];
+            }
+            update_pids(&rlwa, rpids, rcur_command);
+            somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, rcur_command, 7, NULL);
+
+            // right way: use the jacobian to map necessary forces and
+            // torques to joint torques, then map joint torques to
+            // currents.
+            
+            last_pid_time = now;
         }
     }
 }
@@ -453,6 +500,9 @@ void init() {
     // start the daemon running
     somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
 
+    // update our motors
+    update_motor_state();
+
     // Get a nice, clean IMU reading and hang on to it
     std::cout << "Getting initial IMU reading" << std::endl;
     imu_angle = 0.0;
@@ -461,17 +511,28 @@ void init() {
 
     // Get a nice, clean force-torque reading
     std::cout << "Getting initial force-torque reading" << std::endl;
-    Eigen::Vector6d ft_initial_reading;
-    ft_initial_reading << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
-    for(int i = 0; i < ft_init_iters; i++) { ft_initial_reading += get_ft(); }
-    ft_initial_reading /= (double)ft_init_iters;
+    Eigen::Vector6d ft_raw_initial_reading;
+    ft_raw_initial_reading << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
+    for(int i = 0; i < ft_init_iters; i++) { ft_raw_initial_reading += get_ft(); }
+    ft_raw_initial_reading /= (double)ft_init_iters;
 
     // and use it to compute the ft sensor's offset
-    r_ft_offset = compute_ft_offset(ft_initial_reading);
+    r_ft_offset = compute_ft_offset(ft_raw_initial_reading);
 
     // display the computation of the offset
-    DISPLAY_VECTOR(ft_initial_reading);
+    DISPLAY_VECTOR(ft_raw_initial_reading);
     DISPLAY_VECTOR(r_ft_offset);
+
+    // initialize controllers
+    do_init_pids(&rlwa, rpids);
+    for(int i = 0; i < 7; i++) {
+        rpids[i].K_p_p = init_K_p_p[i];
+        rpids[i].K_p_d = init_K_p_d[i];
+        rpids[i].K_v_p = init_K_v_p[i];
+        rpids[i].K_v_d = init_K_v_d[i];
+        rpids[i].use_pos = use_pos[i];
+        rpids[i].use_vel = use_vel[i];
+    }
 }
 
 // #############################################################################
