@@ -127,7 +127,7 @@ double compliance_threshold_force = 4.0;
 double compliance_threshold_torque = .4;
 
 // how many times per second to print information to the screen
-double display_freq = 1.0;
+double display_freq = 10.0;
 
 // #############################################################################
 // #############################################################################
@@ -348,6 +348,7 @@ void run() {
     Eigen::Vector6d r_ft_corrected;
     Eigen::Vector6d r_ft_external;
     Eigen::Vector7d r_arm_vels;
+    for(int i = 0; i < 7; i++) r_arm_vels[i] = 0.0; // in case we skip something important
 
     // loop variables
     double last_ft_update_time = gettime();
@@ -374,11 +375,11 @@ void run() {
             last_ft_update_time = now;
             // imu_angle = get_imu();
 
-            if (now - last_display_time > 1.0 / display_freq) {
-                std::cout << std::setprecision(5);
-                DISPLAY_VECTOR(r_ft_raw);
-                DISPLAY_VECTOR(r_ft_corrected);
-            }
+            // if (now - last_display_time > 1.0 / display_freq) {
+            //     std::cout << std::setprecision(5);
+            //     DISPLAY_VECTOR(r_ft_raw);
+            //     DISPLAY_VECTOR(r_ft_corrected);
+            // }
 
             r_ft_raw = get_ft();
             r_ft_corrected = r_ft_raw + r_ft_offset;
@@ -405,22 +406,13 @@ void run() {
             r_ft_external(5) *= 40;
             
             // figure out our necessary velocity
-            r_arm_vels = wrench_to_joint_vels(r_ft_external);
-        }
-
-        if (now - last_display_time > 1.0 / display_freq) {
-            last_display_time = now;
-            std::cout << std::setprecision(5);
-
-            DISPLAY_VECTOR(r_ft_external);
-            DISPLAY_VECTOR(r_arm_vels);
-            std::cout << std::endl;
+            // r_arm_vels = wrench_to_joint_vels(r_ft_external);
         }
 
         // now we figure out where to go
         // TODO: convert vels to currents
         if (do_send_cmds) {
-            // cheating way: just send velocity command
+            // cheating way: just send velocity command raw
             // somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, r_arm_vels.data(), 7, NULL);
 
             // simple way: integrate velocity to get position, then
@@ -435,8 +427,26 @@ void run() {
             // right way: use the jacobian to map necessary forces and
             // torques to joint torques, then map joint torques to
             // currents.
-            
+
             last_pid_time = now;
+        }
+
+        if (now - last_display_time > 1.0 / display_freq) {
+            last_display_time = now;
+            std::cout << std::setprecision(5);
+
+            Eigen::Vector7d rpos_setpoint;
+            Eigen::Vector7d rpos_current;
+            for(int i = 0; i < 7; i++) {
+                rpos_setpoint[i] = rpids[i].pos_target;
+                rpos_current[i] = rlwa.pos[i];
+            }
+            
+            DISPLAY_VECTOR(r_ft_external);
+            // DISPLAY_VECTOR(r_arm_vels);
+            DISPLAY_VECTOR(rpos_current);
+            DISPLAY_VECTOR(rpos_setpoint);
+            std::cout << std::endl;
         }
     }
 }
