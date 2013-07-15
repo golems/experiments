@@ -15,6 +15,8 @@
 #include <Eigen/Dense>
 #include <math/UtilsRotation.h>
 
+typedef Eigen::Matrix<double, 6, 1> Vector6d;
+
 // Channel variables
 uint8_t *achbuf_joystick;
 size_t n_achbuf_joystick = 1024;
@@ -31,7 +33,7 @@ void initJoystick() {
  * Return the joystick pose in the world frame
  *TODO: rename/refactor for spacenav and joy versions
  */
-bool getJoystickPose(MatrixXd &pose) {
+bool getJoystickPose(MatrixXd &pose, Vector6d* config = NULL) {
 	// get joystick data
 	int r = 0;
 	Somatic__Joystick *js_msg = SOMATIC_GET_LAST_UNPACK( r, somatic__joystick,
@@ -63,6 +65,9 @@ bool getJoystickPose(MatrixXd &pose) {
 	// assume it's a spacenav:
 	pose = T_spacenav.inverse() * pose * T_spacenav;
 
+	// set the config if asked for
+	if(config != NULL) *config << -pos(1), -pos(0), -pos(2), -rotV(2), -rotV(0), -rotV(1);
+	
 	return 0;
 }
 

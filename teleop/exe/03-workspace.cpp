@@ -267,7 +267,7 @@ VectorXd computeWorkVelocity(kinematics::BodyNode* eeNode, MatrixXd &eeGoal ) {
 		return xdot;
 
 	// Get the workspace velocity
-//	errPos = Vector3d(0.0, 0.0, 0.0);
+	//errOriV= Vector3d(0.0, 0.0, 0.0);
 	xdot << errPos, errOriV;
 	return xdot;
 }
@@ -286,19 +286,49 @@ void fakeArmMovement(VectorXd &qL, VectorXd &qR, VectorXd &qdotL, VectorXd &qdot
 }
 
 /* ********************************************************************************************* */
-/*
- * Picks a random configuration for the robot, moves it, does f.k. for the right and left
- * end-effectors, places blue and green boxes for their locations and visualizes it all
- */
-void Timer::Notify() {
+/// Returns the goal configuration for the end-effector using spacenav
+void updateGoalFromSpnavVels(kinematics::BodyNode *ee_node, MatrixXd& goal, double scale = 0.1) {
 
-	// Set goal arrow configurations from the grip interface
-	T_eeL_goal = mWorld->getSkeleton("g1")->getNode("link_0")->getWorldTransform();
-	cout << "\ngoal pos: " << T_eeL_goal.topRightCorner<3,1>().transpose() << endl;
+	// Get the goal configuration from the spacenav
+	Vector6d goalConfig;
+	getJoystickPose(T_eeL_goal, &goalConfig);
+
+	// Set the location around the current end-effector pose with some scale
+	Matrix4d eeT = ee_node->getWorldTransform();
+	goalConfig.topLeftCorner<3,1>() = eeT.topRightCorner<3,1>() + scale * goalConfig.topLeftCorner<3,1>();
+	
+
+	// Set the orientation "change" with respect to the end-effector orientation
+	Quaternion<double> goalOri(T_eeL_goal.topLeftCorner<3,3>()); 
+	Quaternion <double> eeOri(eeT.topLeftCorner<3,3>());
+	Quaternion<double> errOriQ = goalOri * eeOri.inverse();
+	Matrix3d errOriM = errOriQ.matrix();
+	goalConfig.bottomLeftCorner<3,1>() = math::matrixToEuler(errOriM, math::XYZ);
+
+
+	// Update the dart data structure and set the goal
+	vector <int> obj_idx;
+	for(int i = 0; i < 6; i++) obj_idx.push_back(i);
+	mWorld->getSkeleton("g1")->setConfig(obj_idx, goalConfig);
+	goal = mWorld->getSkeleton("g1")->getNode("link_0")->getWorldTransform();
+}
+
+/* ********************************************************************************************* */
+/// Picks a random configuration for the robot, moves it, does f.k. for the right and left
+/// end-effectors, places blue and green boxes for their locations and visualizes it all
+void Timer::Notify() {
 
 	// Grab effector node pointer to compute the task space error and the Jacobian
 	kinematics::BodyNode *eeL_node = mWorld->getSkeleton("Krang")->getNode("lGripper");
 	cout <<"left pos: "<< eeL_node->getWorldTransform().topRightCorner<3,1>().transpose() << endl;
+
+	// Get the goal configuration from spacenav
+	updateGoalFromSpnavVels(eeL_node, T_eeL_goal);
+	
+	// Set goal arrow configurations from the grip interface
+	T_eeL_goal = mWorld->getSkeleton("g1")->getNode("link_0")->getWorldTransform();
+	cout << "\ngoal pos: " << T_eeL_goal.topRightCorner<3,1>().transpose() << endl;
+
 
 	// Compute workspace velocity from goal errors
 	VectorXd xdotL = computeWorkVelocity(eeL_node, T_eeL_goal);
@@ -380,6 +410,10 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	VectorXd larm_conf(7), rarm_conf(7);
 	larm_conf << 0.0, -M_PI / 3.0, 0.0, -M_PI / 3.0, 0.0, M_PI/6.0, 0.0;
 	mWorld->getSkeleton("Krang")->setConfig(armIDsL, larm_conf);
+
+	// Initialize the joystick
+	initJoystick();
+	T_eeL_goal = Matrix4d(4,4); //< left effector goal transform
 
 	// Initialize primary transforms
 	usleep(1e5); // give ach time to initialize, or init transforms will be bogus
