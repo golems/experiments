@@ -34,6 +34,8 @@ void computeExternal (double imu, double waist, const somatic_motor_t& lwa, cons
 	vector <int> dofs;
 	for(size_t i = 0; i < 24; i++) dofs.push_back(i);
 	//cout << "\nq in computeExternal: " << robot.getConfig(dofs).transpose() << endl;
+
+	 cout << "Transform : "<< endl << Rsw << endl;
 	
 	// Create the wrench with computed rotation to change the frame from the world to the sensor
 	Matrix6d pSsensor_world = MatrixXd::Identity(6,6); 
@@ -69,7 +71,11 @@ void computeOffset (double imu, double waist, const somatic_motor_t& lwa, const 
 	robot.setConfig(arm_ids, Map <Vector7d> (lwa.pos));
 	const char* nodeName = left ? "lGripper" : "rGripper";
 	Matrix3d R = robot.getNode(nodeName)->getWorldTransform().topLeftCorner<3,3>().transpose();
-
+	cout << "Transform : "<< endl << R << endl;
+	vector <int> dofs;
+	for(size_t i = 0; i < 25; i++) dofs.push_back(i);
+	cout << "\nq in computeExternal: " << robot.getConfig(dofs).transpose() << endl;
+	
 	// Create the wrench with computed rotation to change the frame from the bracket to the sensor
 	Matrix6d pSsensor_bracket = MatrixXd::Identity(6,6); 
 	pSsensor_bracket.topLeftCorner<3,3>() = R;
@@ -104,10 +110,15 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuCha
 	imuWaist_ids.push_back(8);	
 
 	// Restart the netcanft daemon. Need to sleep to let OS kill the program first.
-	system("killall -s 9 netcanftd");
+	
 	usleep(20000);
-	if(left) system("netcanftd -v -d -I lft -b 1 -B 1000 -c llwa_ft -k -r");
-	else system("netcanftd -v -d -I rft -b 9 -B 1000 -c rlwa_ft -k -r");
+	if(left) { 
+		system("sns -k lft"); 
+		system("netcanftd -v -d -I lft -b 1 -B 1000 -c llwa_ft -k -r");
+	}	else { 
+		system("sns -k rft");
+		system("netcanftd -v -d -I rft -b 9 -B 1000 -c rlwa_ft -k -r");
+	}
 
 	// Load environment from dart for kinematics
 	DartLoader dl;
