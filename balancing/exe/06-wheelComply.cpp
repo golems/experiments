@@ -24,14 +24,18 @@ Vector6d rightWheelWrench;
 void getExternalWrench (Vector6d& external) {
 
 	// Get wrenches on the two arms in world frame and shift them to find the wrench on the wheel
-	Vector6d raw, leftFTWrench, rightFTWrench;
+	Vector6d raw, leftFTWrench = Vector6d::Zero(), rightFTWrench = Vector6d::Zero();
 	if(getFT(daemon_cx, left_ft_chan, raw)) {
 		computeExternal(raw + leftOffset, *robot, leftFTWrench, true);
-		computeWheelWrench(leftFTWrench, *robot, leftWheelWrench, true);
+		if((leftFTWrench.topLeftCorner<3,1>().norm() > 7) || 
+       (leftFTWrench.bottomLeftCorner<3,1>().norm() > 0.4)) 
+			computeWheelWrench(leftFTWrench, *robot, leftWheelWrench, true);
 	} 
 	if(getFT(daemon_cx, right_ft_chan, raw)) {
 		computeExternal(raw + rightOffset, *robot, rightFTWrench, false);
-		computeWheelWrench(rightFTWrench, *robot, rightWheelWrench, false);
+		if((rightFTWrench.topLeftCorner<3,1>().norm() > 7) || 
+       (rightFTWrench.bottomLeftCorner<3,1>().norm() > 0.4)) 
+			computeWheelWrench(rightFTWrench, *robot, rightWheelWrench, true);
 	} 
 		
 	// Sum the wheel wrenches from the two f/t sensors
@@ -47,8 +51,6 @@ void getExternalWrench (Vector6d& external) {
 /// compute the z component. The atan2(x,z) is the desired angle.
 void computeBalAngleRef(const Vector3d& com, double externalTorque, double& refImu) {
 
-	cout << "com: " << com.transpose() << endl;
-
 	// Compute the x component of the desired com
 	static const double totalMass = 142.66;
 	double com_x = externalTorque / (totalMass * 9.81);
@@ -57,10 +59,9 @@ void computeBalAngleRef(const Vector3d& com, double externalTorque, double& refI
 	// and then computing the z from x component
 	double normSq = com(0) * com(0) + com(2) * com(2);
 	double com_z = sqrt(normSq - com_x * com_x);
-	printf("reference: (%lf, -, %lf)\n", com_x, com_z);
 
 	// Compute the expected balancing angle	
-	refImu = atan2(com_x, com_z);
+	refImu = atan2(-com_x, com_z);
 }
 
 /* ******************************************************************************************** */
@@ -85,27 +86,45 @@ void run () {
 	Vector3d com;
 	while(!somatic_sig_received) {
 
-		myDebug = false & (c_++ % 30 == 0);
+		bool debug = (c_++ % 20 == 0);
+		if(debug) cout << "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv\n" << endl;
 
 		// Get the current time and compute the time difference and update the prev. time
 		t_now = aa_tm_now();						
 		double dt = (double)aa_tm_timespec2sec(aa_tm_sub(t_now, t_prev));	
 		t_prev = t_now;
 
+		// Get the joystick input for the js_forw and js_spin axes (to set the gains)
+		double js_forw = 0.0, js_spin = 0.0;
+		bool gotInput = false;
+		while(!gotInput) gotInput = getJoystickInput(js_forw, js_spin);
+
 		// Get the current state and ask the user if they want to start
 		getState(state, dt, &com);
-		cout << "\ntheta: " << state(0) << endl;
+		if(debug) cout << "\nstate: " << state.transpose() << endl;
 
 		// Get the wrench on the wheel due to external force
 		getExternalWrench(externalWrench);
-		cout << "torque: " << externalWrench(4) << endl;
+		if(debug) cout << "torque: " << externalWrench(4) << endl;
 		
 		// Compute the balancing angle reference using the center of mass, total mass and felt wrench.
-		computeBalAngleRef(com, externalWrench(4), refState(0));
-		cout << "balancing angle (th_ref): " << refState(0) << endl;
-		cout << "error: " << (state(0) - refState(0)) * (180.0 / M_PI) << endl;
+		if(complyTorque) computeBalAngleRef(com, externalWrench(4), refState(0));
+		if(debug) cout << "\nrefState: " << refState.transpose() << endl;
 
-		usleep(1e4);
+		// Compute the error term between reference and current, and weight with gains (spin separate)
+		if(debug) cout << "K_bal: " << K_bal.transpose() << endl;
+		Vector6d error = state - refState;
+		double u = K_bal.topLeftCorner<4,1>().dot(error.topLeftCorner<4,1>());
+		if(debug) printf("u: %lf\n", u);
+
+		// Compute the input for left and right wheels
+		double input [2] = {u, u};
+
+		// Set the motor velocities
+		if(start) {
+			if(debug) cout << "Would have started..." << endl;
+			somatic_motor_cmd(&daemon_cx, &amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
+		}
 	}
 
 	// Send the stoppig event
@@ -196,8 +215,10 @@ void init() {
 
 	// Restart the netcanft daemon. Need to sleep to let OS kill the program first.
 	system("sns -k lft");
+	system("sns -k rft");
 	usleep(20000);
 	system("netcanftd -v -d -I lft -b 1 -B 1000 -c llwa_ft -k -r");
+	system("netcanftd -v -d -I rft -b 9 -B 1000 -c rlwa_ft -k -r");
 
 	// Open the state and ft channels
 	somatic_d_channel_open(&daemon_cx, &left_ft_chan, "llwa_ft", NULL);
@@ -215,14 +236,19 @@ void init() {
 		left_ft_data += temp;
 		// Right Arm
 		gotReading = false;
-	//	while(!gotReading) gotReading = getFT(daemon_cx, right_ft_chan, temp);
+		while(!gotReading) gotReading = getFT(daemon_cx, right_ft_chan, temp);
 		right_ft_data += temp;
 	}
 	left_ft_data /= 1e3;
 	right_ft_data /= 1e3;
-	cout << "waist <" << waist.pos[0] << "," << waist.pos[1] << ">: " << (waist.pos[0]-waist.pos[1])/2.0 << endl;
 	computeOffset(imu, (waist.pos[0]-waist.pos[1])/2.0, llwa, left_ft_data, *robot, leftOffset, true);
 	computeOffset(imu, (waist.pos[0]-waist.pos[1])/2.0, rlwa, right_ft_data, *robot, rightOffset, false);
+
+	// =======================================================================
+	// Create a thread to wait for user input to begin balancing
+
+	pthread_t kbhitThread;
+	pthread_create(&kbhitThread, NULL, &kbhit, NULL);
 }
 
 /* ******************************************************************************************** */
@@ -262,6 +288,12 @@ int main(int argc, char* argv[]) {
 	world = dl.parseWorld("../../common/scenes/01-World-Robot.urdf");
 	assert((world != NULL) && "Could not find the world");
 	robot = world->getSkeleton(0);
+
+	// Read the gains from the command line
+	assert(argc == 7 && "Where is my gains for th, x and spin?");
+	K_bal << atof(argv[1]), atof(argv[2]), atof(argv[3]), atof(argv[4]), atof(argv[5]), atof(argv[6]);
+	cout << "K_bal: " << K_bal.transpose() << "\nPress enter: " << endl;
+	getchar();
 
 	// Initialize, run, destroy
 	init();

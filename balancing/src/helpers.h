@@ -63,6 +63,7 @@ simulation::World* world;			///< the world representation in dart
 SkeletonDynamics* robot;			///< the robot representation in dart
 
 bool start = false;						///< Giving time to the user to get the robot in balancing angle
+bool complyTorque = false;
 Vector6d K_bal;								///< The gains for the balancing controller
 Vector6d K_stand;							///< The gains for the standing controller
 

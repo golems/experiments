@@ -133,7 +133,8 @@ void *kbhit(void *) {
 	char input;
 	while(true){ 
 		input=cin.get(); 
-		if(input=='s') break;
+		if(input=='s') start = true; 
+		else if(input=='t') complyTorque = true; 
 	}
 	start = true;
 }
