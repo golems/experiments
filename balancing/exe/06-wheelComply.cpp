@@ -82,17 +82,19 @@ void run () {
 	// Read the FT sensor wrenches, shift them on the wheel axis and display
 	size_t c_ = 0;
 	struct timespec t_now, t_prev = aa_tm_now();
+	double time = 0.0;
 	Vector6d externalWrench;
 	Vector3d com;
 	while(!somatic_sig_received) {
 
-		bool debug = (c_++ % 20 == 0);
+		bool debug = false & (c_++ % 20 == 0);
 		if(debug) cout << "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv\n" << endl;
 
 		// Get the current time and compute the time difference and update the prev. time
 		t_now = aa_tm_now();						
 		double dt = (double)aa_tm_timespec2sec(aa_tm_sub(t_now, t_prev));	
 		t_prev = t_now;
+		time += dt;
 
 		// Get the joystick input for the js_forw and js_spin axes (to set the gains)
 		double js_forw = 0.0, js_spin = 0.0;
@@ -119,6 +121,8 @@ void run () {
 
 		// Compute the input for left and right wheels
 		double input [2] = {u, u};
+		somatic_motor_update(&daemon_cx, &amc);
+		printf("%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n", externalWrench(0), u, amc.cur[0], amc.cur[1],  state(0), refState(0), error(0), time);
 
 		// Set the motor velocities
 		if(start) {
