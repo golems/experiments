@@ -52,7 +52,7 @@ void updateDart (double imu) {
 
 /* ******************************************************************************************** */
 /// Get the joint values from the encoders and the imu and compute the center of mass as well 
-void getState(Vector6d& state, double dt) {
+void getState(Vector6d& state, double dt, Vector3d* com_) {
 
 	// Read imu
 	double imu, imuSpeed;
@@ -68,6 +68,7 @@ void getState(Vector6d& state, double dt) {
 	updateDart(imu);
 	Vector3d com = robot->getWorldCOM();
 	com(2) -= 0.264;
+	if(com_ != NULL) *com_ = com;
 
 	// Update the state (note for amc we are reversing the effect of the motion of the upper body)
 	state(0) = atan2(com(0), com(2));
@@ -293,8 +294,6 @@ void computeWheelWrench(const Vector6d& wrenchSensor, SkeletonDynamics& robot, V
 	// Shift the wrench from the sensor origin to the wheel axis
 	wheelWrench = pTsensor_wheel * wrenchSensor;
 }
-
-
 
 /* ********************************************************************************************* */
 bool getFT (somatic_d_t& daemon_cx, ach_channel_t& ft_chan, Vector6d& data) {

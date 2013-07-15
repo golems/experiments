@@ -95,7 +95,7 @@ bool getJoystickInput(double& js_forw, double& js_spin);
 void updateReference (double js_forw, double js_spin, double dt, Vector6d& refState);
 
 /// Get the joint values from the encoders and the imu and compute the center of mass as well 
-void getState(Vector6d& state, double dt);
+void getState(Vector6d& state, double dt, Vector3d* com = NULL);
 
 /// Updates the dart robot representation
 void updateDart (double imu);
