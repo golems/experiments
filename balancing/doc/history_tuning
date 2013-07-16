@@ -42,4 +42,8 @@ We ended up using 250 38 4 10 3 7 for the video 07/14th, time 11 am.
 
 The waist is low at 162 degrees. We start off with 250 38 4 10 3 7. Both wheel pressures are at 35 psi.
 
+Oscillations in the position were minimized ny increasing the gain for xdot. At Kp, Kd = 4, 10 we get some
+oscilaations. We increased Kd to 19 to minimize the oscillations.  
 
+The current gains are 250 38 4 19 2 10 0.2 0.4. And we are taking a video (July 16, 2013). And the
+position control at this waist height looks acceptable.
