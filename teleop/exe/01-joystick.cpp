@@ -13,6 +13,7 @@
 using namespace std;
 
 #define VELOCITY SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY
+#define POSITION SOMATIC__MOTOR_PARAM__MOTOR_POSITION
 
 /* ********************************************************************************************** */
 somatic_d_t daemon_cx;
@@ -46,12 +47,49 @@ void readJoystick() {
 }
 
 /* ********************************************************************************************* */
+// The preset arm configurations: forward, thriller, goodJacobian
+double presetArmConfs [][7] = {
+  {  1.102, -0.589,  0.000, -1.339,  0.000, -0.959,  0.000},
+  { -1.102,  0.589,  0.000,  1.339,  0.000,  0.959,  0.000},
+  {  0.843,  1.680,  0.000, -1.368,  0.000, -1.794,  0.000},
+  { -0.843, -1.680,  0.000,  1.368,  0.000,  1.794,  0.000},
+  {  1.030, -1.165,  0.000, -1.136,  0.000,  0.791,  0.000},
+  { -1.530,  1.165,  0.000,  1.136,  0.000, -0.791,  0.000},
+	{  0.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000},
+	{  0.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000},
+};
+
+/* ********************************************************************************************* */
 /// Controls the arms
 void controlArms () {
 
 	// Return if the x[3] is being used for robotiq hands
 	if(fabs(x[3]) > 0.2) return;
 
+	// Check if one of the preset configurations are requested by pressing 9 and
+	// any of the buttons from 1 to 4 at the same time
+	if(b[8] == 1) {
+
+		// Check if the button is pressed for the arm configuration is pressed, if so send pos commands
+		bool noConfs = true;
+		for(size_t i = 0; i < 4; i++) {
+			if(b[i] == 1) {
+				somatic_motor_cmd(&daemon_cx, &llwa, POSITION, presetArmConfs[2*i], 7, NULL);
+				somatic_motor_cmd(&daemon_cx, &rlwa, POSITION, presetArmConfs[2*i+1], 7, NULL);
+				noConfs = false; 
+				return;
+			}
+		}
+		
+		// If nothing is pressed, stop the arms
+		if(noConfs) {
+			double dq [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+			somatic_motor_cmd(&daemon_cx, &llwa, VELOCITY, dq, 7, NULL);
+			somatic_motor_cmd(&daemon_cx, &rlwa, VELOCITY, dq, 7, NULL);
+			return;
+		}
+	}
+	
 	// Check the b for each arm and apply velocities accordingly
 	// For left: 4 or 6, for right: 5 or 7, lower arm button is smaller (4 or 5)
 	somatic_motor_t* arm [] = {&llwa, &rlwa};
