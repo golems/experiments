@@ -449,7 +449,7 @@ void run() {
             }
             
             DISPLAY_VECTOR(r_ft_external);
-            // DISPLAY_VECTOR(r_arm_vels);
+            DISPLAY_VECTOR(r_arm_vels);
             DISPLAY_VECTOR(rpos_current);
             DISPLAY_VECTOR(rpos_setpoint);
             std::cout << std::endl;
