@@ -20,7 +20,6 @@
 #include "liberty_client.h"
 #include "joystick_client.h"
 
-
 using namespace std;
 using namespace Eigen;
 using namespace dynamics;
@@ -93,6 +92,17 @@ void fakeArmMovement(vector<int> ids, VectorXd &qdot, double dt) {
 }
 
 /************************ Initialization **************************/
+
+void initialize_robot() {
+	initArm(daemon_cx, llwa, "llwa");
+	initArm(daemon_cx, rlwa, "rlwa");
+	initWaist(daemon_cx, waist);
+	initIMU(daemon_cx, imu_chan);
+	ach_open(&lgripper_chan, "lgripper-cmd", NULL);
+	ach_open(&rgripper_chan, "rgripper-cmd", NULL);
+	motors_initialized = 1;
+}
+
 /*
  * Caches all relevant transforms from the robot's current state
  */
@@ -146,7 +156,7 @@ void setGoalSkelConfig(dynamics::SkeletonDynamics *goalSkel, const MatrixXd &goa
 /// Returns the goal configuration for the end-effector using spacenav
 void updateGoalFromSpnavVels(kinematics::BodyNode *eeNode, MatrixXd& goalTransform,
 		dynamics::SkeletonDynamics *goalSkel = NULL, double scale = 0.1,
-		ach_channel_t &chan = joystick_chan) {
+		ach_channel_t &chan = spacenav_chan) {
 
 	/*
 	 * TODO:
@@ -269,8 +279,8 @@ void Timer::Notify() {
 	kinematics::BodyNode *eeR_node = mWorld->getSkeleton("Krang")->getNode("rGripper");
 
 	// Get the goal configuration from spacenav
-	updateGoalFromSpnavVels(eeL_node, T_eeL_goal, mWorld->getSkeleton("g1"), 0.2, joystick_chan);
-	updateGoalFromSpnavVels(eeR_node, T_eeR_goal, mWorld->getSkeleton("g2"), 0.2, spacenav_chan);
+	updateGoalFromSpnavVels(eeL_node, T_eeL_goal, mWorld->getSkeleton("g1"), 0.2, spacenav_chan);
+	updateGoalFromSpnavVels(eeR_node, T_eeR_goal, mWorld->getSkeleton("g2"), 0.2, spacenav_chan2);
 
 	// Compute workspace velocity from goal errors
 	VectorXd xdotL = computeWorkVelocity(eeL_node, T_eeL_goal);
@@ -280,10 +290,24 @@ void Timer::Notify() {
 	VectorXd qdotL = workToJointVelocity(eeL_node, xdotL);
 	VectorXd qdotR = workToJointVelocity(eeR_node, xdotR);
 
+//VectorXi buttonsL = getSpacenavButtons(spacenav_chan);
+//VectorXi buttonsR = getSpacenavButtons(spacenav_chan2);
+//cout << "buttonsL "<< buttonsL.transpose() << endl;
+//cout << "buttonsR "<< buttonsR.transpose() << endl;
+
 	// dispatch joint velocities to arms
 	if (motor_output_mode) {
+		// send arm velocities
 		sendRobotArmVelocities(daemon_cx, llwa, qdotL, 0.35);
 		sendRobotArmVelocities(daemon_cx, rlwa, qdotR, 0.35);
+
+		// handle grippers
+//		VectorXi buttonsL = getSpacenavButtons(spacenav_chan);
+//		VectorXi buttonsR = getSpacenavButtons(spacenav_chan2);
+//cout << "buttonsL "<< buttonsL.transpose() << endl;
+//cout << "buttonsR "<< buttonsR.transpose() << endl;
+//		handleSpacenavButtons(buttonsL, lgripper_chan);
+//		handleSpacenavButtons(buttonsR, rgripper_chan);
 	} else {
 		// Move the arms with a small delta using the computed velocities
 		if(xdotL.norm() > 1e-2)
@@ -368,8 +392,8 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	mWorld->getSkeleton("Krang")->setConfig(armIDsR, rarm_conf);
 
 	// Initialize the joystick(s)
-	somatic_d_channel_open(&daemon_cx, &joystick_chan, "joystick-data", NULL);
 	somatic_d_channel_open(&daemon_cx, &spacenav_chan, "spacenav-data", NULL);
+	somatic_d_channel_open(&daemon_cx, &spacenav_chan2, "spacenav2-data", NULL);
 
 	// Initialize the liberty
 	initLiberty();
@@ -438,11 +462,7 @@ void SimTab::OnButton(wxCommandEvent &evt) {
 	case id_checkbox_ToggleMotorInputMode: {
 		motor_input_mode = evt.IsChecked();
 		if (motor_input_mode && !motors_initialized) {
-			initArm(daemon_cx, llwa, "llwa");
-			initArm(daemon_cx, rlwa, "rlwa");
-			initWaist(daemon_cx, waist);
-			initIMU(daemon_cx, imu_chan);
-			motors_initialized = 1;
+			initialize_robot();
 		}
 		break;
 	}
@@ -451,11 +471,7 @@ void SimTab::OnButton(wxCommandEvent &evt) {
 
 		motor_output_mode = evt.IsChecked();
 		if (motor_output_mode && !motors_initialized) {
-			initArm(daemon_cx, llwa, "llwa");
-			initArm(daemon_cx, rlwa, "rlwa");
-			initWaist(daemon_cx, waist);
-			initIMU(daemon_cx, imu_chan);
-			motors_initialized = 1;
+			initialize_robot();
 		}
 
 		if (!motor_output_mode) {

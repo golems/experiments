@@ -11,12 +11,17 @@
 
 #include <amino.h>
 #include "initModules.h"
+#include <robotiqd.h>
 
 // somatic globals
 somatic_d_t daemon_cx;
 somatic_motor_t llwa;
 somatic_motor_t rlwa;
 somatic_motor_t waist;
+
+// gripper stuff
+ach_channel_t lgripper_chan;
+ach_channel_t rgripper_chan;
 
 // dart IDs
 vector<int> armIDsL;
@@ -85,7 +90,21 @@ void sendRobotArmVelocities(somatic_d_t &daemon_cx, somatic_motor_t &arm, Vector
 	somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, qdot.data(), 7, NULL);
 }
 
+/*
+ * Opens or closes the target gripper according to the spacenav button state
+ */
+void handleSpacenavButtons(const VectorXi &buttons, ach_channel_t &grip_chan) {
+	robotiqd_achcommand_t rqd_msg;
+	rqd_msg.mode = GRASP_BASIC;
+	rqd_msg.grasping_speed = 0xff;
+	rqd_msg.grasping_force = 0xff;
 
+	if (buttons[0]) rqd_msg.grasping_pos = 0x00;
+	if (buttons[1]) rqd_msg.grasping_pos = 0xff;
+
+	if (buttons[0] || buttons[1])
+		ach_put(&grip_chan, &rqd_msg, sizeof(rqd_msg));
+}
 
 /*
  * Hard-coded IDs for various krang body parts

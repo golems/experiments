@@ -22,8 +22,9 @@ typedef Eigen::Matrix<double, 6, 1> Vector6d;
 // Channel variables
 uint8_t *achbuf_joystick;
 size_t n_achbuf_joystick = 1024;
-ach_channel_t joystick_chan;
 ach_channel_t spacenav_chan;
+ach_channel_t spacenav_chan2;
+
 MatrixXd T_spacenav = (MatrixXd(4,4) <<  0,-1,0,0, -1,0,0,0, 0,0,-1,0, 0,0,0,1).finished();
 
 // use when converting matrices for visualization or control.  anything dart related
@@ -32,12 +33,29 @@ static math::RotationOrder dartRotOrder = math::XYZ;
 // use when converting from spacenav
 static math::RotationOrder spnavRotOrder = math::XYZ;
 
-//void initJoystick(somatic_d_t& daemon_cx, ach_channel_t &chan, char* channel_name = "joystick-data") {
-//	//ach_init(&joystick_chan, channel_name, achbuf_joystick, n_achbuf_joystick);
-//	somatic_d_channel_open(&daemon_cx, &chan, channel_name, NULL);
-//}
+VectorXi getSpacenavButtons(ach_channel_t &joy_chan = spacenav_chan) {
 
-Vector6d getSpacenavConfig(ach_channel_t &chan = joystick_chan) {
+	VectorXi buttons(2); buttons.Zero(2);
+
+	// get spacenav data
+	int r = 0;
+	Somatic__Joystick *js_msg = SOMATIC_GET_LAST_UNPACK( r, somatic__joystick,
+			&protobuf_c_system_allocator,
+			4096, &joy_chan );
+	cout << ach_result_to_string(static_cast<ach_status_t>(r)) << endl;
+	if(!(ACH_OK == r || ACH_MISSED_FRAME == r || ACH_STALE_FRAMES == r) || (js_msg == NULL)) return buttons;
+
+	// pack output vector
+	cout << "button0 raw: " << js_msg->buttons->data[0] << endl;
+	cout << "button1 raw: " << js_msg->buttons->data[1] << endl;
+	buttons << js_msg->buttons->data[0], js_msg->buttons->data[1];
+
+	somatic__joystick__free_unpacked(js_msg, &protobuf_c_system_allocator);
+
+	return buttons;
+}
+
+Vector6d getSpacenavConfig(ach_channel_t &chan = spacenav_chan) {
 
 	Vector6d config(6); config.Zero();
 
@@ -72,7 +90,7 @@ Vector6d getSpacenavConfig(ach_channel_t &chan = joystick_chan) {
  * Return the joystick pose in the world frame
  *TODO: rename/refactor for spacenav and joy versions
  */
-bool getJoystickPose(MatrixXd &pose, Vector6d* config = NULL, ach_channel_t &chan = joystick_chan) {
+bool getJoystickPose(MatrixXd &pose, Vector6d* config = NULL, ach_channel_t &chan = spacenav_chan) {
 //	// get joystick data
 //	int r = 0;
 //	Somatic__Joystick *js_msg = SOMATIC_GET_LAST_UNPACK( r, somatic__joystick,
