@@ -37,3 +37,9 @@ CHanging from (7,9) to (15,15) did not seem affect the dx in beginning too much 
 Observed that Kp and Kd (?) for x should be negative. -25 kp with balancing off seems semi sufficient to control when kd is 0.0.
 
 We ended up using 250 38 4 10 3 7 for the video 07/14th, time 11 am.
+
+------------------------------------- POSITION TUNING -------------------------------------
+
+The waist is low at 162 degrees. We start off with 250 38 4 10 3 7. Both wheel pressures are at 35 psi.
+
+
