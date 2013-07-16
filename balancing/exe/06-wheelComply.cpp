@@ -26,16 +26,25 @@ void getExternalWrench (Vector6d& external) {
 	// Get wrenches on the two arms in world frame and shift them to find the wrench on the wheel
 	Vector6d raw, leftFTWrench = Vector6d::Zero(), rightFTWrench = Vector6d::Zero();
 	if(getFT(daemon_cx, left_ft_chan, raw)) {
+
+		// Compute the external force and threshold it.
 		computeExternal(raw + leftOffset, *robot, leftFTWrench, true);
 		if((leftFTWrench.topLeftCorner<3,1>().norm() > 7) || 
-       (leftFTWrench.bottomLeftCorner<3,1>().norm() > 0.4)) 
+       (leftFTWrench.bottomLeftCorner<3,1>().norm() > 0.4)) {
+
+			// If force is not negligible, compute the effect on wheel 
 			computeWheelWrench(leftFTWrench, *robot, leftWheelWrench, true);
+		}
+		else leftWheelWrench = Vector6d::Zero();
 	} 
+
+	// Do the same as left arm
 	if(getFT(daemon_cx, right_ft_chan, raw)) {
 		computeExternal(raw + rightOffset, *robot, rightFTWrench, false);
 		if((rightFTWrench.topLeftCorner<3,1>().norm() > 7) || 
        (rightFTWrench.bottomLeftCorner<3,1>().norm() > 0.4)) 
 			computeWheelWrench(rightFTWrench, *robot, rightWheelWrench, true);
+		else rightWheelWrench = Vector6d::Zero();
 	} 
 		
 	// Sum the wheel wrenches from the two f/t sensors
@@ -108,7 +117,7 @@ void run () {
 
 		// Get the wrench on the wheel due to external force
 		getExternalWrench(externalWrench);
-		if(debug) cout << "torque: " << externalWrench(4) << endl;
+		if(debug) cout << "tangible torque: " << externalWrench(4) << endl;
 		
 		// Compute the balancing angle reference using the center of mass, total mass and felt wrench.
 		if(complyTorque) computeBalAngleRef(com, externalWrench(4), refState(0));
@@ -119,15 +128,15 @@ void run () {
 		Vector6d error = state - refState;
 		if(logGlobal) printf("%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n", externalWrench(0), lastU, amc.cur[0], amc.cur[1],  state(0), refState(0), error(0), time);			// do not move this line!
 		double u = K_bal.topLeftCorner<4,1>().dot(error.topLeftCorner<4,1>());
-		u = max(-49.0, min(49.0, u));
-		if(debug) printf("u: %lf\n", u);
-
+		double u_spin =  -K_bal.bottomLeftCorner<2,1>().dot(error.bottomLeftCorner<2,1>());
+	
 		// Compute the input for left and right wheels
-		double input [2] = {u, u};
-
+		double input [2] = {u + u_spin, u - u_spin};
+		input[0] = max(-49.0, min(49.0, input[0]));
+		input[1] = max(-49.0, min(49.0, input[1]));
+		if(debug) printf("u: %lf, u_spin: %lf\n", u, u_spin);
 		lastU = u;
-	//	somatic_motor_update(&daemon_cx, &amc);
-
+		
 		// Set the motor velocities
 		if(start) {
 			if(debug) cout << "Would have started..." << endl;
@@ -300,6 +309,9 @@ int main(int argc, char* argv[]) {
 	// Read the gains from the command line
 	assert(argc >= 7 && "Where is my gains for th, x and spin?");
 	K_bal << atof(argv[1]), atof(argv[2]), atof(argv[3]), atof(argv[4]), atof(argv[5]), atof(argv[6]);
+	jsFwdAmp = 0.3;
+	jsSpinAmp = 0.4;
+	
 	cout << "K_bal: " << K_bal.transpose() << "\nPress enter: " << endl;
 
 	// Debug options from command line

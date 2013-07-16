@@ -74,6 +74,8 @@ void run() {
 			//printf("Would have started!!\n"); 
 			somatic_motor_cmd(&daemon_cx, &amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
 		}
+
+		usleep(1e3);
 	}
 
 	// Send the stoppig event

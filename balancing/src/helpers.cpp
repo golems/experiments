@@ -77,6 +77,9 @@ void getState(Vector6d& state, double dt, Vector3d* com_) {
 	state(3) = (amc.vel[0] + amc.vel[1])/2.0 + imuSpeed;
 	state(4) = wheelRadius * (amc.pos[0] - amc.pos[1]) / distanceBetweenWheels;
 	state(5) = wheelRadius * (amc.vel[0] - amc.vel[1]) / distanceBetweenWheels;
+
+	// Making adjustment in com to make it consistent with the hack above for state(0)
+	com(0) = com(2) * tan(state(0));
 }
 
 /* ******************************************************************************************** */
