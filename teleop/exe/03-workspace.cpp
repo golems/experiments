@@ -13,9 +13,6 @@
 #include "GRIPApp.h"
 
 #include "channel.h"
-#include "somatic/daemon.h"
-#include <somatic/motor.h>
-
 #include <math/UtilsRotation.h>
 
 #include "util.h"
@@ -29,11 +26,6 @@ using namespace Eigen;
 using namespace dynamics;
 
 /* ********************************************************************************************* */
-
-// somatic globals
-somatic_d_t daemon_cx;
-somatic_motor_t llwa;
-somatic_motor_t rlwa;
 
 // UI Globals
 /* Events */
@@ -78,13 +70,6 @@ MatrixXd T_joy_cur;		//< joystick device current transform
 
 MatrixXd T_dummy = MatrixXd(4,4).setIdentity(4,4); // dummy transform for 1-arm control
 
-// Arm configurations
-VectorXd qL;
-VectorXd qR;
-vector<int> armIDsL;
-vector<int> armIDsR;
-
-
 /*
  * Queries dart krang skeleton for current effector poses
  */
@@ -95,31 +80,16 @@ bool getEffectorPoses(simulation::World* world, MatrixXd &ee_left, MatrixXd &ee_
 	ee_right = eerNode->getWorldTransform();
 }
 
-/*
- * Updates arm configurations in krang skeleton from current
- * somatic motor states
- */
-void updateRobotSkelFromSomatic(simulation::World* world, somatic_d_t &daemon_cx,
-		somatic_motor_t &arm, vector<int> &armIDs) {
-
-	VectorXd vals(7);
-	somatic_motor_update(&daemon_cx, &arm);
-	for(size_t i = 0; i < 7; i++)
-		vals(i) = arm.pos[i];
-	world->getSkeleton("Krang")->setConfig(armIDs, vals);
-}
 
 /*
- * Send joint velocities to robot over somatic
+ * Manually updates the arm configuration for the provided jointspace
+ * velocities, scaled by the provided dt
+ * TODO use dart dynamics
  */
-void sendRobotArmVelocities(somatic_d_t &daemon_cx, somatic_motor_t &arm, VectorXd &qdot,
-		double gain = 0.02) {
-
-	qdot = qdot.normalized() * gain;
-	double dq [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-	for(size_t i = 0; i < 7; i++)
-		dq[i] = qdot(i);
-	somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7, NULL);
+void fakeArmMovement(vector<int> ids, VectorXd &qdot, double dt) {
+	VectorXd q = mWorld->getSkeleton("Krang")->getConfig(ids);
+	q += (qdot.normalized() * dt);
+	mWorld->getSkeleton("Krang")->setConfig(ids, q);
 }
 
 /************************ Initialization **************************/
@@ -158,16 +128,6 @@ void initialize_transforms(simulation::World* world) {
 	T_eeR_goal = T_eeR_init;
 }
 
-/*
- * Initialize arm configuration IDs
- */
-void initialize_configs(simulation::World* world) {
-	static const int idL[] = {11, 13, 15, 17, 19, 21, 23};
-	static const int idR[] = {12, 14, 16, 18, 20, 22, 24};
-	armIDsL = vector<int>(idL, idL + sizeof(idL)/sizeof(idL[0]));
-	armIDsR = vector<int>(idR, idR + sizeof(idR)/sizeof(idR[0]));
-}
-
 /* ********************************************************************************************* */
 /// Given the two goal 4x4 transformation for the arrows, draw them
 void setGoalSkelConfig(dynamics::SkeletonDynamics *goalSkel, const MatrixXd &goal) {
@@ -185,7 +145,8 @@ void setGoalSkelConfig(dynamics::SkeletonDynamics *goalSkel, const MatrixXd &goa
  ****************************************************************************************/
 /// Returns the goal configuration for the end-effector using spacenav
 void updateGoalFromSpnavVels(kinematics::BodyNode *eeNode, MatrixXd& goalTransform,
-		dynamics::SkeletonDynamics *goalSkel = NULL, double scale = 0.1) {
+		dynamics::SkeletonDynamics *goalSkel = NULL, double scale = 0.1,
+		ach_channel_t &chan = joystick_chan) {
 
 	/*
 	 * TODO:
@@ -196,7 +157,7 @@ void updateGoalFromSpnavVels(kinematics::BodyNode *eeNode, MatrixXd& goalTransfo
 
 	// Get the config of the spacenav
 	Vector6d goalConfig;
-	getJoystickPose(T_eeL_goal, &goalConfig);
+	getJoystickPose(goalTransform, &goalConfig, chan);
 
 	// scale workspace velocity dims
 	double weights[] = {1, 1, 1, 2, 2, 2};
@@ -208,7 +169,7 @@ void updateGoalFromSpnavVels(kinematics::BodyNode *eeNode, MatrixXd& goalTransfo
 	goalConfig.topLeftCorner<3,1>() = eeT.topRightCorner<3,1>() + scale * goalConfig.topLeftCorner<3,1>();
 
 	// Set the orientation "change" with respect to the end-effector orientation
-	Quaternion<double> goalOri(T_eeL_goal.topLeftCorner<3,3>());
+	Quaternion<double> goalOri(goalTransform.topLeftCorner<3,3>());
 	Quaternion <double> eeOri(eeT.topLeftCorner<3,3>());
 	Quaternion<double> errOriQ = goalOri * eeOri.inverse();
 	Matrix3d errOriM = errOriQ.matrix();
@@ -217,7 +178,6 @@ void updateGoalFromSpnavVels(kinematics::BodyNode *eeNode, MatrixXd& goalTransfo
 
 	// update goalTransform from config representation
 	goalTransform = eulerToTransform(goalConfig, dartRotOrder);
-//	cout << "goal transform from euler conversion\n" << goalTransform << endl;
 
 	// Update the dart data structure and set the goal
 	if (goalSkel != NULL) {
@@ -225,8 +185,6 @@ void updateGoalFromSpnavVels(kinematics::BodyNode *eeNode, MatrixXd& goalTransfo
 		for(int i = 0; i < 6; i++) obj_idx.push_back(i);
 		goalSkel->setConfig(obj_idx, goalConfig);
 		goalTransform = goalSkel->getNode("link_0")->getWorldTransform(); //TODO deleteme!
-
-//		cout << "goal transform from dart\n" << goalTransform << endl <<endl;
 	}
 }
 
@@ -258,12 +216,6 @@ VectorXd computeWorkVelocity(const kinematics::BodyNode* eeNode, const MatrixXd 
 	Matrix3d errOriM = errOriQ.matrix();
 	Vector3d errOriV = math::matrixToEuler(errOriM, dartRotOrder);
 
-	// Check if the goal is reached
-	static const double posLimit = 0.01;
-	static const double oriLimit = 0.01;
-	if((errPos.norm() < posLimit) && (errOriV.norm() < oriLimit))
-		return xdot;
-
 	// Get the workspace velocity
 	//errOriV= Vector3d(0.0, 0.0, 0.0);
 	xdot << errPos, errOriV;
@@ -293,20 +245,6 @@ VectorXd workToJointVelocity (kinematics::BodyNode* eeNode, const VectorXd& xdot
 	return qdot;
 }
 
-/* ********************************************************************************************* */
-/*
- * Manually updates the arm configuration for the provided jointspace
- * velocities, scaled by the provided dt
- * TODO use dart dynamics
- */
-void fakeArmMovement(VectorXd &qL, VectorXd &qR, VectorXd &qdotL, VectorXd &qdotR, double dt=0.035) {
-	qL = mWorld->getSkeleton("Krang")->getConfig(armIDsL);
-	qL += (qdotL.normalized() * dt);
-	mWorld->getSkeleton("Krang")->setConfig(armIDsL, qL);
-}
-
-/* ********************************************************************************************* */
-
 
 /* ********************************************************************************************* */
 /// Picks a random configuration for the robot, moves it, does f.k. for the right and left
@@ -314,36 +252,44 @@ void fakeArmMovement(VectorXd &qL, VectorXd &qR, VectorXd &qdotL, VectorXd &qdot
 void Timer::Notify() {
 //	Vector6d joycfg;
 //	getJoystickPose(T_joy_cur, &joycfg);
-//	cout << " joy cfg: " << joycfg.transpose() << endl;
+//	cout << "joy cfg: " << joycfg.transpose() << endl;
 //	//cout << " joy transform: \n" << T_joy_cur << endl;
 //	setGoalSkelConfig(mWorld->getSkeleton("g1"), T_joy_cur);
 
 	// update robot state from ach if we're controlling the actual robot
 	if (motor_input_mode) {
-		updateRobotSkelFromSomatic(mWorld, daemon_cx, llwa, armIDsL);
-		//updateRobotSkelFromSomatic(mWorld, daemon_cx, rlwa, armIDsR);
+		updateRobotSkelFromSomaticMotor(mWorld, daemon_cx, llwa, armIDsL);
+		updateRobotSkelFromSomaticMotor(mWorld, daemon_cx, rlwa, armIDsR);
+		updateRobotSkelFromSomaticWaist(mWorld, daemon_cx, waist, waistIDs);
+		updateRobotSkelFromIMU(mWorld);
 	}
 
 	// Grab effector node pointer to compute the task space error and the Jacobian
 	kinematics::BodyNode *eeL_node = mWorld->getSkeleton("Krang")->getNode("lGripper");
+	kinematics::BodyNode *eeR_node = mWorld->getSkeleton("Krang")->getNode("rGripper");
 
 	// Get the goal configuration from spacenav
-	updateGoalFromSpnavVels(eeL_node, T_eeL_goal, mWorld->getSkeleton("g1"), 0.1);
+	updateGoalFromSpnavVels(eeL_node, T_eeL_goal, mWorld->getSkeleton("g1"), 0.2, joystick_chan);
+	updateGoalFromSpnavVels(eeR_node, T_eeR_goal, mWorld->getSkeleton("g2"), 0.2, spacenav_chan);
 
 	// Compute workspace velocity from goal errors
 	VectorXd xdotL = computeWorkVelocity(eeL_node, T_eeL_goal);
+	VectorXd xdotR = computeWorkVelocity(eeR_node, T_eeR_goal);
 
 	// Convert to jointspace velocities
 	VectorXd qdotL = workToJointVelocity(eeL_node, xdotL);
+	VectorXd qdotR = workToJointVelocity(eeR_node, xdotR);
 
 	// dispatch joint velocities to arms
 	if (motor_output_mode) {
-		sendRobotArmVelocities(daemon_cx, llwa, qdotL);
-		//sendRobotArmVelocities(daemon_cx, rlwa, qdotR);
+		sendRobotArmVelocities(daemon_cx, llwa, qdotL, 0.35);
+		sendRobotArmVelocities(daemon_cx, rlwa, qdotR, 0.35);
 	} else {
 		// Move the arms with a small delta using the computed velocities
 		if(xdotL.norm() > 1e-2)
-			fakeArmMovement(qL, qR, qdotL, qdotL);
+			fakeArmMovement(armIDsL, qdotL, 0.035);
+		if(xdotR.norm() > 1e-2)
+			fakeArmMovement(armIDsR, qdotR, 0.035);
 	}
 
 	// Visualize the arm motion
@@ -412,15 +358,18 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 			SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
 
 	// set arm indices and configs
-	initialize_configs(mWorld);
+	setDartIDs(mWorld);
 
 	// Manually set the initial arm configuration for the left arm
 	VectorXd larm_conf(7), rarm_conf(7);
 	larm_conf << 0.0, -M_PI / 3.0, 0.0, -M_PI / 3.0, 0.0, M_PI/6.0, 0.0;
+	rarm_conf << 0.0, M_PI / 3.0, 0.0, M_PI / 3.0, 0.0, -M_PI/6.0, 0.0;
 	mWorld->getSkeleton("Krang")->setConfig(armIDsL, larm_conf);
+	mWorld->getSkeleton("Krang")->setConfig(armIDsR, rarm_conf);
 
-	// Initialize the joystick
-	initJoystick();
+	// Initialize the joystick(s)
+	somatic_d_channel_open(&daemon_cx, &joystick_chan, "joystick-data", NULL);
+	somatic_d_channel_open(&daemon_cx, &spacenav_chan, "spacenav-data", NULL);
 
 	// Initialize the liberty
 	initLiberty();
@@ -428,7 +377,9 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	// Initialize the arms
 	if (motor_input_mode || motor_output_mode) {
 		initArm(daemon_cx, llwa, "llwa");
-		//initArm(daemon_cx, rlwa, "rlwa");
+		initArm(daemon_cx, rlwa, "rlwa");
+		initWaist(daemon_cx, waist);
+		initIMU(daemon_cx, imu_chan);
 		motors_initialized = 1;
 	}
 
@@ -441,11 +392,9 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 SimTab::~SimTab() {
 
 	// halt the arms TODO: why isn't this being called?
-//	if (motor_mode) {
-//		somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
-//		//somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
-//		cout << "halted motors" << endl;
-//	}
+//	haltArm(daemon_cx, llwa);
+//	haltArm(daemon_cx, rlwa);
+//	motors_initialized = 0;
 
 	// Send the stopping event
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
@@ -490,7 +439,9 @@ void SimTab::OnButton(wxCommandEvent &evt) {
 		motor_input_mode = evt.IsChecked();
 		if (motor_input_mode && !motors_initialized) {
 			initArm(daemon_cx, llwa, "llwa");
-			//initArm(daemon_cx, rlwa, "rlwa");
+			initArm(daemon_cx, rlwa, "rlwa");
+			initWaist(daemon_cx, waist);
+			initIMU(daemon_cx, imu_chan);
 			motors_initialized = 1;
 		}
 		break;
@@ -501,17 +452,17 @@ void SimTab::OnButton(wxCommandEvent &evt) {
 		motor_output_mode = evt.IsChecked();
 		if (motor_output_mode && !motors_initialized) {
 			initArm(daemon_cx, llwa, "llwa");
-			//initArm(daemon_cx, rlwa, "rlwa");
+			initArm(daemon_cx, rlwa, "rlwa");
+			initWaist(daemon_cx, waist);
+			initIMU(daemon_cx, imu_chan);
 			motors_initialized = 1;
 		}
 
 		if (!motor_output_mode) {
-			cout << "halting motors" << endl;
-			somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
+			haltArm(daemon_cx, llwa);
+			haltArm(daemon_cx, rlwa);
 			motors_initialized = 0;
 		}
-
-
 		break;
 	}
 
@@ -545,7 +496,7 @@ IMPLEMENT_DYNAMIC_CLASS(SimTab, GRIPTab)
 extern wxNotebook* tabView;
 class mainApp : public GRIPApp {
 	virtual void AddTabs() {
-		tabView->AddPage(new SimTab(tabView), wxT("Liberty"));
+		tabView->AddPage(new SimTab(tabView), wxT("Teleop"));
 	}
 };
 

@@ -22,9 +22,8 @@ typedef Eigen::Matrix<double, 6, 1> Vector6d;
 // Channel variables
 uint8_t *achbuf_joystick;
 size_t n_achbuf_joystick = 1024;
-ach_channel_t joystick_chan; // global b/c why would you change it
-size_t joystick_id = 1;
-
+ach_channel_t joystick_chan;
+ach_channel_t spacenav_chan;
 MatrixXd T_spacenav = (MatrixXd(4,4) <<  0,-1,0,0, -1,0,0,0, 0,0,-1,0, 0,0,0,1).finished();
 
 // use when converting matrices for visualization or control.  anything dart related
@@ -33,11 +32,12 @@ static math::RotationOrder dartRotOrder = math::XYZ;
 // use when converting from spacenav
 static math::RotationOrder spnavRotOrder = math::XYZ;
 
-void initJoystick() {
-	ach_init(&joystick_chan, "joystick-data", achbuf_joystick, n_achbuf_joystick);
-}
+//void initJoystick(somatic_d_t& daemon_cx, ach_channel_t &chan, char* channel_name = "joystick-data") {
+//	//ach_init(&joystick_chan, channel_name, achbuf_joystick, n_achbuf_joystick);
+//	somatic_d_channel_open(&daemon_cx, &chan, channel_name, NULL);
+//}
 
-Vector6d getSpacenavConfig() {
+Vector6d getSpacenavConfig(ach_channel_t &chan = joystick_chan) {
 
 	Vector6d config(6); config.Zero();
 
@@ -45,7 +45,7 @@ Vector6d getSpacenavConfig() {
 	int r = 0;
 	Somatic__Joystick *js_msg = SOMATIC_GET_LAST_UNPACK( r, somatic__joystick,
 			&protobuf_c_system_allocator,
-			4096, &joystick_chan );
+			4096, &chan );
 
 	if(!(ACH_OK == r || ACH_MISSED_FRAME == r) || (js_msg == NULL)) return config;
 
@@ -58,8 +58,9 @@ Vector6d getSpacenavConfig() {
 	for (int j=0; j < 3; j++) rotV[j] = js_msg->axes[0].data[j+3];
 
 	// pack into config
-
-	config << -pos(1), -pos(0), -pos(2), -rotV(1), -rotV(0), -rotV(2);
+	config << -pos(1), -pos(0), -pos(2), -rotV(1), rotV(0), -rotV(2);
+	//config << -pos(1), -pos(0), -pos(2), -rotV(2), -rotV(0), -rotV(1);
+	//config << -pos(1), -pos(0), -pos(2), -rotV(0), -rotV(2), -rotV(1);
 
 	// Free the liberty message
 	somatic__joystick__free_unpacked(js_msg, &protobuf_c_system_allocator);
@@ -71,7 +72,7 @@ Vector6d getSpacenavConfig() {
  * Return the joystick pose in the world frame
  *TODO: rename/refactor for spacenav and joy versions
  */
-bool getJoystickPose(MatrixXd &pose, Vector6d* config = NULL) {
+bool getJoystickPose(MatrixXd &pose, Vector6d* config = NULL, ach_channel_t &chan = joystick_chan) {
 //	// get joystick data
 //	int r = 0;
 //	Somatic__Joystick *js_msg = SOMATIC_GET_LAST_UNPACK( r, somatic__joystick,
@@ -109,7 +110,7 @@ bool getJoystickPose(MatrixXd &pose, Vector6d* config = NULL) {
 //
 //	return 0;
 	
-	Vector6d spnconfig = getSpacenavConfig();
+	Vector6d spnconfig = getSpacenavConfig(chan);
 	pose = eulerToTransform(spnconfig, dartRotOrder);
 
 	if (config != NULL)

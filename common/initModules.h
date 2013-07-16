@@ -16,6 +16,7 @@
 #include <somatic.pb-c.h>
 #include <somatic/motor.h>
 #include <ach.h>
+#include <imud.h>
 
 /* ********************************************************************************************* */
 /// Initializes a daemon with the given name
@@ -77,6 +78,27 @@ void initTorso (somatic_d_t& daemon_cx, somatic_motor_t& torso) {
 	somatic_motor_cmd(&daemon_cx, &torso, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 1, NULL);
 }
 
+/// Initializes the waist motor
+void initWaist(somatic_d_t& daemon_cx, somatic_motor_t& waist) {
+
+	// Initialize the arm with the daemon context, channel names and # of motors
+	somatic_motor_init(&daemon_cx, &waist, 2, "waist-cmd", "waist-state");
+	usleep(1e5);
+
+	// Set the min/max values for valid and limits values
+	double** limits [] = {
+		&waist.pos_valid_min, &waist.vel_valid_min,
+		&waist.pos_limit_min, &waist.pos_limit_min,
+		&waist.pos_valid_max, &waist.vel_valid_max,
+		&waist.pos_limit_max, &waist.pos_limit_max};
+	for(size_t i = 0; i < 4; i++) aa_fset(*limits[i], -1024.1, 2);
+	for(size_t i = 4; i < 8; i++) aa_fset(*limits[i], 1024.1, 2);
+
+	// Update and reset them
+	somatic_motor_update(&daemon_cx, &waist);
+	somatic_motor_cmd(&daemon_cx, &waist, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 2, NULL);
+}
+
 /* ********************************************************************************************* */
 /// Initializes the arm with the given name: either "llwa" or "rlwa".
 void initArm (somatic_d_t& daemon_cx, somatic_motor_t& arm, const char* armName) {	
@@ -104,4 +126,18 @@ void initArm (somatic_d_t& daemon_cx, somatic_motor_t& arm, const char* armName)
 	somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 7, NULL);
 	usleep(1e5);
 }
+
+/*
+ * Sets zero velocities to the arm and halts it.   No destroying happens here
+ */
+void haltArm(somatic_d_t &daemon_cx, somatic_motor_t &arm) {
+	double dq [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+	somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7, NULL);
+	somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
+}
+
 /* ********************************************************************************************* */
+void initIMU(somatic_d_t& daemon_cx, ach_channel_t &imu_chan) {
+	somatic_d_channel_open(&daemon_cx, &imu_chan, "imu-data", NULL);
+}
+
