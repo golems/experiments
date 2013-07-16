@@ -38,6 +38,7 @@ namespace Eigen {
     typedef Eigen::Matrix<double, 6, 6> Matrix6d;
 }
 
+double ssdmu_pitch(double x, double y, double z);
 double get_imu();
 Eigen::Vector6d get_ft();
 
@@ -129,6 +130,9 @@ double compliance_threshold_torque = .4;
 // how many times per second to print information to the screen
 double display_freq = 10.0;
 
+// Angle that the DMU is mounted at: 45 degrees.
+double csr = -.7853981634;
+
 // #############################################################################
 // #############################################################################
 // HELPERS
@@ -143,6 +147,12 @@ double gettime() {
     struct timespec temp;
     clock_gettime(ACH_DEFAULT_CLOCK, &temp);
     return timespec_to_double(temp);
+}
+
+double ssdmu_pitch(double x, double y, double z) {
+    double newX;
+    newX = x*cos(csr) - y*sin(csr);
+    return atan2(newX, z); 
 }
 
 Eigen::Vector7d wrench_to_joint_vels(const Eigen::Vector6d& wrench) {
@@ -269,19 +279,15 @@ double get_imu() {
     assert((imu_msg != NULL) && "Didn't get IMU message!");
 
     // extract the data into something we can use
-    ssdmu_sample_t imu_sample;
-    imu_sample.x  = imu_msg->data[0];
-    imu_sample.y  = imu_msg->data[1];
-    imu_sample.z  = imu_msg->data[2];
-    imu_sample.dP = imu_msg->data[3];
-    imu_sample.dQ = imu_msg->data[4];
-    imu_sample.dR = imu_msg->data[5];
+    double imu_sample_x  = imu_msg->data[0];
+    double imu_sample_y  = imu_msg->data[1];
+    double imu_sample_z  = imu_msg->data[2];
 
     // Free the unpacked message
     somatic__vector__free_unpacked( imu_msg, &protobuf_c_system_allocator );
 
     // compute our result and return it
-    return -ssdmu_pitch(&imu_sample) + M_PI/2;				 
+    return -ssdmu_pitch(imu_sample_x, imu_sample_y, imu_sample_z) + M_PI/2;				 
 }
 
 Eigen::Vector6d get_ft() {
@@ -406,7 +412,7 @@ void run() {
             r_ft_external(5) *= 40;
             
             // figure out our necessary velocity
-            // r_arm_vels = wrench_to_joint_vels(r_ft_external);
+            r_arm_vels = wrench_to_joint_vels(r_ft_external);
         }
 
         // now we figure out where to go

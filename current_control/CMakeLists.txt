@@ -35,7 +35,7 @@ include(simulation.cmake)
 # Link to somatic, amino and ach
 # NOTE: Ideally we would like to 'find' these packages but for now, we assume they are either 
 # in /usr/lib or /usr/local/lib
-link_libraries(amino protobuf-c ach ntcan ntcanopen filter pcio somatic stdc++ ncurses ssdmu)
+link_libraries(amino protobuf-c ach ntcan ntcanopen filter pcio somatic stdc++ ncurses)
 
 # Include Eigen
 include_directories(/usr/include/eigen3)
