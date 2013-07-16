@@ -18,6 +18,7 @@
 
 #include <math/UtilsRotation.h>
 
+#include "util.h"
 #include "initModules.h"
 #include "liberty_client.h"
 #include "joystick_client.h"
@@ -41,6 +42,8 @@ enum DynamicSimulationTabEvents {
 	id_button_ResetLiberty,
 	id_button_ResetJoystick,
 	id_button_ResetArms,
+	id_checkbox_ToggleMotorInputMode,
+	id_checkbox_ToggleMotorOutputMode,
 };
 
 // control globals
@@ -49,8 +52,10 @@ enum UI_MODES {
 	UI_JOYSTICK,
 	UI_MIXED,
 };
-static bool motor_mode = 0;
-static int input_mode = UI_JOYSTICK;
+static bool motor_input_mode = 0;
+static bool motor_output_mode = 0;
+static bool motors_initialized = 0;
+static int ui_input_mode = UI_JOYSTICK;
 
 // Effector and liberty transforms
 MatrixXd T_eeL_init; 	//< left effector initial transform
@@ -76,49 +81,8 @@ MatrixXd T_dummy = MatrixXd(4,4).setIdentity(4,4); // dummy transform for 1-arm 
 // Arm configurations
 VectorXd qL;
 VectorXd qR;
-//VectorXd qdotL;
-//VectorXd qdotR;
 vector<int> armIDsL;
 vector<int> armIDsR;
-
-/************************ Helpers **************************/
-
-/*
- * Converts a 4x4 homogeneous transform to a 6D euler.
- * Conversion convention corresponds to Grip's ZYX
- */
-VectorXd transformToEuler(const MatrixXd &T, math::RotationOrder _order = math::XYZ) { // math::XYZ
-	// extract translation
-	Vector3d posV = T.topRightCorner<3,1>();
-
-	// convert rotmat to euler
-	Matrix3d rotM = T.topLeftCorner<3,3>();
-	Vector3d rotV = math::matrixToEuler(rotM, _order);  // math::ZYX for spacenav!?
-
-	// pack into a 6D config vector
-	VectorXd V(6);
-	V << posV, rotV;
-	return V;
-}
-
-MatrixXd eulerToTransform(const VectorXd &V, math::RotationOrder _order = math::XYZ) { // math::XYZ
-	// extract translation
-	Vector3d posV; posV << V[0], V[1], V[2];
-
-	// extract rotation
-	Vector3d rotV; rotV << V[3], V[4], V[5];
-
-	// convert rotmat to euler
-	Matrix3d rotM = math::eulerToMatrix(rotV, _order);  // math::ZYX for spacenav!?
-
-	// pack into a 4x4 matrix
-	MatrixXd T(4,4);
-	T.topLeftCorner<3,3>() = rotM;
-	T.topRightCorner<3,1>() = posV;
-	T(3,3) = 1.0;
-
-	return T;
-}
 
 
 /*
@@ -129,6 +93,33 @@ bool getEffectorPoses(simulation::World* world, MatrixXd &ee_left, MatrixXd &ee_
 	ee_left = eelNode->getWorldTransform();
 	kinematics::BodyNode* eerNode = world->getSkeleton("Krang")->getNode("rGripper");
 	ee_right = eerNode->getWorldTransform();
+}
+
+/*
+ * Updates arm configurations in krang skeleton from current
+ * somatic motor states
+ */
+void updateRobotSkelFromSomatic(simulation::World* world, somatic_d_t &daemon_cx,
+		somatic_motor_t &arm, vector<int> &armIDs) {
+
+	VectorXd vals(7);
+	somatic_motor_update(&daemon_cx, &arm);
+	for(size_t i = 0; i < 7; i++)
+		vals(i) = arm.pos[i];
+	world->getSkeleton("Krang")->setConfig(armIDs, vals);
+}
+
+/*
+ * Send joint velocities to robot over somatic
+ */
+void sendRobotArmVelocities(somatic_d_t &daemon_cx, somatic_motor_t &arm, VectorXd &qdot,
+		double gain = 0.02) {
+
+	qdot = qdot.normalized() * gain;
+	double dq [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+	for(size_t i = 0; i < 7; i++)
+		dq[i] = qdot(i);
+	somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7, NULL);
 }
 
 /************************ Initialization **************************/
@@ -168,7 +159,7 @@ void initialize_transforms(simulation::World* world) {
 }
 
 /*
- *
+ * Initialize arm configuration IDs
  */
 void initialize_configs(simulation::World* world) {
 	static const int idL[] = {11, 13, 15, 17, 19, 21, 23};
@@ -177,43 +168,108 @@ void initialize_configs(simulation::World* world) {
 	armIDsR = vector<int>(idR, idR + sizeof(idR)/sizeof(idR[0]));
 }
 
-/*
- * use this one when you want to interpret UI input as velocities
- */
-//void updateEffectorGoalFromUI(MatrixXd &goalM, MatrixXd &ui_curM, VectorXd &goalE, double gain = 0.003) {
-//	goalE = transformToEuler(goalM);
-//	VectorXd ui_curE(6);
-//	ui_curE = transformToEuler(ui_curM);
-//	goalE += (ui_curE * gain); // update goal in Euler space
-//	goalM = eulerToTransform(goalE); // update matrix representation
-//}
-
 /* ********************************************************************************************* */
 /// Given the two goal 4x4 transformation for the arrows, draw them
-void setGoalSkelConfigs(const MatrixXd &goalL, const MatrixXd &goalR) {
-//	mWorld->getSkeleton("g1")->getNode("link_0")->setWorldTransform(goalL);
-//	mWorld->getSkeleton("g2")->getNode("link_0")->setWorldTransform(goalR);
+void setGoalSkelConfig(dynamics::SkeletonDynamics *goalSkel, const MatrixXd &goal) {
+	// convert goal to euler
+	VectorXd arrowConf = transformToEuler(goal, dartRotOrder);
 
-	const MatrixXd *goal_transforms[] = {&goalL, &goalR};
-	dynamics::SkeletonDynamics* skeletons[] = {mWorld->getSkeleton("g1"), mWorld->getSkeleton("g2")};
+	// set config of skeleton
+	vector<int> conf_ids;
+	for(int k = 0; k < 6; k++) conf_ids.push_back(k);
+	goalSkel->setConfig(conf_ids, arrowConf);
+}
 
-	for (int i=0; i < 2; i++ ) {
-		// grab ref to goal transform
-		const MatrixXd *goal = goal_transforms[i];
-		// grab ref to effector skeleton
-		SkeletonDynamics *skel = skeletons[i];
+/****************************************************************************************
+ * Workspace goal update functions
+ ****************************************************************************************/
+/// Returns the goal configuration for the end-effector using spacenav
+void updateGoalFromSpnavVels(kinematics::BodyNode *eeNode, MatrixXd& goalTransform,
+		dynamics::SkeletonDynamics *goalSkel = NULL, double scale = 0.1) {
 
-		// convert goal to euler
-		VectorXd arrowConf = transformToEuler(*goal);
+	/*
+	 * TODO:
+	 * 1) un-reverse spacenav pitch dimension
+	 * 2) get jacobian for pitch dimension to work with eulerToTransform
+	 * 3) drift thing
+	 */
 
-		// set config of skeleton
-		vector<int> conf_ids;
-		for(int k = 0; k < 6; k++) conf_ids.push_back(k);
-		skel->setConfig(conf_ids, arrowConf);
+	// Get the config of the spacenav
+	Vector6d goalConfig;
+	getJoystickPose(T_eeL_goal, &goalConfig);
+
+	// scale workspace velocity dims
+	double weights[] = {1, 1, 1, 2, 2, 2};
+	for (int i=0; i < 6; ++i)
+		goalConfig[i] *= weights[i];
+
+	// Set the location around the current end-effector pose with some scale
+	Matrix4d eeT = eeNode->getWorldTransform();
+	goalConfig.topLeftCorner<3,1>() = eeT.topRightCorner<3,1>() + scale * goalConfig.topLeftCorner<3,1>();
+
+	// Set the orientation "change" with respect to the end-effector orientation
+	Quaternion<double> goalOri(T_eeL_goal.topLeftCorner<3,3>());
+	Quaternion <double> eeOri(eeT.topLeftCorner<3,3>());
+	Quaternion<double> errOriQ = goalOri * eeOri.inverse();
+	Matrix3d errOriM = errOriQ.matrix();
+	goalConfig.bottomLeftCorner<3,1>() = math::matrixToEuler(errOriM, dartRotOrder);
+
+
+	// update goalTransform from config representation
+	goalTransform = eulerToTransform(goalConfig, dartRotOrder);
+//	cout << "goal transform from euler conversion\n" << goalTransform << endl;
+
+	// Update the dart data structure and set the goal
+	if (goalSkel != NULL) {
+		vector <int> obj_idx;
+		for(int i = 0; i < 6; i++) obj_idx.push_back(i);
+		goalSkel->setConfig(obj_idx, goalConfig);
+		goalTransform = goalSkel->getNode("link_0")->getWorldTransform(); //TODO deleteme!
+
+//		cout << "goal transform from dart\n" << goalTransform << endl <<endl;
 	}
 }
 
-/* ********************************************************************************************* */
+/****************************************************************************************
+ * Jacobian velocity functions
+ ****************************************************************************************/
+/*
+ * Computes desired workspace effector velocities xdot based on the
+ * provided goals, and returns jointspace velocities qdot from jacobian
+ */
+VectorXd computeWorkVelocity(const kinematics::BodyNode* eeNode, const MatrixXd &eeGoal ) {
+
+	VectorXd xdot(6); xdot.Zero(6);
+
+	// Get the current goal location and orientation as a quaternion
+	VectorXd goalPos = eeGoal.topRightCorner<3,1>();
+	Quaternion<double> goalOri(eeGoal.topLeftCorner<3,3>());
+
+	// Get the current end-effector location and orientation as a quaternion;
+	MatrixXd eeTransform = eeNode->getWorldTransform();
+	VectorXd eePos = eeTransform.topRightCorner<3,1>();
+	Quaternion <double> eeOri(eeTransform.topLeftCorner<3,3>());
+
+	// Find the position error
+	VectorXd errPos = goalPos - eePos;
+
+	// Find the orientation error and express it in RPY representation
+	Quaternion<double> errOriQ = goalOri * eeOri.inverse();
+	Matrix3d errOriM = errOriQ.matrix();
+	Vector3d errOriV = math::matrixToEuler(errOriM, dartRotOrder);
+
+	// Check if the goal is reached
+	static const double posLimit = 0.01;
+	static const double oriLimit = 0.01;
+	if((errPos.norm() < posLimit) && (errOriV.norm() < oriLimit))
+		return xdot;
+
+	// Get the workspace velocity
+	//errOriV= Vector3d(0.0, 0.0, 0.0);
+	xdot << errPos, errOriV;
+	return xdot;
+}
+
 /*
  * Given a workspace velocity, returns the joint space velocity
  */
@@ -237,131 +293,57 @@ VectorXd workToJointVelocity (kinematics::BodyNode* eeNode, const VectorXd& xdot
 	return qdot;
 }
 
-/*
- * Computes desired workspace effector velocities xdot based on the
- * provided goals, and returns jointspace velocities qdot from jacobian
- */
-VectorXd computeWorkVelocity(kinematics::BodyNode* eeNode, MatrixXd &eeGoal ) {
-	VectorXd xdot(6); xdot.Zero(6);
-
-	// Get the current goal location and orientation as a quaternion
-	VectorXd goalPos = eeGoal.topRightCorner<3,1>();
-	Quaternion<double> goalOri(eeGoal.topLeftCorner<3,3>());
-
-	// Get the current end-effector location and orientation as a quaternion;
-	MatrixXd eeTransform = eeNode->getWorldTransform();
-	VectorXd eePos = eeTransform.topRightCorner<3,1>();
-	Quaternion <double> eeOri(eeTransform.topLeftCorner<3,3>());
-
-	// Find the position error
-	VectorXd errPos = goalPos - eePos;
-
-	// Find the orientation error and express it in RPY representation
-	Quaternion<double> errOriQ = goalOri * eeOri.inverse();
-	Matrix3d errOriM = errOriQ.matrix();
-	Vector3d errOriV = math::matrixToEuler(errOriM, math::XYZ);
-
-	// Check if the goal is reached
-	static const double posLimit = 0.01;
-	static const double oriLimit = 0.01;
-	if((errPos.norm() < posLimit) && (errOriV.norm() < oriLimit))
-		return xdot;
-
-	// Get the workspace velocity
-	//errOriV= Vector3d(0.0, 0.0, 0.0);
-	xdot << errPos, errOriV;
-	return xdot;
-}
-
 /* ********************************************************************************************* */
 /*
  * Manually updates the arm configuration for the provided jointspace
  * velocities, scaled by the provided dt
  * TODO use dart dynamics
  */
-void fakeArmMovement(VectorXd &qL, VectorXd &qR, VectorXd &qdotL, VectorXd &qdotR, double dt=0.005) {
+void fakeArmMovement(VectorXd &qL, VectorXd &qR, VectorXd &qdotL, VectorXd &qdotR, double dt=0.035) {
 	qL = mWorld->getSkeleton("Krang")->getConfig(armIDsL);
 	qL += (qdotL.normalized() * dt);
-	cout << "qL: " << qL.transpose() << endl;
 	mWorld->getSkeleton("Krang")->setConfig(armIDsL, qL);
 }
 
 /* ********************************************************************************************* */
-/// Returns the goal configuration for the end-effector using spacenav
-void updateGoalFromSpnavVels(kinematics::BodyNode *ee_node, MatrixXd& goal,
-		dynamics::SkeletonDynamics *goal_skel = NULL, double scale = 0.1) {
 
-	// Get the goal configuration from the spacenav
-	Vector6d goalConfig;
-	getJoystickPose(T_eeL_goal, &goalConfig);
-
-	// Set the location around the current end-effector pose with some scale
-	Matrix4d eeT = ee_node->getWorldTransform();
-	goalConfig.topLeftCorner<3,1>() = eeT.topRightCorner<3,1>() + scale * goalConfig.topLeftCorner<3,1>();
-	
-
-	// Set the orientation "change" with respect to the end-effector orientation
-	Quaternion<double> goalOri(T_eeL_goal.topLeftCorner<3,3>()); 
-	Quaternion <double> eeOri(eeT.topLeftCorner<3,3>());
-	Quaternion<double> errOriQ = goalOri * eeOri.inverse();
-	Matrix3d errOriM = errOriQ.matrix();
-	goalConfig.bottomLeftCorner<3,1>() = math::matrixToEuler(errOriM, math::XYZ);
-
-	// update goal transform from config representation
-	goal = eulerToTransform(goalConfig);
-
-	// Update the dart data structure and set the goal
-	if (goal_skel != NULL) {
-		vector <int> obj_idx;
-		for(int i = 0; i < 6; i++) obj_idx.push_back(i);
-		goal_skel->setConfig(obj_idx, goalConfig);
-		goal = goal_skel->getNode("link_0")->getWorldTransform();
-		//cout << "goal from dart: " << goal << endl;
-		//cout << "goal from conversion" << eulerToTransform(goalConfig) << endl;
-	}
-}
 
 /* ********************************************************************************************* */
 /// Picks a random configuration for the robot, moves it, does f.k. for the right and left
 /// end-effectors, places blue and green boxes for their locations and visualizes it all
 void Timer::Notify() {
+//	Vector6d joycfg;
+//	getJoystickPose(T_joy_cur, &joycfg);
+//	cout << " joy cfg: " << joycfg.transpose() << endl;
+//	//cout << " joy transform: \n" << T_joy_cur << endl;
+//	setGoalSkelConfig(mWorld->getSkeleton("g1"), T_joy_cur);
 
 	// update robot state from ach if we're controlling the actual robot
-	if (motor_mode) {
-
+	if (motor_input_mode) {
+		updateRobotSkelFromSomatic(mWorld, daemon_cx, llwa, armIDsL);
+		//updateRobotSkelFromSomatic(mWorld, daemon_cx, rlwa, armIDsR);
 	}
-
 
 	// Grab effector node pointer to compute the task space error and the Jacobian
 	kinematics::BodyNode *eeL_node = mWorld->getSkeleton("Krang")->getNode("lGripper");
-	cout <<"left pos: "<< eeL_node->getWorldTransform().topRightCorner<3,1>().transpose() << endl;
 
 	// Get the goal configuration from spacenav
 	updateGoalFromSpnavVels(eeL_node, T_eeL_goal, mWorld->getSkeleton("g1"), 0.1);
-	
-	// Set goal arrow configurations from the grip interface
-//	T_eeL_goal = mWorld->getSkeleton("g1")->getNode("link_0")->getWorldTransform();
-//	cout << "\ngoal pos: " << T_eeL_goal.topRightCorner<3,1>().transpose() << endl;
-
 
 	// Compute workspace velocity from goal errors
 	VectorXd xdotL = computeWorkVelocity(eeL_node, T_eeL_goal);
-	cout << "xdot L: " << xdotL.transpose() << endl;
-	cout << "xdot norm: " << xdotL.norm() << endl;
 
 	// Convert to jointspace velocities
 	VectorXd qdotL = workToJointVelocity(eeL_node, xdotL);
-	cout << "qdot L: " << qdotL.transpose() << endl;
 
 	// dispatch joint velocities to arms
-	if (motor_mode) {
-		// send to motors
-
+	if (motor_output_mode) {
+		sendRobotArmVelocities(daemon_cx, llwa, qdotL);
+		//sendRobotArmVelocities(daemon_cx, rlwa, qdotR);
 	} else {
 		// Move the arms with a small delta using the computed velocities
 		if(xdotL.norm() > 1e-2)
 			fakeArmMovement(qL, qR, qdotL, qdotL);
-
 	}
 
 	// Visualize the arm motion
@@ -383,10 +365,14 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	wxStaticBoxSizer* ss2BoxS = new wxStaticBoxSizer(ss2Box, wxVERTICAL);
 	wxStaticBoxSizer* ss3BoxS = new wxStaticBoxSizer(ss3Box, wxVERTICAL);
 
+	ss1BoxS->Add(new wxCheckBox(this, id_checkbox_ToggleMotorInputMode, wxT("Read Motor State")), 0, wxALL, 1);
+
 	ss2BoxS->Add(new wxButton(this, id_button_ResetScene, wxT("Reset Scene")), 0, wxALL, 1);
 	ss2BoxS->Add(new wxButton(this, id_button_ResetLiberty, wxT("Set Liberty Initial Transforms")), 0, wxALL, 1);
 	ss2BoxS->Add(new wxButton(this, id_button_ResetJoystick, wxT("Set Joystick Initial Transform")), 0, wxALL, 1);
 	ss2BoxS->Add(new wxButton(this, id_button_ResetArms, wxT("Set Arm Initial Transforms")), 0, wxALL, 1);
+
+	ss3BoxS->Add(new wxCheckBox(this, id_checkbox_ToggleMotorOutputMode, wxT("Send Motor Commands")), 0, wxALL, 1);
 
 	sizerFull->Add(ss1BoxS, 1, wxEXPAND | wxALL, 6);
 	sizerFull->Add(ss2BoxS, 1, wxEXPAND | wxALL, 6);
@@ -435,30 +421,31 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 
 	// Initialize the joystick
 	initJoystick();
-	T_eeL_goal = Matrix4d(4,4); //< left effector goal transform
+
+	// Initialize the liberty
+	initLiberty();
 
 	// Initialize the arms
-	if (motor_mode) {
+	if (motor_input_mode || motor_output_mode) {
 		initArm(daemon_cx, llwa, "llwa");
-		initArm(daemon_cx, rlwa, "rlwa");
+		//initArm(daemon_cx, rlwa, "rlwa");
+		motors_initialized = 1;
 	}
-
 
 	// Initialize primary transforms
 	usleep(1e5); // give ach time to initialize, or init transforms will be bogus
-	// initialize_transforms(mWorld);
-	// getEffectorPoses(mWorld, T_eeL_cur, T_eeR_cur);
-	// setGoalSkelConfigs(T_eeL_cur, T_eeR_cur);
+	initialize_transforms(mWorld);
 }
 
 /* ********************************************************************************************* */
 SimTab::~SimTab() {
 
-	// halt the arms
-	if (motor_mode) {
-		somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
-		somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
-	}
+	// halt the arms TODO: why isn't this being called?
+//	if (motor_mode) {
+//		somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
+//		//somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
+//		cout << "halted motors" << endl;
+//	}
 
 	// Send the stopping event
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
@@ -475,48 +462,55 @@ void SimTab::GRIPEventSimulationBeforeTimestep() {}
  * @function OnButton
  * @brief Handles button events
  */
-void SimTab::OnButton(wxCommandEvent & evt) {
+void SimTab::OnButton(wxCommandEvent &evt) {
 	int slnum = evt.GetId();
 	switch(slnum) {
 	// Set Start Arm Configuration
 	case id_button_ResetScene: {
-//		T_eeL_goal = T_eeL_cur;
-//		T_eeL_goal(0,3) += 0.1;
-//		computeJointVelocities(mWorld, T_eeL_cur, T_eeR_cur, T_eeL_goal, T_eeR_goal, qdotL, qdotR);
-//		fakeArmMovement(qL, qR, qdotL, qdotR);
 		break;
 	}
 
 	case id_button_ResetLiberty: {
-//		MatrixXd *Tlibs[] = {&T_lib1_init, &T_lib2_init};
-//		getLibertyPoses(Tlibs, 2, NULL);
-
-//		T_eeL_goal = T_eeL_cur;
-//		T_eeL_goal(0,3) -= 0.1;
-//		computeJointVelocities(mWorld, T_eeL_cur, T_eeR_cur, T_eeL_goal, T_eeR_goal, qdotL, qdotR);
-//		fakeArmMovement(qL, qR, qdotL, qdotR);
-
+		MatrixXd *Tlibs[] = {&T_lib1_init, &T_lib2_init};
+		getLibertyPoses(Tlibs, 2, NULL);
 		break;
 	}
 
 	case id_button_ResetJoystick: {
-//			getJoystickPose(T_joy_init);
-
-//		T_eeL_goal = T_eeL_cur;
-//		T_eeL_goal(1,3) += 0.1;
-//		computeJointVelocities(mWorld, T_eeL_cur, T_eeR_cur, T_eeL_goal, T_eeR_goal, qdotL, qdotR);
-//		fakeArmMovement(qL, qR, qdotL, qdotR);
-
+		getJoystickPose(T_joy_init);
 		break;
 		}
 
 	case id_button_ResetArms: {
-//		getEffectorPoses(mWorld, T_eeL_init, T_eeR_init);
+		getEffectorPoses(mWorld, T_eeL_init, T_eeR_init);
+		break;
+	}
 
-//		T_eeL_goal = T_eeL_cur;
-//		T_eeL_goal(1,3) -= 0.1;
-//		computeJointVelocities(mWorld, T_eeL_cur, T_eeR_cur, T_eeL_goal, T_eeR_goal, qdotL, qdotR);
-//		fakeArmMovement(qL, qR, qdotL, qdotR);
+	case id_checkbox_ToggleMotorInputMode: {
+		motor_input_mode = evt.IsChecked();
+		if (motor_input_mode && !motors_initialized) {
+			initArm(daemon_cx, llwa, "llwa");
+			//initArm(daemon_cx, rlwa, "rlwa");
+			motors_initialized = 1;
+		}
+		break;
+	}
+
+	case id_checkbox_ToggleMotorOutputMode: {
+
+		motor_output_mode = evt.IsChecked();
+		if (motor_output_mode && !motors_initialized) {
+			initArm(daemon_cx, llwa, "llwa");
+			//initArm(daemon_cx, rlwa, "rlwa");
+			motors_initialized = 1;
+		}
+
+		if (!motor_output_mode) {
+			cout << "halting motors" << endl;
+			somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
+			motors_initialized = 0;
+		}
+
 
 		break;
 	}
@@ -534,6 +528,9 @@ void SimTab::OnSlider(wxCommandEvent &evt) {}
 BEGIN_EVENT_TABLE(SimTab, wxPanel)
 EVT_COMMAND (wxID_ANY, wxEVT_COMMAND_BUTTON_CLICKED, SimTab::OnButton)
 EVT_COMMAND (wxID_ANY, wxEVT_GRIP_SLIDER_CHANGE, SimTab::OnSlider)
+//EVT_CHECKBOX(wxEVT_COMMAND_CHECKBOX_CLICKED, SimTab::OnButton)
+EVT_CHECKBOX(id_checkbox_ToggleMotorInputMode, SimTab::OnButton)
+EVT_CHECKBOX(id_checkbox_ToggleMotorOutputMode, SimTab::OnButton)
 END_EVENT_TABLE()
 
 /* ********************************************************************************************* */

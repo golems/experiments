@@ -14,6 +14,7 @@
 #include <Tools/Constants.h>
 #include <wx/wx.h>
 #include <wx/statbox.h>
+#include <wx/tglbtn.h>
 #include <GUI/Viewer.h>
 #include <GUI/GUI.h>
 #include <GUI/GRIPSlider.h>
