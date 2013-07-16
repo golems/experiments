@@ -66,7 +66,9 @@ void run() {
 
 		// Compute the input for left and right wheels
 		double input [2] = {u + u_spin, u - u_spin};
-
+		input[0] = max(-49.0, min(49.0, input[0]));
+		input[1] = max(-49.0, min(49.0, input[1]));
+			
 		// Set the motor velocities
 		if(start) 
 			somatic_motor_cmd(&daemon_cx, &amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);

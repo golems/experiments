@@ -18,7 +18,7 @@ Vector6d leftOffset;
 Vector6d leftWheelWrench;
 Vector6d rightOffset;
 Vector6d rightWheelWrench;
-
+bool debugGlobal, logGlobal;
 /* ******************************************************************************************** */
 /// Computes the wrench on the wheels due to external force from the f/t sensors' data
 void getExternalWrench (Vector6d& external) {
@@ -88,7 +88,7 @@ void run () {
 	double lastU = 0.0;
 	while(!somatic_sig_received) {
 
-		bool debug = false & (c_++ % 20 == 0);
+		bool debug = debugGlobal & (c_++ % 20 == 0);
 		if(debug) cout << "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv\n" << endl;
 
 		// Get the current time and compute the time difference and update the prev. time
@@ -117,12 +117,14 @@ void run () {
 		// Compute the error term between reference and current, and weight with gains (spin separate)
 		if(debug) cout << "K_bal: " << K_bal.transpose() << endl;
 		Vector6d error = state - refState;
-		printf("%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n", externalWrench(0), lastU, amc.cur[0], amc.cur[1],  state(0), refState(0), error(0), time);			// do not move this line!
+		if(logGlobal) printf("%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n", externalWrench(0), lastU, amc.cur[0], amc.cur[1],  state(0), refState(0), error(0), time);			// do not move this line!
 		double u = K_bal.topLeftCorner<4,1>().dot(error.topLeftCorner<4,1>());
+		u = max(-49.0, min(49.0, u));
 		if(debug) printf("u: %lf\n", u);
 
 		// Compute the input for left and right wheels
 		double input [2] = {u, u};
+
 		lastU = u;
 	//	somatic_motor_update(&daemon_cx, &amc);
 
@@ -296,9 +298,17 @@ int main(int argc, char* argv[]) {
 	robot = world->getSkeleton(0);
 
 	// Read the gains from the command line
-	assert(argc == 7 && "Where is my gains for th, x and spin?");
+	assert(argc >= 7 && "Where is my gains for th, x and spin?");
 	K_bal << atof(argv[1]), atof(argv[2]), atof(argv[3]), atof(argv[4]), atof(argv[5]), atof(argv[6]);
 	cout << "K_bal: " << K_bal.transpose() << "\nPress enter: " << endl;
+
+	// Debug options from command line
+	debugGlobal = 1; logGlobal = 0;
+	if(argc == 8) { 
+		if(argv[7][0]=='l') { debugGlobal = 0; logGlobal = 1;} 
+		else if(argv[7][0] == 'd') {debugGlobal = 1; logGlobal = 0; } 
+	} 
+
 	getchar();
 
 	// Initialize, run, destroy
