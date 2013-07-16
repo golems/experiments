@@ -24,6 +24,7 @@
 // constants
 
 bool do_curses = true;
+bool do_logging = false;
 
 bool use_pos[] = {true, true, true, true, true, true, true};
 bool use_vel[] = {true, true, true, true, true, true, true};
@@ -35,6 +36,8 @@ double init_K_v_d[] = {0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0};
 
 double joint_vel_command_scale = 1.0;
 double joint_cur_command_scale = 8.0;
+
+double log_frequency = 100.0;
 
 // ################################################################################
 // definitions
@@ -62,6 +65,10 @@ joystick_controlling_t js_controlling;
 Somatic__Joystick* last_js_msg;
 
 bool halted = true;
+
+std::ofstream log_file;
+double log_time_last;
+double log_time_start;
 
 // ################################################################################
 // small helper functions
@@ -186,6 +193,41 @@ void do_control_display(somatic_motor_t* llwa, somatic_motor_t* rlwa,
 }
 
 // ################################################################################
+// logging
+
+void init_log_to_file() {
+    if (!do_logging) return;
+    log_file.open("02-full-arm.log");
+    log_time_last = gettime();
+    log_time_start = gettime();
+}
+
+void end_log_to_file() {
+    if (!do_logging) return;
+    log_file.close();
+}
+
+void do_log_to_file(pid_state_t* lpids, pid_state_t* rpids,
+                    somatic_motor_t* llwa, somatic_motor_t* rlwa,
+                    double* lmessage, double* rmessage) {
+    if (!do_logging) return;
+
+    double now = gettime();
+    if (now - log_time_last < 1.0/log_frequency) return;
+    log_time_last = now;
+    
+    int log_module = 1;
+    log_file
+        << now - log_time_start << ","         // 1
+        << (halted ? 1 : 0) << ","             // 2
+        << rpids[log_module].pos_target << "," // 3
+        << rlwa->pos[log_module] << ","        // 4
+        << rpids[log_module].vel_target << "," // 5
+        << rlwa->vel[log_module] << ","        // 6
+        << rmessage[log_module] << std::endl;  // 7
+}
+
+// ################################################################################
 // functions that actually do things
 
 int do_set_limits(somatic_motor_t* lwa) {
@@ -240,16 +282,18 @@ int do_joystick(pid_state_t* lpids, pid_state_t* rpids) {
 
     // and do stuff
     if (js_msg->buttons->data[1] && !last_js_msg->buttons->data[1]) {
-        for (int i = 0; i < 7; i++) { lpids[i].K_v_p -= .1; rpids[i].K_v_p -= .1; }
+        // for (int i = 0; i < 7; i++) { lpids[i].K_v_p -= .1; rpids[i].K_v_p -= .1; }
     }
     if (js_msg->buttons->data[3] && !last_js_msg->buttons->data[3]) {
-        for (int i = 0; i < 7; i++) { lpids[i].K_v_p += .1; rpids[i].K_v_p += .1; }
+        // for (int i = 0; i < 7; i++) { lpids[i].K_v_p += .1; rpids[i].K_v_p += .1; }
     }
     if (js_msg->buttons->data[0] && !last_js_msg->buttons->data[0]) {
-        for (int i = 0; i < 7; i++) { lpids[i].K_v_d -= .01; rpids[i].K_v_d -= .01; }
+        // for (int i = 0; i < 7; i++) { lpids[i].K_v_d -= .01; rpids[i].K_v_d -= .01; }
+        for (int i = 0; i < 7; i++) { std::cout << rlwa.pos[i] << ","; }
+        std::cout << std::endl;
     }
     if (js_msg->buttons->data[2] && !last_js_msg->buttons->data[2]) {
-        for (int i = 0; i < 7; i++) { lpids[i].K_v_d += .01; rpids[i].K_v_d += .01; }
+        // for (int i = 0; i < 7; i++) { lpids[i].K_v_d += .01; rpids[i].K_v_d += .01; }
     }
 
     if (js_msg->buttons->data[8] && !last_js_msg->buttons->data[8]) { // brakes!
@@ -322,6 +366,9 @@ int main( int argc, char **argv ) {
     daemon_opt.ident = "arm-joy-current";
     somatic_d_init(&daemon_cx, &daemon_opt);
 
+    // init logging
+    init_log_to_file();
+
     // init motors
     somatic_motor_init(&daemon_cx, &llwa, 7, "llwa-cmd", "llwa-state");
     somatic_motor_init(&daemon_cx, &rlwa, 7, "rlwa-cmd", "rlwa-state");
@@ -387,9 +434,12 @@ int main( int argc, char **argv ) {
         do_control_display(&llwa, &rlwa, lpids, rpids, lmessage, rmessage);
         refresh();
 
+        // log stuff
+        do_log_to_file(lpids, rpids, &llwa, &rlwa, lmessage, rmessage);
+
         // and send commands
         if (!halted) {
-            // somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, lmessage, 7, NULL);
+            somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, lmessage, 7, NULL);
             somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, rmessage, 7, NULL);
         }
     }
@@ -401,6 +451,8 @@ int main( int argc, char **argv ) {
     somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
     somatic_motor_destroy(&daemon_cx, &rlwa);
     somatic_d_destroy(&daemon_cx);
+
+    end_log_to_file();
 
     // end curses
     do_end_curses();

@@ -9,10 +9,15 @@
  * controllers.
  */
 
+#pragma once
+
+#include <somatic.h>
+#include <somatic/daemon.h>
+#include <somatic.pb-c.h>
+#include <somatic/motor.h>
+#include <ach.h>
 
 #include <dynamics/SkeletonDynamics.h>
-
-#pragma once
 
 /* the size of the window used for pseudo-integral terms */
 #define PID_ERROR_WINDOW_SIZE 30

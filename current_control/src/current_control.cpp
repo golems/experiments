@@ -9,7 +9,6 @@
  */
 
 #include "current_control.h"
-#include <somatic/motor.h>
 
 void do_init_pids(somatic_motor_t* mot, pid_state_t* pids) {
     for(int i = 0; i < mot->n; i++) {

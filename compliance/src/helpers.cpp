@@ -51,6 +51,8 @@ void computeExternal (double imu, double waist, const somatic_motor_t& lwa, cons
 	// position and rotation transforms with the expected effect of the gravity 
 	Vector6d wrenchWeight = pTcom_sensor * pSsensor_world * weightVector_in_world;
 
+        pv(wrenchWeight);
+
 	// Remove the effect from the sensor value and convert the wrench into the world frame
 	external = input - wrenchWeight;
 	external = pSsensor_world.transpose() * external;	
@@ -111,12 +113,13 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuCha
 
 	// Restart the netcanft daemon. Need to sleep to let OS kill the program first.
 	
-	usleep(20000);
 	if(left) { 
 		system("sns -k lft"); 
+                usleep(20000);
 		system("netcanftd -v -d -I lft -b 1 -B 1000 -c llwa_ft -k -r");
 	}	else { 
 		system("sns -k rft");
+                usleep(20000);
 		system("netcanftd -v -d -I rft -b 9 -B 1000 -c rlwa_ft -k -r");
 	}
 
@@ -128,7 +131,7 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuCha
 	// Initialize this daemon (program!)
 	somatic_d_opts_t dopt;
 	memset(&dopt, 0, sizeof(dopt)); // zero initialize
-	dopt.ident = "01-gripperWeight";
+	dopt.ident = "saul-01-gripperWeight";
 	somatic_d_init( &daemon_cx, &dopt );
 
 	// Initialize the left arm

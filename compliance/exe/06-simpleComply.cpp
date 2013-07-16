@@ -37,9 +37,11 @@ ach_channel_t waistChan;
 ach_channel_t ft_chan;
 somatic_motor_t llwa;
 Vector6d offset;							///< the offset we are going to decrease from raw readings
-bool useLeftArm = true;				///< The indicator that the left arm will be used for this program
+bool useLeftArm = false;				///< The indicator that the left arm will be used for this program
 
 const int krang_id = 0;
+
+bool do_run = true;
 
 /* ******************************************************************************************** */
 /// Given a wrench, computes the joint space velocities so that wrench is minimized 
@@ -108,12 +110,13 @@ void run() {
 
 		// Compute the external forces from ideal readings and move it to bracket frame
 		computeExternal(imu, waist, llwa, ideal, *(world->getSkeleton(krang_id)), external, useLeftArm);
-
+                
 		// Threshold the values - 4N for forces, 0.4Nm for torques
 		if((external.topLeftCorner<3,1>().norm() < 7) && 
-       (external.bottomLeftCorner<3,1>().norm() < 0.4)) {
+                   (external.bottomLeftCorner<3,1>().norm() < 0.4)) {
+                    if (do_run)
 			somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dqZero, 7, NULL);
-			continue;
+                    continue;
 		}
 
 		// Increase the sensitivity to the torque values
@@ -127,8 +130,7 @@ void run() {
 		pv(dq);
 
 		// Apply the joint space velocities to the robot
-		bool run = 1;
-		if(run)
+		if(do_run)
 			somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq.data(), 7, 
 				NULL);
 	}
@@ -141,16 +143,17 @@ void run() {
 /* ******************************************************************************************** */
 /// Kills the motor and daemon structs 
 void destroy() {
+    if(do_run)
 	somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
-	somatic_d_destroy(&daemon_cx);
+    somatic_d_destroy(&daemon_cx);
 }
 
 /* ******************************************************************************************** */
 /// The main thread
 int main(int argc, char* argv[]) {
 
-	// Check if the user wants the right arm indicated by the -r flag
-	if((argc > 1) && (strcmp(argv[1], "-r") == 0)) useLeftArm = false;
+	// // Check if the user wants the right arm indicated by the -r flag
+	// if((argc > 1) && (strcmp(argv[1], "-r") == 0)) useLeftArm = false;
 
 	// Initialize the robot
 	init(daemon_cx, js_chan, imuChan, waistChan, ft_chan, llwa, offset, useLeftArm);

@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <argp.h>
 #include <Eigen/Dense>
+#include <iomanip>
 
 #include "somatic.h"
 #include "somatic/daemon.h"
@@ -36,7 +37,8 @@
 using namespace Eigen;
 
 /* ******************************************************************************************** */
-#define pv(x) std::cout << #x << ": " << (x).transpose() << std::endl;
+#define pv(VEC) std::cout << std::setw(20) << std::left << #VEC; for(int i = 0; i < VEC.size(); i++) std::cout << std::setw(12) << VEC[i]; std::cout << std::endl;
+/* #define pv(x) std::cout << #x << ": " << (x).transpose() << std::endl; */
 
 #define parm (cout << llwa.pos[0] << ", " << llwa.pos[1] << ", " << llwa.pos[2] << ", " << \
 	llwa.pos[3] << ", " << llwa.pos[4] << ", " << llwa.pos[5] << ", " << llwa.pos[6] << endl);
