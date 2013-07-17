@@ -23,25 +23,24 @@
  * This class bundles all the variables and methods necessary to control Krang
  * over somatic into a single class.
  */
-
-
 class KrangControl {
 public:
 	KrangControl();
 	virtual ~KrangControl();
 
 	// initialization methods
-	int initialize(); ///< initializes full robot
+	int initialize(somatic_d_t *daemon_cx); ///< initializes full robot
 
 	// state update methods
 	void updateKrangSkeleton(simulation::World* world);
 
 	// control methods
-	void sendRobotArmVelocities(somatic_d_t &daemon_cx, somatic_motor_t &arm, Eigen::VectorXd &qdot, double dt);
+	void sendRobotArmVelocities(somatic_motor_t &arm, Eigen::VectorXd &qdot, double dt);
+	void halt();
 
 protected:
 	// somatic globals
-	somatic_d_t daemon_cx;
+	somatic_d_t *daemon_cx;  ///< somatic daemon pointer
 	somatic_motor_t llwa;	///< left arm motor
 	somatic_motor_t rlwa;	///< right arm motor
 	somatic_motor_t waist;	///< waist motor
@@ -76,10 +75,6 @@ protected:
 	void updateRobotSkelFromSomaticMotor(simulation::World* world, somatic_d_t &daemon_cx, somatic_motor_t &mot, std::vector<int> &IDs);
 	void updateRobotSkelFromSomaticWaist(simulation::World* world, somatic_d_t &daemon_cx, somatic_motor_t &waist, std::vector<int> &waistIDs);
 	void updateRobotSkelFromIMU(simulation::World* world);
-
-	// control helpers
-
-private:
 
 };
 

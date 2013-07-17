@@ -9,21 +9,18 @@
 #include <imud.h>
 #include "KrangControl.h"
 
-KrangControl::KrangControl() {
-	// TODO Auto-generated constructor stub
-
-}
+KrangControl::KrangControl() {}
 
 KrangControl::~KrangControl() {
 	// TODO Auto-generated destructor stub
 }
 
-int KrangControl::initialize() {
-
-	initArm(daemon_cx, llwa, "llwa");
-	initArm(daemon_cx, rlwa, "rlwa");
-	initWaist(daemon_cx, waist);
-	initIMU(daemon_cx, imu_chan);
+int KrangControl::initialize(somatic_d_t *daemon_cx) {
+	this->daemon_cx = daemon_cx;
+	initArm(*daemon_cx, llwa, "llwa");
+	initArm(*daemon_cx, rlwa, "rlwa");
+	initWaist(*daemon_cx, waist);
+	initIMU(*daemon_cx, imu_chan);
 	ach_open(&lgripper_chan, "lgripper-cmd", NULL);
 	ach_open(&rgripper_chan, "rgripper-cmd", NULL);
 	return 1;
@@ -35,22 +32,27 @@ int KrangControl::initialize() {
  */
 void KrangControl::updateKrangSkeleton(simulation::World* world) {
 
-	updateRobotSkelFromSomaticMotor(world, daemon_cx, llwa, armIDsL);
-	updateRobotSkelFromSomaticMotor(world, daemon_cx, rlwa, armIDsR);
-	updateRobotSkelFromSomaticWaist(world, daemon_cx, waist, waistIDs);
+	updateRobotSkelFromSomaticMotor(world, *daemon_cx, llwa, armIDsL);
+	updateRobotSkelFromSomaticMotor(world, *daemon_cx, rlwa, armIDsR);
+	updateRobotSkelFromSomaticWaist(world, *daemon_cx, waist, waistIDs);
 	updateRobotSkelFromIMU(world);
 }
 
-void KrangControl::sendRobotArmVelocities(somatic_d_t& daemon_cx,
-		somatic_motor_t& arm, Eigen::VectorXd& qdot, double dt) {
+void KrangControl::sendRobotArmVelocities(somatic_motor_t& arm, Eigen::VectorXd& qdot, double dt) {
 
 	//somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, qdot.data()*dt, 7, NULL);
 
 	double dq [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 	for(size_t i = 0; i < 7; i++)
 		dq[i] = qdot(i) * dt;
-	somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7, NULL);
+	somatic_motor_cmd(daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7, NULL);
 	//somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, dq, 7, NULL);
+}
+
+void KrangControl::halt() {
+
+	haltArm(*daemon_cx, llwa);
+	haltArm(*daemon_cx, rlwa);
 }
 
 double KrangControl::ssdmu_pitch(double x, double y, double z) {
