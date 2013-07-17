@@ -18,7 +18,8 @@ Vector6d leftOffset;
 Vector6d leftWheelWrench;
 Vector6d rightOffset;
 Vector6d rightWheelWrench;
-bool debugGlobal, logGlobal;
+bool debugGlobal = false, logGlobal = true;
+
 /* ******************************************************************************************** */
 /// Computes the wrench on the wheels due to external force from the f/t sensors' data
 void getExternalWrench (Vector6d& external) {
@@ -95,6 +96,13 @@ void run () {
 	Vector6d externalWrench;
 	Vector3d com;
 	double lastU = 0.0;
+	
+	// Initialize the running history
+	const size_t historySize = 60;
+	vector <double> torqueHistory;
+	for(size_t i = 0; i < historySize; i++) torqueHistory.push_back(0.0);
+	
+	// Continue processing data until stop received
 	while(!somatic_sig_received) {
 
 		bool debug = debugGlobal & (c_++ % 20 == 0);
@@ -119,14 +127,20 @@ void run () {
 		getExternalWrench(externalWrench);
 		if(debug) cout << "tangible torque: " << externalWrench(4) << endl;
 		
+		// Perform a running average on the felt torque on the wheel by adding the index and averaging the data again
+		double averagedTorque = 0.0;
+		torqueHistory[c_ % historySize] = externalWrench(4);
+		for(size_t i = 0; i < historySize; i++) averagedTorque += torqueHistory[i];
+		averagedTorque /= historySize;
+		
 		// Compute the balancing angle reference using the center of mass, total mass and felt wrench.
-		if(complyTorque) computeBalAngleRef(com, externalWrench(4), refState(0));
+		if(complyTorque) computeBalAngleRef(com, averagedTorque, refState(0));
 		if(debug) cout << "\nrefState: " << refState.transpose() << endl;
 
 		// Compute the error term between reference and current, and weight with gains (spin separate)
 		if(debug) cout << "K_bal: " << K_bal.transpose() << endl;
 		Vector6d error = state - refState;
-		if(logGlobal) printf("%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n", externalWrench(0), lastU, amc.cur[0], amc.cur[1],  state(0), refState(0), error(0), time);			// do not move this line!
+		if(logGlobal) printf("%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n", averagedTorque, externalWrench(4), lastU, amc.cur[0], amc.cur[1],  state(0), refState(0), error(0), time);// do not move this line!
 		double u = K_bal.topLeftCorner<4,1>().dot(error.topLeftCorner<4,1>());
 		double u_spin =  -K_bal.bottomLeftCorner<2,1>().dot(error.bottomLeftCorner<2,1>());
 	
@@ -135,7 +149,7 @@ void run () {
 		input[0] = max(-49.0, min(49.0, input[0]));
 		input[1] = max(-49.0, min(49.0, input[1]));
 		if(debug) printf("u: %lf, u_spin: %lf\n", u, u_spin);
-		lastU = u;
+		lastU = input[0];
 		
 		// Set the motor velocities
 		if(start) {
