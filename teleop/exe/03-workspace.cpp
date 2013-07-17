@@ -152,7 +152,7 @@ void updateGoalFromSpnavVels(kinematics::BodyNode *eeNode, MatrixXd& goalTransfo
 
 //cout << "\ngoalConfig raw: " << goalConfig.transpose() << endl;
 //cout << "goalTransform: " << goalTransform << endl;
-//cout << "goalConfig ftr: " << transformToEuler(goalTransform, dartRotOrder).transpose() << endl;
+//cout << "goalConfig ftr: " << transformToEuler(goalTransform, math::XYZ).transpose() << endl;
 
 	// scale workspace velocity dims
 	double weights[] = {1, 1, 1, 2, 2, 2};
@@ -168,10 +168,10 @@ void updateGoalFromSpnavVels(kinematics::BodyNode *eeNode, MatrixXd& goalTransfo
 	Quaternion <double> eeOri(eeT.topLeftCorner<3,3>());
 	Quaternion<double> errOriQ = goalOri * eeOri.inverse();
 	Matrix3d errOriM = errOriQ.matrix();
-	goalConfig.bottomLeftCorner<3,1>() = math::matrixToEuler(errOriM, dartRotOrder);
+	goalConfig.bottomLeftCorner<3,1>() = math::matrixToEuler(errOriM, math::XYZ);
 
 	// update goalTransform from config representation
-	goalTransform = eulerToTransform(goalConfig, dartRotOrder);
+	goalTransform = eulerToTransform(goalConfig, math::XYZ);
 
 	// Update the dart data structure and set the goal
 	if (goalSkel != NULL) {
@@ -206,7 +206,7 @@ VectorXd computeWorkVelocity(const kinematics::BodyNode* eeNode, const MatrixXd 
 	// Find the orientation error and express it in RPY representation
 	Quaternion<double> errOriQ = goalOri * eeOri.inverse();
 	Matrix3d errOriM = errOriQ.matrix();
-	Vector3d errOriV = math::matrixToEuler(errOriM, dartRotOrder);
+	Vector3d errOriV = math::matrixToEuler(errOriM, math::XYZ);
 
 	// Get the workspace velocity
 	//errOriV= Vector3d(0.0, 0.0, 0.0);
@@ -263,7 +263,7 @@ VectorXd workToJointVelocity (kinematics::BodyNode* eeNode, const VectorXd& xdot
  */
 void setGoalSkelConfig(dynamics::SkeletonDynamics *goalSkel, const MatrixXd &goal) {
 	// convert goal to euler
-	VectorXd arrowConf = transformToEuler(goal, dartRotOrder);
+	VectorXd arrowConf = transformToEuler(goal, math::XYZ);
 
 	// set config of skeleton
 	goalSkel->setConfig(dartRootDofOrdering, arrowConf);
