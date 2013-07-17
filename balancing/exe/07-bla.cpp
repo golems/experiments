@@ -15,6 +15,7 @@ using namespace dynamics;
 // For logging purposes
 
 struct LogState {
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	
 	// Read state and sensors
 	double time;
@@ -37,8 +38,7 @@ struct LogState {
 		//       torques         currents        state        refstate       time
 		printf("%lf\t%lf\t  %lf\t%lf\t%lf\t%lf\t  %lf\t%lf\t%lf\t %lf\t%lf\t%lf\t %lf\n", 
         averagedTorque, torque, lastUleft, lastUright, amc.cur[0], amc.cur[1],  
-				state(0)*180.0/M_PI, state(2)*180.0/M_PI, state(4)*180.0/M_PI, refState(0)*180.0/M_PI, 
-				refState(2)*180.0/M_PI, refState(4)*180.0/M_PI, time);
+				state(0), state(2), state(4), refState(0), refState(2), refState(4), time);
 	}
 	
 };
@@ -94,7 +94,8 @@ void getExternalWrench (Vector6d& external) {
 /// Let com_x be the x component of the desired com such that com_x * mass * gravity = external
 /// torque. Now, given that we know com, we can compute its distance from the origin, and then
 /// compute the z component. The atan2(x,z) is the desired angle.
-void computeBalAngleRef(const Vector3d& com, double externalTorque, double& refImu) {
+void computeBalAngleRef(const Vector4d& com, double externalTorque, double& refImu) {
+		
 
 	// Compute the x component of the desired com
 	static const double totalMass = 142.66;
@@ -196,7 +197,7 @@ void run () {
 		error = state - refState;
 		double u = K_bal.topLeftCorner<4,1>().dot(error.topLeftCorner<4,1>());
 		double u_spin =  -K_bal.bottomLeftCorner<2,1>().dot(error.bottomLeftCorner<2,1>());
-    	
+	
 		// Compute the input for left and right wheels
 		double input [2] = {u + u_spin, u - u_spin};
 		input[0] = max(-49.0, min(49.0, input[0]));
@@ -351,7 +352,7 @@ void destroy() {
 	// Stop the motors
 	double zeros2[2] = {0.0, 0.0}, zeros7[7] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}; 
 	somatic_motor_cmd(&daemon_cx, &amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, zeros2, 2, NULL);
-	somatic_motor_cmd(&daemon_cx, &waist, SOMATIC__MOTOR_PARAM__MOTOR_HALT, zeros2, 2, NULL);
+	somatic_motor_cmd(&daemon_cx, &waist, SOMATIC__MOTOR_PARAM__MOTOR_HALT, zeros2, 7, NULL);
 	somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_HALT, zeros7, 7, NULL);
 	somatic_motor_cmd(&daemon_cx, &llwa, SOMATIC__MOTOR_PARAM__MOTOR_HALT, zeros7, 7, NULL);
 

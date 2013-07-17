@@ -31,6 +31,7 @@ double freq = 0.5;
 int main (int argc, char * argv[]) {
 
 	// Read amp and freq from cmd line	 
+	assert(argc > 2 && "Usage: ./00-simpleSineCurrent <amplitude> <freq>");
 	Amplitude = atof(argv[1]);
 	freq = atof(argv[2]);
 	
@@ -67,7 +68,7 @@ int main (int argc, char * argv[]) {
 		u = Amplitude * sin(2*M_PI*freq*time);
 		
 		// Sned the command
-		double input[] = {u, 0};
+		double input[] = {u, u};
 		somatic_motor_cmd(&daemon_cx, &amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
 		usleep(10e3);
 
