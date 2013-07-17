@@ -27,7 +27,11 @@ void SpacenavTeleop::initialize(somatic_d_t *daemon_cx, const char* channel_name
 	somatic_d_channel_open(daemon_cx, &spacenav_chan, channel_name, NULL);
 }
 
-Eigen::VectorXd SpacenavTeleop::getSpacenavConfig() {
+void SpacenavTeleop::setInitialTransform() {
+	//T_spn_init =
+}
+
+Eigen::VectorXd SpacenavTeleop::getConfig() {
 
 	Eigen::VectorXd config(6); config.setZero();
 
@@ -56,9 +60,9 @@ Eigen::VectorXd SpacenavTeleop::getSpacenavConfig() {
 	return config;
 }
 
-bool SpacenavTeleop::getSpacenavPose(Eigen::MatrixXd& pose, Eigen::VectorXd* config) {
+bool SpacenavTeleop::getPose(Eigen::MatrixXd& pose, Eigen::VectorXd* config) {
 
-	Eigen::VectorXd spnconfig = getSpacenavConfig();
+	Eigen::VectorXd spnconfig = getConfig();
 	pose = eulerToTransform(spnconfig, math::XYZ);
 
 	if (config != NULL)
@@ -67,7 +71,7 @@ bool SpacenavTeleop::getSpacenavPose(Eigen::MatrixXd& pose, Eigen::VectorXd* con
 	return 0;
 }
 
-Eigen::VectorXi SpacenavTeleop::getSpacenavButtons() {
+Eigen::VectorXi SpacenavTeleop::getButtons() {
 
 	Eigen::VectorXi buttons(2); buttons.setZero(2);
 

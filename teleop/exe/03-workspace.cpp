@@ -82,8 +82,8 @@ MatrixXd T_lib2_cur; 	//< liberty channel2 global transform
 MatrixXd T_eeL_goal; 	//< liberty channel1 global transform
 MatrixXd T_eeR_goal; 	//< liberty channel2 global transform
 
-MatrixXd T_joy_init;	//< joystick device initial transform
-MatrixXd T_joy_cur;		//< joystick device current transform
+//MatrixXd T_joy_init;	//< joystick device initial transform
+//MatrixXd T_joy_cur;		//< joystick device current transform
 
 MatrixXd T_eeL_eeR; //< left effector transform in right effector frame
 MatrixXd T_eeR_eeL; //< right effector transform in left effector frame
@@ -106,8 +106,8 @@ void initialize_robot() {
  * Caches all relevant transforms from the robot's current state
  */
 void initialize_transforms(simulation::World* world) {
-	T_joy_init = Matrix4d(4,4); //< initial joystick transform
-	T_joy_cur = Matrix4d(4,4); //< current joystick transform
+//	T_joy_init = Matrix4d(4,4); //< initial joystick transform
+//	T_joy_cur = Matrix4d(4,4); //< current joystick transform
 
 	T_eeL_init = Matrix4d(4,4); //< left effector global transform
 	T_eeR_init = Matrix4d(4,4); //< right effector global transform
@@ -130,7 +130,7 @@ void initialize_transforms(simulation::World* world) {
 	getLibertyPoses(Tlibs, 2, NULL);
 
 	// grab joystick pose
-	getJoystickPose(T_joy_init);
+//	getJoystickPose(T_joy_init);
 
 	// grab pose of robot left and right effectors
 	T_eeL_init = eeNodeL->getWorldTransform();
@@ -156,7 +156,7 @@ void initialize_transforms(simulation::World* world) {
  * added to the current effector pose (using quaternions for orientation)
  */
 void updateGoalFromSpnavVels(kinematics::BodyNode *eeNode, MatrixXd& goalTransform,
-		ach_channel_t &chan, double scale, dynamics::SkeletonDynamics *goalSkel = NULL) {
+		SpacenavTeleop &spn, double scale, dynamics::SkeletonDynamics *goalSkel = NULL) {
 
 	/*
 	 * TODO:
@@ -169,8 +169,9 @@ void updateGoalFromSpnavVels(kinematics::BodyNode *eeNode, MatrixXd& goalTransfo
 	 */
 
 	// Get the config of the spacenav
-	Vector6d goalConfig;
-	getJoystickPose(goalTransform, &goalConfig, chan);
+	VectorXd goalConfig(6);
+	spn.getPose(goalTransform, &goalConfig);
+
 
 //cout << "\ngoalConfig raw: " << goalConfig.transpose() << endl;
 //cout << "goalTransform: " << goalTransform << endl;
@@ -346,7 +347,7 @@ void Timer::Notify() {
 	}
 
 	// Get the goal configuration from spacenav
-	updateGoalFromSpnavVels(eeNodeL, T_eeL_goal, spacenav_chan, 0.2, goalSkelL);
+	updateGoalFromSpnavVels(eeNodeL, T_eeL_goal, spn1, 0.2, goalSkelL);
 
 	if (right_track_left_mode) {
 		// hack: get right arm goal by tracking left arm
@@ -355,7 +356,7 @@ void Timer::Notify() {
 		VectorXd goalConfigR = transformToEuler(T_eeR_goal, math::ZYX);
 		goalSkelR->setConfig(dartRootDofOrdering, goalConfigR);
 	} else {
-		updateGoalFromSpnavVels(eeNodeR, T_eeR_goal, spacenav_chan2, 0.2, goalSkelR);
+		updateGoalFromSpnavVels(eeNodeR, T_eeR_goal, spn2, 0.2, goalSkelR);
 	}
 
 	// handle grippers
@@ -439,7 +440,6 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 			SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
 
 
-
 	// set arm indices and configs
 	setDartIDs(mWorld);
 
@@ -451,10 +451,10 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	mWorld->getSkeleton("Krang")->setConfig(armIDsR, rarm_conf);
 
 	// Initialize the joystick(s)
-	somatic_d_channel_open(&daemon_cx, &spacenav_chan, "spacenav-data", NULL);
-	somatic_d_channel_open(&daemon_cx, &spacenav_chan2, "spacenav2-data", NULL);
-//	spn1.initialize(&daemon_cx, "spacenav-data");
-//	spn2.initialize(&daemon_cx, "spacenav2-data");
+//	somatic_d_channel_open(&daemon_cx, &spacenav_chan, "spacenav-data", NULL);
+//	somatic_d_channel_open(&daemon_cx, &spacenav_chan2, "spacenav2-data", NULL);
+	spn1.initialize(&daemon_cx, "spacenav-data");
+	spn2.initialize(&daemon_cx, "spacenav2-data");
 
 	// Initialize the liberty
 	initLiberty();
@@ -518,7 +518,7 @@ void SimTab::OnButton(wxCommandEvent &evt) {
 	}
 
 	case id_button_ResetJoystick: {
-		getJoystickPose(T_joy_init);
+//		getJoystickPose(T_joy_init);
 		break;
 		}
 

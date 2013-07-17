@@ -26,11 +26,12 @@ public:
 
 	// initialization
 	void initialize(somatic_d_t *daemon_cx, const char* channel_name = "spacenav-data");
+	void setInitialTransform();
 
 	// update methods
-	Eigen::VectorXd getSpacenavConfig();
-	Eigen::VectorXi getSpacenavButtons();
-	bool getSpacenavPose(Eigen::MatrixXd &pose, Eigen::VectorXd* config = NULL);
+	Eigen::VectorXd getConfig();
+	Eigen::VectorXi getButtons();
+	bool getPose(Eigen::MatrixXd &pose, Eigen::VectorXd* config = NULL);
 
 protected:
 	// Channel variables
@@ -40,7 +41,7 @@ protected:
 	ach_channel_t spacenav_chan;
 
 	// Transforms
-	Eigen::Matrix4d T_spn_init;; //< initial spacenav transform
+	Eigen::Matrix4d T_spn_init; //< initial spacenav transform
 	Eigen::Matrix4d T_spn_cur; //< current spacenav transform
 };
 

@@ -11,6 +11,7 @@
 #include <Eigen/Dense>
 #include <math/UtilsRotation.h>
 #include <iomanip>
+#include <vector>
 
 /************************ Helpers **************************/
 #define DISPLAY_VECTOR(VEC) std::cout << std::setw(24) << std::left << #VEC; for(int i = 0; i < VEC.size(); i++) std::cout << std::setw(12) << VEC[i]; std::cout << std::endl;

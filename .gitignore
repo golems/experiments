@@ -2,3 +2,7 @@ build/
 *.swp
 *.swo
 *~
+/.cproject
+/.lastload
+/.project
+.settings
