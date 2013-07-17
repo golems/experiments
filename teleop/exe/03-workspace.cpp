@@ -134,8 +134,7 @@ void initialize_transforms(simulation::World* world) {
  * added to the current effector pose (using quaternions for orientation)
  */
 void updateGoalFromSpnavVels(kinematics::BodyNode *eeNode, MatrixXd& goalTransform,
-		dynamics::SkeletonDynamics *goalSkel = NULL, double scale = 0.1,
-		ach_channel_t &chan = spacenav_chan) {
+		ach_channel_t &chan, double scale, dynamics::SkeletonDynamics *goalSkel = NULL) {
 
 	/*
 	 * TODO:
@@ -230,7 +229,7 @@ VectorXd workToJointVelocity (kinematics::BodyNode* eeNode, const VectorXd& xdot
 	Eigen::MatrixXd Jt = J.transpose();
 	Eigen::MatrixXd Jsq = J * Jt;
 	for (int i=0; i < Jsq.rows(); i++)
-		Jsq.diagonal()[i] += 0.005;
+		Jsq(i,i) += 0.005;
 	Eigen::MatrixXd Jinv = Jt * Jsq.inverse();
 
 	// Get the joint-space velocities by multiplying inverse Jacobian with x.
@@ -259,7 +258,8 @@ void setGoalSkelConfig(dynamics::SkeletonDynamics *goalSkel, const MatrixXd &goa
  */
 void fakeArmMovement(vector<int> ids, VectorXd &qdot, double dt) {
 	VectorXd q = mWorld->getSkeleton("Krang")->getConfig(ids);
-	q += (qdot.normalized() * dt);
+	//q += (qdot.normalized() * dt);
+	q += qdot * dt;
 	mWorld->getSkeleton("Krang")->setConfig(ids, q);
 }
 
@@ -270,10 +270,10 @@ void fakeArmMovement(vector<int> ids, VectorXd &qdot, double dt) {
 void updateArm(kinematics::BodyNode *eeNode, MatrixXd &eeGoal,
 		dynamics::SkeletonDynamics *goalSkel,
 		ach_channel_t &spn_chan, ach_channel_t &rqd_chan, somatic_motor_t &arm,
-		bool motor_output_mode, vector<int> armIDs) {
+		bool motor_output_mode, vector<int> armIDs, double dt) {
 
 	// Get the goal configuration from spacenav
-	updateGoalFromSpnavVels(eeNode, eeGoal, goalSkel, 0.2, spn_chan);
+	updateGoalFromSpnavVels(eeNode, eeGoal, spn_chan, 0.8, goalSkel);
 
 	// Compute workspace velocity from goal errors
 	VectorXd xdot = computeWorkVelocity(eeNode, eeGoal);
@@ -284,7 +284,7 @@ void updateArm(kinematics::BodyNode *eeNode, MatrixXd &eeGoal,
 	// dispatch joint velocities to arms
 	if (motor_output_mode) {
 		// send arm velocities
-		sendRobotArmVelocities(daemon_cx, arm, qdot, 0.35);
+		sendRobotArmVelocities(daemon_cx, arm, qdot, dt);
 
 		// handle grippers
 		VectorXi buttons = getSpacenavButtons(spn_chan);
@@ -292,8 +292,9 @@ cout << "buttonsL "<< buttons.transpose() << endl;
 		handleSpacenavButtons(buttons, rqd_chan);
 	} else {
 		// Move the arms with a small delta using the computed velocities
+
 		if(xdot.norm() > 1e-2)
-			fakeArmMovement(armIDs, qdot, 0.035);
+			fakeArmMovement(armIDs, qdot, dt);
 	}
 }
 
@@ -310,10 +311,16 @@ void Timer::Notify() {
 		updateRobotSkelFromIMU(mWorld);
 	}
 
+	// Compute timestep
+	static double last_movement_time = aa_tm_timespec2sec(aa_tm_now());
+	double current_time = aa_tm_timespec2sec(aa_tm_now());
+	double dt = current_time - last_movement_time;
+	last_movement_time = current_time;
+
 	updateArm(eeNodeL, T_eeL_goal, goalSkelL, spacenav_chan,
-			lgripper_chan, llwa, motor_output_mode, armIDsL);
-//	updateArm(eeNodeR, T_eeR_goal, goalSkelR, spacenav_chan2,
-//			rgripper_chan, rlwa, motor_output_mode, armIDsR);
+			lgripper_chan, llwa, motor_output_mode, armIDsL, dt);
+	updateArm(eeNodeR, T_eeR_goal, goalSkelR, spacenav_chan2,
+			rgripper_chan, rlwa, motor_output_mode, armIDsR, dt);
 
 	// Visualize the arm motion
 	viewer->DrawGLScene();
