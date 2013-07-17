@@ -26,15 +26,98 @@ using namespace dynamics;
 
 /* ********************************************************************************************* */
 
+/*
+ * SANDBOX FOR HACKING
+ */
+
+//filter_kalman_t *kf;					///< the kalman filter to smooth the imu readings
+//
+///// Computes the imu value from the imu readings
+//void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt,
+//		filter_kalman_t* kf) {
+//
+//	// ======================================================================
+//	// Get the readings
+//
+//	// Get the value
+//	int r;
+//	struct timespec currTime;
+//	clock_gettime(CLOCK_MONOTONIC, &currTime);
+//	struct timespec abstime = aa_tm_add(aa_tm_sec2timespec(1.0/30.0), currTime);
+//	Somatic__Vector *imu_msg = SOMATIC_WAIT_LAST_UNPACK(r, somatic__vector,
+//			&protobuf_c_system_allocator, IMU_CHANNEL_SIZE, imuChan, &abstime );
+//	assert((imu_msg != NULL) && "Imu message is faulty!");
+//
+//	// Get the imu position and velocity value from the readings (note imu mounted at 45 deg).
+//	static const double mountAngle = -.7853981634;
+//	double newX = imu_msg->data[0] * cos(mountAngle) - imu_msg->data[1] * sin(mountAngle);
+//	_imu = atan2(newX, imu_msg->data[2]);
+//	_imuSpeed = imu_msg->data[3] * sin(mountAngle) + imu_msg->data[4] * cos(mountAngle);
+//
+//	// Free the unpacked message
+//	somatic__vector__free_unpacked( imu_msg, &protobuf_c_system_allocator );
+//
+//	// ======================================================================
+//	// Filter the readings
+//
+//	// Skip if a filter is not provided
+//	if(kf == NULL) return;
+//
+//	// Setup the data
+//	kf->z[0] = _imu, kf->z[1] = _imuSpeed;
+//
+//	// Setup the time-dependent process matrix
+//	kf->A[0] = kf->A[3] = 1.0;
+//	kf->A[2] = dt;
+//
+//	// Setup the process noise matrix
+//	static const double k1 = 2.0;
+//	static const double k1b = 5.0;
+//	kf->R[0] = (dt*dt*dt*dt) * k1 * (1.0 / 4.0);
+//	kf->R[1] = (dt*dt*dt) * k1 * (1.0 / 2.0);
+//	kf->R[2] = (dt*dt*dt) * k1 * (1.0 / 2.0);
+//	kf->R[3] = (dt*dt) * k1b;
+//
+//	// First make a prediction of what the reading should have been, then correct it
+//	filter_kalman_predict(kf);
+//	filter_kalman_correct(kf);
+//
+//	// Set the values
+//	_imu = kf->x[0], _imuSpeed = kf->x[1];
+//}
+//
+//void initIMUFilter() {
+//
+//	// Set the offset values to amc motor group so initial wheel pos readings are zero
+//	double imu, imuSpeed;
+//	getImu(&imuChan, imu, imuSpeed, 0.0, NULL);
+//
+//	usleep(1e5);
+//
+//	// Initialize kalman filter for the imu and set the measurement and meas. noise matrices
+//	// Also, set the initial reading to the current imu reading to stop moving from 0 to current
+//	kf = new filter_kalman_t;
+//	filter_kalman_init(kf, 2, 0, 2);
+//	kf->C[0] = kf->C[3] = 1.0;
+//	kf->Q[0] = kf->Q[3] = 1e-3;
+//	kf->x[0] = imu, kf->x[1] = imuSpeed;
+//}
+
+/*
+ * ENDSANDBOX
+ */
+
+
 // UI Globals
 /* Events */
 enum DynamicSimulationTabEvents {
 	id_button_ResetScene = 8100,
 	id_button_ResetLiberty,
 	id_button_ResetJoystick,
-	id_button_ResetArms,
+	id_button_SetInitialTransforms,
 	id_checkbox_ToggleMotorInputMode,
 	id_checkbox_ToggleMotorOutputMode,
+	id_checkbox_ToggleRightTrackLeftMode,
 };
 
 // control globals
@@ -46,6 +129,7 @@ enum UI_MODES {
 static bool motor_input_mode = 0;
 static bool motor_output_mode = 0;
 static bool motors_initialized = 0;
+static bool right_track_left_mode = 0;
 static int ui_input_mode = UI_JOYSTICK;
 
 // Pointers to frequently used dart data structures
@@ -72,6 +156,9 @@ MatrixXd T_eeR_goal; 	//< liberty channel2 global transform
 
 MatrixXd T_joy_init;	//< joystick device initial transform
 MatrixXd T_joy_cur;		//< joystick device current transform
+
+MatrixXd T_eeL_eeR; //< left effector transform in right effector frame
+MatrixXd T_eeR_eeL; //< right effector transform in left effector frame
 
 MatrixXd T_dummy = MatrixXd(4,4).setIdentity(4,4); // dummy transform for 1-arm control
 
@@ -107,6 +194,9 @@ void initialize_transforms(simulation::World* world) {
 	T_eeL_goal = Matrix4d(4,4); //< left effector goal transform
 	T_eeR_goal = Matrix4d(4,4); //< left effector global transform
 
+	T_eeL_eeR = Matrix4d(4,4); //< left effector transform in right effector frame
+	T_eeR_eeL = Matrix4d(4,4); //< right effector transform in left effector frame
+
 	// grab pose of liberty channels 1 and 2
 	MatrixXd *Tlibs[] = {&T_lib1_init, &T_lib2_init};
 	getLibertyPoses(Tlibs, 2, NULL);
@@ -121,6 +211,10 @@ void initialize_transforms(simulation::World* world) {
 	// set the effector goal poses to their current states
 	T_eeL_goal = T_eeL_init;
 	T_eeR_goal = T_eeR_init;
+
+	// cache the relative effector transfomrs
+	T_eeR_eeL = T_eeL_init.inverse() * T_eeR_init;
+	T_eeL_eeR = T_eeR_init.inverse() * T_eeL_init;
 }
 
 /****************************************************************************************
@@ -275,8 +369,8 @@ void setGoalSkelConfig(dynamics::SkeletonDynamics *goalSkel, const MatrixXd &goa
  * TODO use dart dynamics
  */
 void fakeArmMovement(vector<int> ids, VectorXd &qdot, double dt) {
+
 	VectorXd q = mWorld->getSkeleton("Krang")->getConfig(ids);
-	//q += (qdot.normalized() * dt);
 	q += qdot * dt;
 	mWorld->getSkeleton("Krang")->setConfig(ids, q);
 }
@@ -285,13 +379,8 @@ void fakeArmMovement(vector<int> ids, VectorXd &qdot, double dt) {
 /****************************************************************************************
  * Primary arm control function
  ****************************************************************************************/
-void updateArm(kinematics::BodyNode *eeNode, MatrixXd &eeGoal,
-		dynamics::SkeletonDynamics *goalSkel,
-		ach_channel_t &spn_chan, ach_channel_t &rqd_chan, somatic_motor_t &arm,
-		bool motor_output_mode, vector<int> armIDs, double dt) {
-
-	// Get the goal configuration from spacenav
-	updateGoalFromSpnavVels(eeNode, eeGoal, spn_chan, 0.2, goalSkel);
+void updateArm(kinematics::BodyNode *eeNode, MatrixXd &eeGoal, dynamics::SkeletonDynamics *goalSkel,
+		somatic_motor_t &arm,bool motor_output_mode, vector<int> armIDs, double dt) {
 
 	// Compute workspace velocity from goal errors
 	VectorXd xdot = computeWorkVelocity(eeNode, eeGoal);
@@ -303,12 +392,9 @@ void updateArm(kinematics::BodyNode *eeNode, MatrixXd &eeGoal,
 	// dispatch joint velocities to arms
 	if (motor_output_mode) {
 		// send arm velocities
-		sendRobotArmVelocities(daemon_cx, arm, qdot, dt);
+		double extraBoost = 4.0;
+		sendRobotArmVelocities(daemon_cx, arm, qdot, dt * extraBoost);
 
-		// handle grippers
-		VectorXi buttons = getSpacenavButtons(spn_chan);
-cout << "buttonsL "<< buttons.transpose() << endl;
-		handleSpacenavButtons(buttons, rqd_chan);
 	} else {
 		// Move the arms with a small delta using the computed velocities
 
@@ -330,16 +416,32 @@ void Timer::Notify() {
 		updateRobotSkelFromIMU(mWorld);
 	}
 
+	// Get the goal configuration from spacenav
+	updateGoalFromSpnavVels(eeNodeL, T_eeL_goal, spacenav_chan, 0.2, goalSkelL);
+
+	if (right_track_left_mode) {
+		// hack: get right arm goal by tracking left arm
+		T_eeL_cur = eeNodeL->getWorldTransform();
+		T_eeR_goal = T_eeL_cur * T_eeR_eeL;
+		VectorXd goalConfigR = transformToEuler(T_eeR_goal, math::ZYX);
+		goalSkelR->setConfig(dartRootDofOrdering, goalConfigR);
+	} else {
+		updateGoalFromSpnavVels(eeNodeR, T_eeR_goal, spacenav_chan2, 0.2, goalSkelR);
+	}
+
+	// handle grippers
+//	VectorXi buttons = getSpacenavButtons(spn_chan);
+//	cout << "buttonsL "<< buttons.transpose() << endl;
+//	handleSpacenavButtons(buttons, rqd_chan);
+
 	// Compute timestep
 	static double last_movement_time = aa_tm_timespec2sec(aa_tm_now());
 	double current_time = aa_tm_timespec2sec(aa_tm_now());
 	double dt = current_time - last_movement_time;
 	last_movement_time = current_time;
 
-	updateArm(eeNodeL, T_eeL_goal, goalSkelL, spacenav_chan,
-			lgripper_chan, llwa, motor_output_mode, armIDsL, dt);
-	updateArm(eeNodeR, T_eeR_goal, goalSkelR, spacenav_chan2,
-			rgripper_chan, rlwa, motor_output_mode, armIDsR, dt);
+	updateArm(eeNodeL, T_eeL_goal, goalSkelL, llwa, motor_output_mode, armIDsL, dt);
+	updateArm(eeNodeR, T_eeR_goal, goalSkelR, rlwa, motor_output_mode, armIDsR, dt);
 
 	// Visualize the arm motion
 	viewer->DrawGLScene();
@@ -365,9 +467,10 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	ss2BoxS->Add(new wxButton(this, id_button_ResetScene, wxT("Reset Scene")), 0, wxALL, 1);
 	ss2BoxS->Add(new wxButton(this, id_button_ResetLiberty, wxT("Set Liberty Initial Transforms")), 0, wxALL, 1);
 	ss2BoxS->Add(new wxButton(this, id_button_ResetJoystick, wxT("Set Joystick Initial Transform")), 0, wxALL, 1);
-	ss2BoxS->Add(new wxButton(this, id_button_ResetArms, wxT("Set Arm Initial Transforms")), 0, wxALL, 1);
+	ss2BoxS->Add(new wxButton(this, id_button_SetInitialTransforms, wxT("Set Arm Initial Transforms")), 0, wxALL, 1);
 
 	ss3BoxS->Add(new wxCheckBox(this, id_checkbox_ToggleMotorOutputMode, wxT("Send Motor Commands")), 0, wxALL, 1);
+	ss3BoxS->Add(new wxCheckBox(this, id_checkbox_ToggleRightTrackLeftMode, wxT("Track left arm with right")), 0, wxALL, 1);
 
 	sizerFull->Add(ss1BoxS, 1, wxEXPAND | wxALL, 6);
 	sizerFull->Add(ss2BoxS, 1, wxEXPAND | wxALL, 6);
@@ -483,10 +586,11 @@ void SimTab::OnButton(wxCommandEvent &evt) {
 		break;
 		}
 
-	case id_button_ResetArms: {
+	case id_button_SetInitialTransforms: {
 		// grab pose of robot left and right effectors
-		T_eeL_init = eeNodeL->getWorldTransform();
-		T_eeR_init = eeNodeR->getWorldTransform();
+		//T_eeL_init = eeNodeL->getWorldTransform();
+		//T_eeR_init = eeNodeR->getWorldTransform();
+		initialize_transforms(mWorld);
 		break;
 	}
 
@@ -513,6 +617,13 @@ void SimTab::OnButton(wxCommandEvent &evt) {
 		break;
 	}
 
+	case id_checkbox_ToggleRightTrackLeftMode: {
+		right_track_left_mode = evt.IsChecked();
+		if (right_track_left_mode)
+			initialize_transforms(mWorld);
+		break;
+	}
+
 	default: {}
 	}
 }
@@ -529,6 +640,7 @@ EVT_COMMAND (wxID_ANY, wxEVT_GRIP_SLIDER_CHANGE, SimTab::OnSlider)
 //EVT_CHECKBOX(wxEVT_COMMAND_CHECKBOX_CLICKED, SimTab::OnButton)
 EVT_CHECKBOX(id_checkbox_ToggleMotorInputMode, SimTab::OnButton)
 EVT_CHECKBOX(id_checkbox_ToggleMotorOutputMode, SimTab::OnButton)
+EVT_CHECKBOX(id_checkbox_ToggleRightTrackLeftMode, SimTab::OnButton)
 END_EVENT_TABLE()
 
 /* ********************************************************************************************* */

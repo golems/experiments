@@ -34,12 +34,12 @@ VectorXi getSpacenavButtons(ach_channel_t &joy_chan = spacenav_chan) {
 	Somatic__Joystick *js_msg = SOMATIC_GET_LAST_UNPACK( r, somatic__joystick,
 			&protobuf_c_system_allocator,
 			4096, &joy_chan );
-	cout << ach_result_to_string(static_cast<ach_status_t>(r)) << endl;
+//cout << ach_result_to_string(static_cast<ach_status_t>(r)) << endl;
 	if(!(ACH_OK == r || ACH_MISSED_FRAME == r || ACH_STALE_FRAMES == r) || (js_msg == NULL)) return buttons;
 
 	// pack output vector
-	cout << "button0 raw: " << js_msg->buttons->data[0] << endl;
-	cout << "button1 raw: " << js_msg->buttons->data[1] << endl;
+//	cout << "button0 raw: " << js_msg->buttons->data[0] << endl;
+//	cout << "button1 raw: " << js_msg->buttons->data[1] << endl;
 	buttons << js_msg->buttons->data[0], js_msg->buttons->data[1];
 
 	somatic__joystick__free_unpacked(js_msg, &protobuf_c_system_allocator);
