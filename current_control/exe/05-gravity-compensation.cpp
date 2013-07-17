@@ -18,6 +18,7 @@
 #include <fstream>
 #include <iomanip>
 #include <imud.h>
+#include <ncurses.h>
 
 #include <Eigen/Dense>
 
@@ -28,22 +29,6 @@
 #include <robotics/parser/dart_parser/DartLoader.h>
 #include <simulation/World.h>
 #include <dynamics/SkeletonDynamics.h>
-
-
-
-// load skeelton
-// load world
-// Vector3d gravity(0, -9.8, 0)
-// set world->setGravity(gravity)
-
-
-
-
-// update configuration with ifnormation from sensors
-// call setState with new configuration
-// get gravity vecotr
-// print it
-
 
 
 // ################################################################################
@@ -93,6 +78,8 @@ std::ofstream log_file;
 double log_time_last;
 double log_time_start;
 
+Eigen::Vector7d arm_torque_constants;
+double arm_torque_constants_initializer[] = {0.00054, 0.00057, 0.00122, 0.00122, 0.0, 0.0, 0.0};
 
 // ################################################################################
 // ################################################################################
@@ -144,6 +131,44 @@ double ssdmu_pitch(double x, double y, double z) {
     double newX;
     newX = x*cos(csr) - y*sin(csr);
     return atan2(newX, z); 
+}
+
+// #############################################################################
+// #############################################################################
+// CURSES
+// #############################################################################
+// #############################################################################
+
+void init_curses() {
+    initscr();
+    clear();
+    noecho();                   // do not echo input to the screen
+    cbreak();                   // do not buffer by line (receive characters immediately)
+    timeout(0);                 // non-blocking getch
+}
+
+void end_curses() {
+    clrtoeol();
+    refresh();
+    endwin();
+}
+
+void do_display(somatic_motor_t* rlwa, Eigen::VectorXd arm_gravity_torques, Eigen::VectorXd arm_current_cmd) {
+    // display torque constants
+    mvprintw(1, 4, "torque constants");
+    for(int i = 0; i < 7; i++) { mvprintw(2+i, 5, "%f", arm_torque_constants[i]); }
+
+    // display arm configuration
+    mvprintw(1, 24, "arm configuration");
+    for(int i = 0; i < 7; i++) { mvprintw(2+i, 25, "%f", rlwa->pos[i]); }
+
+    // display arm gravity torques
+    mvprintw(1, 44, "arm gravity torque");
+    for(int i = 0; i < 7; i++) { mvprintw(2+i, 45, "%f", arm_gravity_torques[i]); }
+
+    // display arm current commands
+    mvprintw(1, 64, "arm current command");
+    for(int i = 0; i < 7; i++) { mvprintw(2+i, 65, "%f", arm_current_cmd[i]); }
 }
 
 // #############################################################################
@@ -250,11 +275,32 @@ void update_dart_state() {
 
 void run()
 {
-    // tell the user we're going
-    std::cout << std::endl << "running!" << std::endl;
-    
+    // the currents to send
+    Eigen::VectorXd rcurrentcmd(7);
+
+    // variables for user interface
+    int cur_ui_joint = 0;
+
     // and go
     while(!somatic_sig_received) {
+        // handle user input
+        mvprintw(2+cur_ui_joint, 1, "   ");
+        int ch = getch();
+        switch (ch) {
+        case '0': somatic_sig_received = true; break;
+        case '7': for (int i = 0; i < 7; i++) arm_torque_constants[i] = 0.0; break;
+        case '8': cur_ui_joint = std::max(0, cur_ui_joint-1); break;
+        case '2': cur_ui_joint = std::min(6, cur_ui_joint+1); break;
+        case '6': arm_torque_constants[cur_ui_joint] += .00001; break;
+        case '4': arm_torque_constants[cur_ui_joint] -= .00001; break;
+        case '1':
+            std::ofstream torque_constants_file;
+            torque_constants_file.open("torque constants.txt", std::ios_base::trunc);
+            for(int i = 0; i < 7; i++) { torque_constants_file << arm_torque_constants[i] << ","; }
+            torque_constants_file.close();
+            break;
+        }
+
         // update our motors
         update_motor_state();
         
@@ -264,12 +310,21 @@ void run()
         // get our gravity vector
         Eigen::VectorXd krang_gravity_vector = krang->getGravityVector();
         
-        // and nicely print the part we care about
+        // grab just the part we care about
+        Eigen::Vector7d arm_gravity_torques;
         for(int i = 0; i < rarm_ids.size(); i++) {
-            std::cout << std::setw(12) << krang_gravity_vector[rarm_ids[i]] << ",";
+            arm_gravity_torques[i] = krang_gravity_vector[rarm_ids[i]];
         }
-        for(int i = 0; i < 7; i++) { std::cout << rlwa.pos[i] << ","; }
-        std::cout << std::endl;
+
+        // turn that into currents
+        rcurrentcmd = arm_gravity_torques.cwiseProduct(arm_torque_constants);
+        
+        // and send it
+        somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, rcurrentcmd.data(), 7, NULL);
+
+        // then display everything
+        do_display(&rlwa, arm_torque_constants, rcurrentcmd);
+        refresh();
     }
 }
 
@@ -310,9 +365,11 @@ void init() {
 
     // init motors
     somatic_motor_init(&daemon_cx, &waist, 2, "waist-cmd", "waist-state");
-    somatic_motor_init(&daemon_cx, &rlwa, 7, "rlwa-cmd", "rlwa-state");
     somatic_motor_init(&daemon_cx, &torso, 1, "torso-cmd", "torso-state");
+    somatic_motor_init(&daemon_cx, &rlwa, 7, "rlwa-cmd", "rlwa-state");
+    somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 7, NULL);
     usleep(1e5);                // wait 100 ms for it to get going
+    
 
     // set arm joint limits
     double** arm_minimum_values[] = { &rlwa.pos_valid_min, &rlwa.vel_valid_min,
@@ -338,6 +395,9 @@ void init() {
     for(size_t i = 0; i < 4; i++) aa_fset(*torso_minimum_values[i], -1024.1, 1);
     for(size_t i = 0; i < 4; i++) aa_fset(*torso_maximum_values[i], 1024.1, 1);
 
+    // initialize the torque constant vector
+    for(int i = 0; i < 7; i++) { arm_torque_constants[i] = arm_torque_constants_initializer[i]; }
+
     // Open the ach channels for the IMU and FT sensor
     somatic_d_channel_open(&daemon_cx, &imu_chan, "imu-data", NULL);
 
@@ -352,6 +412,9 @@ void init() {
     imu_angle = 0.0;
     for(int i = 0; i < imu_init_iters; i++) { imu_angle += get_imu(); }
     imu_angle /= (double)imu_init_iters;
+
+    // and finally start up the UI
+    init_curses();
 }
 
 // #############################################################################
@@ -364,8 +427,14 @@ void destroy() {
     // Send stopping event
     somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, SOMATIC__EVENT__CODES__PROC_STOPPING, NULL, NULL);
 
+    // end curses
+    end_curses();
+
     // stop logging
     end_log_to_file();
+
+    // halt arm
+    somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
 
     // close motor channels
     somatic_motor_destroy(&daemon_cx, &rlwa);
