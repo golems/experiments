@@ -67,6 +67,9 @@ bool complyTorque = false;
 Vector6d K_bal;								///< The gains for the balancing controller
 Vector6d K_stand;							///< The gains for the standing controller
 
+double jsFwdAmp;				///< The gains for joystick forward/reverse input
+double jsSpinAmp;				///< The gains for joystick left/right spin input
+
 /* ******************************************************************************************** */
 // The arm indices to set/get configurations from dart
 

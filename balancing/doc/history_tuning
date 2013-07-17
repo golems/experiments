@@ -28,12 +28,26 @@ Increasing kd helps with overshoots but shakes are observed.
 
 250 45/50 lead to shaking after stand up. 250 38 worked. 
 
-However, now we see a moving forward due to low x gains, the robot moves forward when standing up. We increased the gains from (3,10) to (7,10) which decreased the overshoot but now there is shaking.
+However, now we see a moving forward due to low x gains, the robot moves forward when standing up. 
+We increased the gains from (3,10) to (7,10) which decreased the overshoot but now there is 
+shaking.
 
 11 stopped to oscillations in x direction and half a foot motion is acceptable.
 
 CHanging from (7,9) to (15,15) did not seem affect the dx in beginning too much (2 cm).
 
-Observed that Kp and Kd (?) for x should be negative. -25 kp with balancing off seems semi sufficient to control when kd is 0.0.
+Observed that Kp and Kd (?) for x should be negative. -25 kp with balancing off seems semi 
+sufficient to control when kd is 0.0.
 
 We ended up using 250 38 4 10 3 7 for the video 07/14th, time 11 am.
+
+------------------------------------- POSITION TUNING -------------------------------------
+
+The waist is low at 162 degrees. We start off with 250 38 4 10 3 7. Both wheel pressures are at 35 
+psi.
+
+Oscillations in the position were minimized ny increasing the gain for xdot. At Kp, Kd = 4, 10 we 
+get some oscilaations. We increased Kd to 19 to minimize the oscillations.  
+
+The current gains are 250 38 4 10 2 10 0.2 0.4. And we are taking a video (July 16, 2013). And the
+position control at this waist height looks acceptable.

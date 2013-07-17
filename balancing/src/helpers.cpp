@@ -71,12 +71,15 @@ void getState(Vector6d& state, double dt, Vector3d* com_) {
 	if(com_ != NULL) *com_ = com;
 
 	// Update the state (note for amc we are reversing the effect of the motion of the upper body)
-	state(0) = atan2(com(0), com(2));
+	state(0) = atan2(com(0), com(2)) + 2.0 * M_PI / 180.0;;
 	state(1) = imuSpeed;
 	state(2) = (amc.pos[0] + amc.pos[1])/2.0 + imu;
 	state(3) = (amc.vel[0] + amc.vel[1])/2.0 + imuSpeed;
 	state(4) = wheelRadius * (amc.pos[0] - amc.pos[1]) / distanceBetweenWheels;
 	state(5) = wheelRadius * (amc.vel[0] - amc.vel[1]) / distanceBetweenWheels;
+
+	// Making adjustment in com to make it consistent with the hack above for state(0)
+	com(0) = com(2) * tan(state(0));
 }
 
 /* ******************************************************************************************** */
@@ -122,8 +125,8 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 
 	// Set the values for the axis
 	double* x = &(js_msg->axes->data[0]);
-	js_forw = -x[1] / 2.0;
-	js_spin = 0.0; 
+	js_forw = -x[1] * jsFwdAmp;
+	js_spin = x[2] * jsSpinAmp;; 
 	return true;
 }
 

@@ -66,10 +66,14 @@ void run() {
 
 		// Compute the input for left and right wheels
 		double input [2] = {u + u_spin, u - u_spin};
-
+		input[0] = max(-49.0, min(49.0, input[0]));
+		input[1] = max(-49.0, min(49.0, input[1]));
+			
 		// Set the motor velocities
-		if(start) 
+		if(start) {
+			//printf("Would have started!!\n"); 
 			somatic_motor_cmd(&daemon_cx, &amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
+		}
 	}
 
 	// Send the stoppig event
@@ -191,9 +195,12 @@ int main(int argc, char* argv[]) {
 	robot = world->getSkeleton(0);
 
 	// Read the gains from the command line
-	assert(argc == 7 && "Where is my gains for th, x and spin?");
+	assert(argc == 9 && "Where is my gains for th, x, spin and js?");
 	K_bal << atof(argv[1]), atof(argv[2]), atof(argv[3]), atof(argv[4]), atof(argv[5]), atof(argv[6]);
-	cout << "K_bal: " << K_bal.transpose() << "\nPress enter: " << endl;
+	jsFwdAmp = atof(argv[7]);
+	jsSpinAmp = atof(argv[8]);
+	cout << "K_bal: " << K_bal.transpose() << "\njsFwd: " << jsFwdAmp << "jsSpin : " << jsSpinAmp;
+	cout << "\nPress enter: " << endl;
 	getchar();
 
 	// Initialize, run, destroy

@@ -148,10 +148,12 @@
 	</link>
 
 	<link name = "lgPlate1">
+    <inertial> <mass value="0.0001"/> </inertial>
 		<visual> <geometry> <mesh filename="Schunk/gripperPlate.dae" /> </geometry> </visual>
 	</link> 	
 
 	<link name = "lgPlate2">
+    <inertial> <mass value="0.0001"/> </inertial>
 		<visual> <geometry> <mesh filename="Schunk/gripperPlate.dae" /> </geometry> </visual>
 	</link> 	
 
@@ -227,10 +229,12 @@
 	</link>
 
 	<link name = "rgPlate1">
+    <inertial> <mass value="0.0001"/> </inertial>
 		<visual> <geometry> <mesh filename="Schunk/gripperPlate.dae" /> </geometry> </visual>
 	</link> 	
 
 	<link name = "rgPlate2">
+    <inertial> <mass value="0.0001"/> </inertial>
 		<visual> <geometry> <mesh filename="Schunk/gripperPlate.dae" /> </geometry> </visual>
 	</link> 	
 
