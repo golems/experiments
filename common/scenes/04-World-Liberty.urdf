@@ -7,7 +7,7 @@
 <world name="schunk_with_desktop">
 
 	<include filename="greenArrow.urdf" model_name="greenArrow"/>
-	<include filename="Krang.urdf" model_name="Krang"/>
+	<include filename="KrangBlocks.urdf" model_name="Krang"/>
 
 	<entity model="greenArrow" name="g1"> <origin xyz="0.45 0.20 1.32" rpy="1.57 -1.57 1.5708"/> </entity>
 	<entity model="greenArrow" name="g2"> <origin xyz="0.75 0.10 1.42" rpy="-1.5708 0 1.04"/> </entity>

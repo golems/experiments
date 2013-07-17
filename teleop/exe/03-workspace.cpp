@@ -189,7 +189,7 @@ void updateGoalFromSpnavVels(kinematics::BodyNode *eeNode, MatrixXd& goalTransfo
  */
 VectorXd computeWorkVelocity(const kinematics::BodyNode* eeNode, const MatrixXd &eeGoal) {
 
-	VectorXd xdot(6); xdot.Zero(6);
+	VectorXd xdot(6); xdot.setZero(6);
 
 	// Get the current goal location and orientation as a quaternion
 	VectorXd goalPos = eeGoal.topRightCorner<3,1>();
@@ -217,7 +217,8 @@ VectorXd computeWorkVelocity(const kinematics::BodyNode* eeNode, const MatrixXd 
 /*
  * Given a workspace velocity, returns the joint space velocity
  */
-VectorXd workToJointVelocity (kinematics::BodyNode* eeNode, const VectorXd& xdot) {
+VectorXd workToJointVelocity (kinematics::BodyNode* eeNode, const VectorXd& xdot,
+		double xdotGain, double nullGain, VectorXd *q = NULL) {
 
 	// Get the Jacobian towards computing joint-space velocities
 	MatrixXd Jlin = eeNode->getJacobianLinear().topRightCorner<3,7>();
@@ -232,8 +233,25 @@ VectorXd workToJointVelocity (kinematics::BodyNode* eeNode, const VectorXd& xdot
 		Jsq(i,i) += 0.005;
 	Eigen::MatrixXd Jinv = Jt * Jsq.inverse();
 
-	// Get the joint-space velocities by multiplying inverse Jacobian with x.
-	VectorXd qdot = Jinv * xdot;
+	// Get the joint-space velocities by multiplying inverse Jacobian with x (simple version)
+	//VectorXd qdot = Jinv * xdot;
+
+    /*
+     * Do the null-space projection thing to bias our solution towards
+     * joint values in the middle of each joint's range of motion
+     *
+     * scale must be negative to move towards rather than away
+     */
+
+	// Compute Joint Distance from middle of range
+	VectorXd qDist(7); qDist.setZero(7);
+	if (q != NULL)
+		qDist = q->cwiseAbs();
+
+	MatrixXd JinvJ = Jinv*J;
+	MatrixXd I = MatrixXd::Identity(7,7);
+	VectorXd qdot = Jinv * (xdot * xdotGain) + (I - JinvJ) * (qDist * nullGain);
+
 	return qdot;
 }
 
@@ -273,13 +291,14 @@ void updateArm(kinematics::BodyNode *eeNode, MatrixXd &eeGoal,
 		bool motor_output_mode, vector<int> armIDs, double dt) {
 
 	// Get the goal configuration from spacenav
-	updateGoalFromSpnavVels(eeNode, eeGoal, spn_chan, 0.8, goalSkel);
+	updateGoalFromSpnavVels(eeNode, eeGoal, spn_chan, 0.2, goalSkel);
 
 	// Compute workspace velocity from goal errors
 	VectorXd xdot = computeWorkVelocity(eeNode, eeGoal);
 
 	// Convert to jointspace velocities
-	VectorXd qdot = workToJointVelocity(eeNode, xdot);
+	VectorXd q = mWorld->getSkeleton("Krang")->getConfig(armIDs);
+	VectorXd qdot = workToJointVelocity(eeNode, xdot, 5.0, 0.01, &q);
 
 	// dispatch joint velocities to arms
 	if (motor_output_mode) {

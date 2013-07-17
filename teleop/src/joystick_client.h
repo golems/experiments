@@ -35,7 +35,7 @@ static math::RotationOrder spnavRotOrder = math::XYZ;
 
 VectorXi getSpacenavButtons(ach_channel_t &joy_chan = spacenav_chan) {
 
-	VectorXi buttons(2); buttons.Zero(2);
+	VectorXi buttons(2); buttons.setZero(2);
 
 	// get spacenav data
 	int r = 0;
@@ -57,7 +57,7 @@ VectorXi getSpacenavButtons(ach_channel_t &joy_chan = spacenav_chan) {
 
 Vector6d getSpacenavConfig(ach_channel_t &chan = spacenav_chan) {
 
-	Vector6d config(6); config.Zero();
+	Vector6d config(6); config.setZero();
 
 	// get joystick data
 	int r = 0;
