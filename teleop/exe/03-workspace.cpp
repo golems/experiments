@@ -16,7 +16,7 @@
 #include <math/UtilsRotation.h>
 
 #include "util.h"
-#include "initModules.h"
+#include "KrangControl.h"
 #include "liberty_client.h"
 #include "joystick_client.h"
 
@@ -107,6 +107,8 @@ using namespace dynamics;
  * ENDSANDBOX
  */
 
+// Krang the monster
+KrangControl krang;
 
 // UI Globals
 /* Events */
@@ -194,8 +196,8 @@ void initialize_transforms(simulation::World* world) {
 	T_eeL_goal = Matrix4d(4,4); //< left effector goal transform
 	T_eeR_goal = Matrix4d(4,4); //< left effector global transform
 
-	T_eeL_eeR = Matrix4d(4,4); //< left effector transform in right effector frame
-	T_eeR_eeL = Matrix4d(4,4); //< right effector transform in left effector frame
+	T_eeL_eeR = Matrix4d(4,4); ///< left effector transform in right effector frame
+	T_eeR_eeL = Matrix4d(4,4); ///< right effector transform in left effector frame
 
 	// grab pose of liberty channels 1 and 2
 	MatrixXd *Tlibs[] = {&T_lib1_init, &T_lib2_init};
@@ -213,8 +215,8 @@ void initialize_transforms(simulation::World* world) {
 	T_eeR_goal = T_eeR_init;
 
 	// cache the relative effector transfomrs
-	T_eeR_eeL = T_eeL_init.inverse() * T_eeR_init;
 	T_eeL_eeR = T_eeR_init.inverse() * T_eeL_init;
+	T_eeR_eeL = T_eeL_init.inverse() * T_eeR_init;
 }
 
 /****************************************************************************************
@@ -410,10 +412,11 @@ void Timer::Notify() {
 
 	// update robot state from ach if we're controlling the actual robot
 	if (motor_input_mode) {
-		updateRobotSkelFromSomaticMotor(mWorld, daemon_cx, llwa, armIDsL);
-		updateRobotSkelFromSomaticMotor(mWorld, daemon_cx, rlwa, armIDsR);
-		updateRobotSkelFromSomaticWaist(mWorld, daemon_cx, waist, waistIDs);
-		updateRobotSkelFromIMU(mWorld);
+//		updateRobotSkelFromSomaticMotor(mWorld, daemon_cx, llwa, armIDsL);
+//		updateRobotSkelFromSomaticMotor(mWorld, daemon_cx, rlwa, armIDsR);
+//		updateRobotSkelFromSomaticWaist(mWorld, daemon_cx, waist, waistIDs);
+//		updateRobotSkelFromIMU(mWorld);
+		krang.updateKrangSkeleton(mWorld);
 	}
 
 	// Get the goal configuration from spacenav
@@ -509,6 +512,8 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
 			SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
 
+
+
 	// set arm indices and configs
 	setDartIDs(mWorld);
 
@@ -528,7 +533,9 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 
 	// Initialize the arms
 	if (motor_input_mode || motor_output_mode) {
-		initialize_robot();
+		//initialize_robot();
+		// initialize krang the monster
+		krang.initialize();
 	}
 
 	// Grab effector node pointer to compute the task space error and the Jacobian
