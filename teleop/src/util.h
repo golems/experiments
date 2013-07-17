@@ -10,8 +10,14 @@
 
 #include <Eigen/Dense>
 #include <math/UtilsRotation.h>
+#include <iomanip>
 
 /************************ Helpers **************************/
+#define DISPLAY_VECTOR(VEC) std::cout << std::setw(24) << std::left << #VEC; for(int i = 0; i < VEC.size(); i++) std::cout << std::setw(12) << VEC[i]; std::cout << std::endl;
+
+//vector<int> dart_root_dof_ordering {0,1,2,5,4,3};
+int vv[] =  {0,1,2,5,4,3};
+std::vector<int> dartRootDofOrdering(&vv[0], &vv[0]+6);
 
 /*
  * Converts a 4x4 homogeneous transform to a 6D euler.

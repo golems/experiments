@@ -12,16 +12,19 @@
 #define protected public
 #define private public
 
-#include "simTab.h"
-#include "GRIPApp.h"
 
-#include "somatic.h"
-#include "somatic/daemon.h"
+#include <GRIPApp.h>
+#include <somatic.h>
+#include <somatic/daemon.h>
 #include <somatic.pb-c.h>
 #include <somatic/motor.h>
 #include <ach.h>
 
 #include <math/UtilsRotation.h>
+
+#include "simTab.h"
+#include "util.h"
+
 
 using namespace std;
 using namespace Eigen;
@@ -84,9 +87,7 @@ void Timer::Notify() {
 	for (int j=3; j < 6; j++) 
 	    arrowConf[j] = rotV[j-3];
 
-	vector <int> conf_ids;
-	for(size_t k = 0; k < 6; k++) conf_ids.push_back(k);
-	mWorld->getSkeleton(i)->setConfig(conf_ids, arrowConf);
+	mWorld->getSkeleton(i)->setConfig(dartRootDofOrdering, arrowConf);
     }
 
     // Free the liberty message

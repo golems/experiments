@@ -76,9 +76,12 @@ Vector6d getSpacenavConfig(ach_channel_t &chan = spacenav_chan) {
 	for (int j=0; j < 3; j++) rotV[j] = js_msg->axes[0].data[j+3];
 
 	// pack into config
-	config << -pos(1), -pos(0), -pos(2), -rotV(1), rotV(0), -rotV(2);
-	//config << -pos(1), -pos(0), -pos(2), -rotV(2), -rotV(0), -rotV(1);
-	//config << -pos(1), -pos(0), -pos(2), -rotV(0), -rotV(2), -rotV(1);
+	config << -pos(1), -pos(0), -pos(2), -rotV(1), -rotV(0), -rotV(2); // correct raw (and control) (this is XYZ)
+	//config << -pos(1), -pos(0), -pos(2), -rotV(2), -rotV(0), -rotV(1); // works for grip visualization (this is ZYX)
+
+	/*
+	 * positive rotation is CW with positive axis facing AWAY from you
+	 */
 
 	// Free the liberty message
 	somatic__joystick__free_unpacked(js_msg, &protobuf_c_system_allocator);
