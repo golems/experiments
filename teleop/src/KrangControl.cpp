@@ -15,14 +15,12 @@ KrangControl::~KrangControl() {
 	// TODO Auto-generated destructor stub
 }
 
-int KrangControl::initialize(somatic_d_t *daemon_cx) {
+int KrangControl::initialize(simulation::World* world, somatic_d_t *daemon_cx, bool fake_ctl_mode) {
 	this->daemon_cx = daemon_cx;
-	initArm(*daemon_cx, llwa, "llwa");
-	initArm(*daemon_cx, rlwa, "rlwa");
-	initWaist(*daemon_cx, waist);
-	initIMU(*daemon_cx, imu_chan);
-	ach_open(&lgripper_chan, "lgripper-cmd", NULL);
-	ach_open(&rgripper_chan, "rgripper-cmd", NULL);
+	this->arm_motors.resize(2);
+	this->armIDs.resize(2);
+	setDartIDs(world);
+	setControlMode(fake_ctl_mode);
 	return 1;
 }
 
@@ -32,27 +30,63 @@ int KrangControl::initialize(somatic_d_t *daemon_cx) {
  */
 void KrangControl::updateKrangSkeleton(simulation::World* world) {
 
-	updateRobotSkelFromSomaticMotor(world, *daemon_cx, llwa, armIDsL);
-	updateRobotSkelFromSomaticMotor(world, *daemon_cx, rlwa, armIDsR);
+	updateRobotSkelFromSomaticMotor(world, *daemon_cx, arm_motors[LEFT_ARM], armIDs[LEFT_ARM]);
+	updateRobotSkelFromSomaticMotor(world, *daemon_cx, arm_motors[RIGHT_ARM], armIDs[RIGHT_ARM]);
 	updateRobotSkelFromSomaticWaist(world, *daemon_cx, waist, waistIDs);
 	updateRobotSkelFromIMU(world);
 }
 
-void KrangControl::sendRobotArmVelocities(somatic_motor_t& arm, Eigen::VectorXd& qdot, double dt) {
+Eigen::VectorXd KrangControl::getArmConfig(simulation::World* world, lwa_arm_t arm) {
+	return world->getSkeleton("Krang")->getConfig(armIDs[arm]);
+}
+
+void KrangControl::setControlMode(bool fake_ctl_mode) {
+	this->fake_ctl_mode = fake_ctl_mode;
+
+	if (!this->fake_ctl_mode && !initialized) {
+		initArm(*daemon_cx, arm_motors[LEFT_ARM], "llwa");
+		initArm(*daemon_cx, arm_motors[RIGHT_ARM], "rlwa");
+		initWaist(*daemon_cx, waist);
+		initIMU(*daemon_cx, imu_chan);
+
+		ach_open(&lgripper_chan, "lgripper-cmd", NULL);
+		ach_open(&rgripper_chan, "rgripper-cmd", NULL);
+
+		initialized = true;
+	}
+}
+
+void KrangControl::sendRobotArmVelocities(lwa_arm_t arm, Eigen::VectorXd& qdot, double dt) {
 
 	//somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, qdot.data()*dt, 7, NULL);
 
 	double dq [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 	for(size_t i = 0; i < 7; i++)
 		dq[i] = qdot(i) * dt;
-	somatic_motor_cmd(daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7, NULL);
-	//somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, dq, 7, NULL);
+	somatic_motor_cmd(daemon_cx, &arm_motors[arm], SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7, NULL);
+}
+
+void KrangControl::setRobotArmVelocities(simulation::World* world,
+		lwa_arm_t arm, Eigen::VectorXd& qdot, double dt) {
+
+	if (fake_ctl_mode)
+		fakeArmMovement(world, arm, qdot, dt);
+	else
+		sendRobotArmVelocities(arm, qdot, dt);
+}
+
+void KrangControl::fakeArmMovement(simulation::World* world, lwa_arm_t arm, Eigen::VectorXd& qdot, double dt) {
+
+	Eigen::VectorXd q = world->getSkeleton("Krang")->getConfig(armIDs[arm]);
+	q += qdot * dt;
+	world->getSkeleton("Krang")->setConfig(armIDs[arm], q);
 }
 
 void KrangControl::halt() {
 
-	haltArm(*daemon_cx, llwa);
-	haltArm(*daemon_cx, rlwa);
+	haltArm(*daemon_cx, arm_motors[LEFT_ARM]);
+	haltArm(*daemon_cx, arm_motors[RIGHT_ARM]);
+	initialized = false;
 }
 
 double KrangControl::ssdmu_pitch(double x, double y, double z) {
@@ -66,10 +100,10 @@ void KrangControl::setDartIDs(simulation::World* world) {
 	// IDs for various krang body parts, hard-coded for now
 
 	int idL[] = {11, 13, 15, 17, 19, 21, 23};
-	armIDsL = std::vector<int>(idL, idL + sizeof(idL)/sizeof(idL[0]));
+	armIDs[LEFT_ARM] = std::vector<int>(idL, idL + sizeof(idL)/sizeof(idL[0]));
 
 	int idR[] = {12, 14, 16, 18, 20, 22, 24};
-	armIDsR = std::vector<int>(idR, idR + sizeof(idR)/sizeof(idR[0]));
+	armIDs[RIGHT_ARM] = std::vector<int>(idR, idR + sizeof(idR)/sizeof(idR[0]));
 
 	int imu_ids[] = {5};
 	imuIDs = std::vector<int>(imu_ids, imu_ids + sizeof(imu_ids)/sizeof(imu_ids[0]));

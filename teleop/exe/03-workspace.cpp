@@ -33,6 +33,9 @@ using namespace dynamics;
 SpacenavTeleop spn1;
 SpacenavTeleop spn2;
 
+// Workspace control object
+WorkspaceControl wrkCtl;
+
 // Krang the monster
 KrangControl krang;
 
@@ -308,8 +311,8 @@ void fakeArmMovement(vector<int> ids, VectorXd &qdot, double dt) {
 /****************************************************************************************
  * Primary arm control function
  ****************************************************************************************/
-void updateArm(kinematics::BodyNode *eeNode, MatrixXd &eeGoal, dynamics::SkeletonDynamics *goalSkel,
-		somatic_motor_t &arm,bool motor_output_mode, vector<int> armIDs, double dt) {
+void updateArm(kinematics::BodyNode *eeNode, MatrixXd &eeGoal,
+		somatic_motor_t &arm, bool motor_output_mode, vector<int> armIDs, double dt) {
 
 	// Compute workspace velocity from goal errors
 	VectorXd xdot = computeWorkVelocity(eeNode, eeGoal);
@@ -337,6 +340,13 @@ void updateArm(kinematics::BodyNode *eeNode, MatrixXd &eeGoal, dynamics::Skeleto
 /// end-effectors, places blue and green boxes for their locations and visualizes it all
 void Timer::Notify() {
 
+	// Compute timestep
+	static double last_movement_time = aa_tm_timespec2sec(aa_tm_now());
+	double current_time = aa_tm_timespec2sec(aa_tm_now());
+	double dt = current_time - last_movement_time;
+	last_movement_time = current_time;
+
+
 	// update robot state from ach if we're controlling the actual robot
 	if (motor_input_mode) {
 //		updateRobotSkelFromSomaticMotor(mWorld, daemon_cx, llwa, armIDsL);
@@ -346,32 +356,47 @@ void Timer::Notify() {
 		krang.updateKrangSkeleton(mWorld);
 	}
 
-	// Get the goal configuration from spacenav
-	updateGoalFromSpnavVels(eeNodeL, T_eeL_goal, spn1, 0.2, goalSkelL);
-
-	if (right_track_left_mode) {
-		// hack: get right arm goal by tracking left arm
-		T_eeL_cur = eeNodeL->getWorldTransform();
-		T_eeR_goal = T_eeL_cur * T_eeR_eeL;
-		VectorXd goalConfigR = transformToEuler(T_eeR_goal, math::ZYX);
-		goalSkelR->setConfig(dartRootDofOrdering, goalConfigR);
-	} else {
-		updateGoalFromSpnavVels(eeNodeR, T_eeR_goal, spn2, 0.2, goalSkelR);
-	}
+//	// Get the goal configuration from spacenav
+//	updateGoalFromSpnavVels(eeNodeL, T_eeL_goal, spn1, 0.2, goalSkelL);
+//
+//	if (right_track_left_mode) {
+//		// hack: get right arm goal by tracking left arm
+//		T_eeL_cur = eeNodeL->getWorldTransform();
+//		T_eeR_goal = T_eeL_cur * T_eeR_eeL;
+//		VectorXd goalConfigR = transformToEuler(T_eeR_goal, math::ZYX);
+//		goalSkelR->setConfig(dartRootDofOrdering, goalConfigR);
+//	} else {
+//		updateGoalFromSpnavVels(eeNodeR, T_eeR_goal, spn2, 0.2, goalSkelR);
+//	}
 
 	// handle grippers
 //	VectorXi buttons = getSpacenavButtons(spn_chan);
 //	cout << "buttonsL "<< buttons.transpose() << endl;
 //	handleSpacenavButtons(buttons, rqd_chan);
 
-	// Compute timestep
-	static double last_movement_time = aa_tm_timespec2sec(aa_tm_now());
-	double current_time = aa_tm_timespec2sec(aa_tm_now());
-	double dt = current_time - last_movement_time;
-	last_movement_time = current_time;
+//	updateArm(eeNodeL, T_eeL_goal, llwa, motor_output_mode, armIDsL, dt);
+//	updateArm(eeNodeR, T_eeR_goal, rlwa, motor_output_mode, armIDsR, dt);
 
-	updateArm(eeNodeL, T_eeL_goal, goalSkelL, llwa, motor_output_mode, armIDsL, dt);
-	updateArm(eeNodeR, T_eeR_goal, goalSkelR, rlwa, motor_output_mode, armIDsR, dt);
+	VectorXd cfgL = spn1.getConfig() * 0.2;
+	VectorXd cfgR = spn2.getConfig() * 0.2;
+
+	wrkCtl.updateXrefFromXdot(LEFT_ARM, cfgL);
+
+	if (right_track_left_mode)
+		wrkCtl.updateXrefFromOther(RIGHT_ARM, LEFT_ARM);
+	else
+		wrkCtl.updateXrefFromXdot(RIGHT_ARM, cfgR);
+
+	goalSkelL->setConfig(dartRootDofOrdering, transformToEuler(wrkCtl.getXref(LEFT_ARM), math::XYZ));
+	goalSkelR->setConfig(dartRootDofOrdering, transformToEuler(wrkCtl.getXref(RIGHT_ARM), math::XYZ));
+
+	VectorXd qL = krang.getArmConfig(mWorld, LEFT_ARM);
+	VectorXd qR = krang.getArmConfig(mWorld, RIGHT_ARM);
+	VectorXd qdotL = wrkCtl.xdotToQdot(LEFT_ARM, 5.0, 0.01, &qL, NULL);
+	VectorXd qdotR = wrkCtl.xdotToQdot(RIGHT_ARM, 5.0, 0.01, &qR, NULL);
+
+	krang.setRobotArmVelocities(mWorld, LEFT_ARM, qdotL, dt);
+	krang.setRobotArmVelocities(mWorld, RIGHT_ARM, qdotR, dt);
 
 	// Visualize the arm motion
 	viewer->DrawGLScene();
@@ -460,11 +485,8 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	initLiberty();
 
 	// Initialize the arms
-	if (motor_input_mode || motor_output_mode) {
-		//initialize_robot();
-		// initialize krang the monster
-		krang.initialize(&daemon_cx);
-	}
+//	if (motor_input_mode || motor_output_mode)
+//		initialize_robot();
 
 	// Grab effector node pointer to compute the task space error and the Jacobian
 	eeNodeL = mWorld->getSkeleton("Krang")->getNode("lGripper");
@@ -473,6 +495,12 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	// Grab goal skeleton references
 	goalSkelL = mWorld->getSkeleton("g1");
 	goalSkelR = mWorld->getSkeleton("g2");
+
+	// initialize krang the monster
+	krang.initialize(mWorld, &daemon_cx, !(motor_input_mode || motor_output_mode));
+
+	// initialize workspace controller
+	wrkCtl.initialize(eeNodeL, eeNodeR);
 
 	// Initialize primary transforms
 	usleep(1e5); // give ach time to initialize, or init transforms will be bogus
@@ -532,23 +560,27 @@ void SimTab::OnButton(wxCommandEvent &evt) {
 
 	case id_checkbox_ToggleMotorInputMode: {
 		motor_input_mode = evt.IsChecked();
-		if (motor_input_mode && !motors_initialized) {
-			initialize_robot();
-		}
+
+//		if (motor_input_mode && !motors_initialized)
+//			initialize_robot();
+
+		krang.setControlMode(!(motor_input_mode && !motors_initialized));
+
 		break;
 	}
 
 	case id_checkbox_ToggleMotorOutputMode: {
 
 		motor_output_mode = evt.IsChecked();
-		if (motor_output_mode && !motors_initialized) {
-			initialize_robot();
-		}
+//		if (motor_output_mode && !motors_initialized)
+//			initialize_robot();
+		krang.setControlMode(!(motor_output_mode && !motors_initialized));
 
 		if (!motor_output_mode) {
-			haltArm(daemon_cx, llwa);
-			haltArm(daemon_cx, rlwa);
-			motors_initialized = 0;
+//			haltArm(daemon_cx, llwa);
+//			haltArm(daemon_cx, rlwa);
+//			motors_initialized = 0;
+			krang.halt();
 		}
 		break;
 	}
@@ -556,7 +588,8 @@ void SimTab::OnButton(wxCommandEvent &evt) {
 	case id_checkbox_ToggleRightTrackLeftMode: {
 		right_track_left_mode = evt.IsChecked();
 		if (right_track_left_mode)
-			initialize_transforms(mWorld);
+			//initialize_transforms(mWorld);
+			wrkCtl.updateRelativeTransforms();
 		break;
 	}
 

@@ -10,7 +10,16 @@
 
 #include "util.h" //TODO: rename, move, or do something good
 
-WorkspaceTeleop::WorkspaceTeleop(kinematics::BodyNode* eeNodeL, kinematics::BodyNode* eeNodeR) {
+WorkspaceControl::WorkspaceControl() {
+
+}
+
+WorkspaceControl::~WorkspaceControl() {
+	// TODO Auto-generated destructor stub
+}
+
+void WorkspaceControl::initialize(kinematics::BodyNode* eeNodeL, kinematics::BodyNode* eeNodeR) {
+	eeNodes.resize(2);
 	eeNodes[LEFT_ARM] = eeNodeL;
 	eeNodes[RIGHT_ARM] = eeNodeR;
 	initializeTransforms();
@@ -18,15 +27,11 @@ WorkspaceTeleop::WorkspaceTeleop(kinematics::BodyNode* eeNodeL, kinematics::Body
 	setEffectorTransformFromSkel(RIGHT_ARM);
 }
 
-WorkspaceTeleop::~WorkspaceTeleop() {
-	// TODO Auto-generated destructor stub
-}
-
 /*
  * Initializes all transform containers to the identity.
  * For now, we're simply assuming 2 possible arms
  */
-void WorkspaceTeleop::initializeTransforms() {
+void WorkspaceControl::initializeTransforms() {
 
 	T_dummy.setIdentity();
 
@@ -40,20 +45,24 @@ void WorkspaceTeleop::initializeTransforms() {
 	relTrans.push_back(T_dummy);
 }
 
-void WorkspaceTeleop::setEffectorTransformFromSkel(lwa_arm_t arm) {
+void WorkspaceControl::setEffectorTransformFromSkel(lwa_arm_t arm) {
 
 	assert(eeNodes[arm] != NULL);
 	curTrans[arm] = eeNodes[arm]->getWorldTransform();
 }
 
-void WorkspaceTeleop::setEffectorTransform(lwa_arm_t arm, Eigen::Matrix4d T) {
-
-	curTrans[arm] = T;
+void WorkspaceControl::updateRelativeTransforms() {
+	relTrans[LEFT_ARM] = curTrans[RIGHT_ARM].inverse() * curTrans[LEFT_ARM];
+	relTrans[RIGHT_ARM] = curTrans[LEFT_ARM].inverse() * curTrans[RIGHT_ARM];
 }
 
-void WorkspaceTeleop::setXrefFromTransform(lwa_arm_t arm, Eigen::Matrix4d& T) {
+void WorkspaceControl::setXref(lwa_arm_t arm, Eigen::Matrix4d& T) {
 
 	refTrans[arm] = T;
+}
+
+Eigen::Matrix4d WorkspaceControl::getXref(lwa_arm_t arm) {
+	return refTrans[arm];
 }
 
 /*
@@ -64,13 +73,27 @@ void WorkspaceTeleop::setXrefFromTransform(lwa_arm_t arm, Eigen::Matrix4d& T) {
  * Note: xdot should be appropriately scaled before passing in.  Internally it
  * is treated as a relative transform applied to the current effector pose
  */
-void WorkspaceTeleop::updateXrefFromXdot(lwa_arm_t arm, Eigen::VectorXd& xdot) {
+void WorkspaceControl::updateXrefFromXdot(lwa_arm_t arm, Eigen::VectorXd& xdot) {
 
+	setEffectorTransformFromSkel(arm);
 	Eigen::Matrix4d xdotM = eulerToTransform(xdot, math::XYZ);
 	refTrans[arm] = xdotM * curTrans[arm];
 }
 
-Eigen::VectorXd WorkspaceTeleop::getXdotFromXref(lwa_arm_t arm) {
+/*
+ * Sets xref of arm2 to track arm1
+ */
+void WorkspaceControl::updateXrefFromOther(lwa_arm_t arm, lwa_arm_t other) {
+
+	// update arm current transforms
+	setEffectorTransformFromSkel(arm);
+	setEffectorTransformFromSkel(other);
+
+	// set arm2 reference based on cached relative transform
+	refTrans[arm] = curTrans[other] * relTrans[arm];
+}
+
+Eigen::VectorXd WorkspaceControl::getXdotFromXref(lwa_arm_t arm) {
 
 	// get transform from effector to reference in global frame
 	Eigen::Matrix4d xdotM = refTrans[arm] * curTrans[arm].inverse();
@@ -87,9 +110,15 @@ Eigen::VectorXd WorkspaceTeleop::getXdotFromXref(lwa_arm_t arm) {
  * null-space projection thing to bias our solution towards
  * joint values in the middle of each joint's range of motion
  */
-Eigen::VectorXd WorkspaceTeleop::xdotToQdot(lwa_arm_t arm, const Eigen::VectorXd& xdot,
-		double xdotGain, double nullGain, Eigen::VectorXd *q) {
+Eigen::VectorXd WorkspaceControl::xdotToQdot(lwa_arm_t arm, double xdotGain,
+		double nullGain, Eigen::VectorXd *q, Eigen::VectorXd *xdot) {
 
+	// obtain xdot from user or reference
+	Eigen::VectorXd xd(6);
+	if (xdot == NULL)
+		xd = getXdotFromXref(arm);
+	else
+		xd = *xdot;
 
 	// Get the Jacobian towards computing joint-space velocities
 	Eigen::MatrixXd Jlin = eeNodes[arm]->getJacobianLinear().topRightCorner<3,7>();
@@ -113,11 +142,18 @@ Eigen::VectorXd WorkspaceTeleop::xdotToQdot(lwa_arm_t arm, const Eigen::VectorXd
 
 	Eigen::MatrixXd JinvJ = Jinv*J;
 	Eigen::MatrixXd I = Eigen::MatrixXd::Identity(7,7);
-	return Jinv * (xdot * xdotGain) + (I - JinvJ) * (qDist * nullGain);
+	return Jinv * (xd * xdotGain) + (I - JinvJ) * (qDist * nullGain);
 }
 
-void WorkspaceTeleop::setRelativeTransforms() {
+void WorkspaceControl::setRelativeTransforms() {
 
 	// cache the relative effector transforms
 	relTrans[LEFT_ARM] = curTrans[RIGHT_ARM].inverse() * curTrans[LEFT_ARM]; ///< left effector transform in right effector frame
 }
+
+
+
+//void WorkspaceControl::setEffectorTransform(lwa_arm_t arm, Eigen::Matrix4d T) {
+//
+//	curTrans[arm] = T;
+//}

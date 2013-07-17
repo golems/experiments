@@ -24,23 +24,36 @@ typedef enum arm {
  * used to obtain the effector's current pose and jacobian.
  */
 
-class WorkspaceTeleop {
+class WorkspaceControl {
 public:
-	WorkspaceTeleop(kinematics::BodyNode* eeNodeL = NULL, kinematics::BodyNode* eeNodeR = NULL);
-	virtual ~WorkspaceTeleop();
+	WorkspaceControl();
+	virtual ~WorkspaceControl();
+
+	// initialization
+	void initialize(kinematics::BodyNode* eeNodeL = NULL, kinematics::BodyNode* eeNodeR = NULL);
 
 	// Update methods
-	void setEffectorTransformFromSkel(lwa_arm_t arm);
-	void setEffectorTransform(lwa_arm_t arm, Eigen::Matrix4d T);
-	void setXrefFromTransform(lwa_arm_t arm, Eigen::Matrix4d &T);
+	void updateRelativeTransforms();
 	void updateXrefFromXdot(lwa_arm_t arm, Eigen::VectorXd &xdot);
+	void updateXrefFromOther(lwa_arm_t arm, lwa_arm_t other);
 
-	// Jacobian workspace control methods
-	Eigen::VectorXd getXdotFromXref(lwa_arm_t arm);
+	// getters and setters
+	void setXref(lwa_arm_t arm, Eigen::Matrix4d &T);
+	Eigen::Matrix4d getXref(lwa_arm_t arm);
 
-	///< Workhorse function: maps given xdot into joint space
-	Eigen::VectorXd xdotToQdot(lwa_arm_t arm, const Eigen::VectorXd &xdot,
-			double xdotGain, double nullGain, Eigen::VectorXd *q = NULL);
+
+	/**
+	 * Workhorse function: maps given xdot into joint space.
+	 *
+	 * @param arm: An arm to control (left or right)
+	 * @param xdotGain: Jointspace velocity gain
+	 * @param nullGain: A nullspace projection gain (how strongly to bias towards zero)
+	 * @param q: The current joint angles (TODO: add way to bias towards arbitrary)
+	 * @param xdot: A desired xdot.  If Null, it is computed from the arm's current reference
+	 * @return: the jointspace velocities qdot
+	 */
+	Eigen::VectorXd xdotToQdot(lwa_arm_t arm, double xdotGain, double nullGain = 0.01,
+			Eigen::VectorXd *q = NULL, Eigen::VectorXd *xdot = NULL);
 
 protected:
 	// initialization helpers
@@ -48,6 +61,10 @@ protected:
 
 	// update helpers
 	void setRelativeTransforms();
+	void setEffectorTransformFromSkel(lwa_arm_t arm);
+
+	// Returns an xdot for the given arm's current reference position
+	Eigen::VectorXd getXdotFromXref(lwa_arm_t arm);
 
 	// flag for whether to have left arm track the right one (TODO de-hackify)
 	static const bool right_track_left_mode = 0;
@@ -63,3 +80,5 @@ protected:
 };
 
 #endif /* WORKSPACETELEOP_H_ */
+
+//void setRelativeTransforms(lwa_arm_t arm1, lwa_arm_t arm2)
