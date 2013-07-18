@@ -33,9 +33,7 @@ public:
 	// Update methods
 	void updateRelativeTransforms();
 	void updateXrefFromXdot(lwa_arm_t arm, Eigen::VectorXd &xdot);
-	void updateXrefFromOther(lwa_arm_t arm, lwa_arm_t other,
-			Eigen::VectorXd *qdotOther = NULL, Eigen::VectorXd *qOther = NULL,
-			double dt = 0);
+	void updateXrefFromOther(lwa_arm_t arm, lwa_arm_t other);
 
 	// getters and setters
 	void setXref(lwa_arm_t arm, Eigen::Matrix4d &T);
@@ -54,8 +52,7 @@ public:
 	 * @param xdot: A desired xdot.  If Null, it is computed from the arm's current reference
 	 * @return: the jointspace velocities qdot
 	 */
-	Eigen::VectorXd xdotToQdot(lwa_arm_t arm, kinematics::BodyNode* eeNode, double xdotGain,
-			double nullGain = 0.01, Eigen::VectorXd *q = NULL, Eigen::VectorXd *xdot = NULL);
+	Eigen::VectorXd xdotToQdot(lwa_arm_t arm, const Eigen::VectorXd &xdot, double nullGain = 0.01);
 
 protected:
 	// initialization helpers
@@ -66,7 +63,7 @@ protected:
 //	void setEffectorTransformFromSkel(lwa_arm_t arm, kinematics::BodyNode* eeNode);
 
 	// Returns an xdot for the given arm's current reference position
-	Eigen::VectorXd getXdotFromXref(lwa_arm_t arm);
+	Eigen::VectorXd getXdotFromXref(lwa_arm_t arm, double xdotGain);
 
 	// flag for whether to have left arm track the right one (TODO de-hackify)
 	static const bool right_track_left_mode = 0;

@@ -195,48 +195,34 @@ void Timer::Notify() {
 	if (motor_input_mode)
 		krang.updateKrangSkeleton();
 
-	VectorXd cfgL = spn1.getConfig(0.4,0.4);
-	VectorXd cfgR = spn2.getConfig(0.4,0.4);
-	//goalSkelL->setConfig(dartRootDofOrdering, cfgL);
+	VectorXd cfgL = spn1.getConfig(0.1,0.3);
+	VectorXd cfgR = spn2.getConfig(0.1,0.3);
+	//goalSkelL->setConfig(dartRootDofOrdering, cfgL); // uncomment to visualize spacenav directly
 
-	VectorXd qdotL(7);
-	VectorXd qdotR(7);
+	wrkCtl.updateXrefFromXdot(LEFT_ARM, cfgL);
 
-	bool vel_mode = false;
-	if (vel_mode) {
-		//method 1: direct velocity control
-		VectorXd qL = krang.getArmConfig(LEFT_ARM);
-		VectorXd qR = krang.getArmConfig(RIGHT_ARM);
-		qdotL = wrkCtl.xdotToQdot(LEFT_ARM, eeNodeL, xdot_gain, 0.01, &qL, &cfgL);
+	if (right_track_left_mode)
+		wrkCtl.updateXrefFromOther(RIGHT_ARM, LEFT_ARM);
+	else
+		wrkCtl.updateXrefFromXdot(RIGHT_ARM, cfgR);
 
-		//TODO: add tracking mode using feed-forward vels
-		if (right_track_left_mode) {
-			wrkCtl.updateXrefFromOther(RIGHT_ARM, LEFT_ARM, &qdotL, &qL, dt);
-			qdotR = wrkCtl.xdotToQdot(RIGHT_ARM, eeNodeR, xdot_gain, 0.01, &qR, NULL);
-		}
-		else {
-			qdotR = wrkCtl.xdotToQdot(RIGHT_ARM, eeNodeR, xdot_gain, 0.01, &qR, &cfgR);
-		}
+	goalSkelL->setConfig(dartRootDofOrdering, transformToEuler(wrkCtl.getXref(LEFT_ARM), math::XYZ));
+	goalSkelR->setConfig(dartRootDofOrdering, transformToEuler(wrkCtl.getXref(RIGHT_ARM), math::XYZ));
 
-		goalSkelL->setConfig(dartRootDofOrdering, transformToEuler(wrkCtl.getXref(LEFT_ARM), math::XYZ));
-		goalSkelR->setConfig(dartRootDofOrdering, transformToEuler(wrkCtl.getXref(RIGHT_ARM), math::XYZ));
-	}
-	else {
-		//method 2: position control, which seems to crash
-		wrkCtl.updateXrefFromXdot(LEFT_ARM, cfgL);
-		if (right_track_left_mode)
-			wrkCtl.updateXrefFromOther(RIGHT_ARM, LEFT_ARM);
-		else
-			wrkCtl.updateXrefFromXdot(RIGHT_ARM, cfgR);
+	// get xdot from references and force sensor
+	VectorXd xdotToRefL = wrkCtl.getXdotFromXref(LEFT_ARM, 5.0);
+	VectorXd xdotToRefR = wrkCtl.getXdotFromXref(RIGHT_ARM, 5.0);
 
-		goalSkelL->setConfig(dartRootDofOrdering, transformToEuler(wrkCtl.getXref(LEFT_ARM), math::XYZ));
-		goalSkelR->setConfig(dartRootDofOrdering, transformToEuler(wrkCtl.getXref(RIGHT_ARM), math::XYZ));
+	// TODO: grab FT readings and combine with xdotToRef
+	VectorXd xdotL = xdotToRefL;
+	VectorXd xdotR = xdotToRefR;
 
-		VectorXd qL = krang.getArmConfig(LEFT_ARM);
-		VectorXd qR = krang.getArmConfig(RIGHT_ARM);
-		qdotL = wrkCtl.xdotToQdot(LEFT_ARM, eeNodeL, xdot_gain, 0.01, &qL, NULL);
-		qdotR = wrkCtl.xdotToQdot(RIGHT_ARM, eeNodeR, xdot_gain, 0.01, &qR, NULL);
-	}
+	// get current arm configurations (for jacobian nullspace)
+	VectorXd qL = krang.getArmConfig(LEFT_ARM);
+	VectorXd qR = krang.getArmConfig(RIGHT_ARM);
+
+	VectorXd qdotL = wrkCtl.xdotToQdot(LEFT_ARM,  xdotL, 0.01);
+	VectorXd qdotR = wrkCtl.xdotToQdot(RIGHT_ARM, xdotR, 0.01);
 
 	krang.setRobotArmVelocities(LEFT_ARM, qdotL, dt);
 	krang.setRobotArmVelocities(RIGHT_ARM, qdotR, dt);

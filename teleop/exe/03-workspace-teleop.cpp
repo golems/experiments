@@ -181,10 +181,19 @@ void step() {
 	else
 		wrkCtl.updateXrefFromXdot(RIGHT_ARM, cfgR);
 
+	// get xdot from references and force sensor
+	VectorXd xdotToRefL = wrkCtl.getXdotFromXref(LEFT_ARM, 5.0);
+	VectorXd xdotToRefR = wrkCtl.getXdotFromXref(RIGHT_ARM, 5.0);
+
+	VectorXd xdotL = xdotToRefL;
+	VectorXd xdotR = xdotToRefR;
+
+	// get current arm configurations (for jacobian nullspace)
 	VectorXd qL = krang.getArmConfig(LEFT_ARM);
 	VectorXd qR = krang.getArmConfig(RIGHT_ARM);
-	VectorXd qdotL = wrkCtl.xdotToQdot(LEFT_ARM, eeNodeL,  5.0, 0.01, &qL, NULL);
-	VectorXd qdotR = wrkCtl.xdotToQdot(RIGHT_ARM, eeNodeR, 5.0, 0.01, &qR, NULL);
+
+	VectorXd qdotL = wrkCtl.xdotToQdot(LEFT_ARM,  xdotL, 0.01);
+	VectorXd qdotR = wrkCtl.xdotToQdot(RIGHT_ARM, xdotR, 0.01);
 
 	krang.setRobotArmVelocities(LEFT_ARM, qdotL, dt);
 	krang.setRobotArmVelocities(RIGHT_ARM, qdotR, dt);
