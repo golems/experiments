@@ -140,10 +140,18 @@ void run () {
 	
 	// Continue processing data until stop received
 	double js_forw = 0.0, js_spin = 0.0, averagedTorque = 0.0, lastUleft = 0.0, lastUright = 0.0;
+	size_t mode4iter = 0, mode4iterLimit = 100;
+	size_t lastMode = MODE;
 	while(!somatic_sig_received) {
 
 		bool debug = debugGlobal & (c_++ % 20 == 0);
 		if(debug) cout << "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv\n" << endl;
+
+		// Cancel any position built up in previous mode
+		if(lastMode != MODE) {
+			refState(2) = state(2), refState(4) = state(4);
+			lastMode = MODE;
+		}
 
 		// =======================================================================
 		// Get inputs: time, joint states, joystick and external forces
@@ -158,6 +166,7 @@ void run () {
 		double imu = 0.0;
 		getState(state, dt, &com, &imu);
 		if(debug) cout << "\nstate: " << state.transpose() << endl;
+		if(debug) cout << "com: " << com.transpose() << endl;
 
 		// Print the information about the last iteration (after reading effects of it from sensors)
 		// NOTE: Constructor order is NOT the print order
@@ -201,7 +210,28 @@ void run () {
 		error = state - refState;
 
 		// If we are in the sit down mode, over write the reference
-		if(MODE == 3) error(0) = imu - ((-103.0 / 180.0) * M_PI);
+		if(MODE == 3) {
+			static const double limit = ((-103.0 / 180.0) * M_PI);
+			if(imu < limit) {
+				printf("imu (%lf) < limit (%lf): changing to mode 1\n", imu, limit);
+				MODE = 1;
+				K = K_ground;
+
+			}
+			else error(0) = imu - limit;
+		}
+		else if(MODE == 2) {
+			if(fabs(state(0)) < 0.01) mode4iter++;
+			// Change to mode 4 (balance low) if stood up enough
+			if(mode4iter > mode4iterLimit) {
+				MODE = 4;
+				mode4iter = 0;
+				K = K_balLow;
+			}
+		}
+		else if(MODE == 5) {
+			error(0) -= 0.005;	
+		}
 		if(debug) cout << "error: " << error.transpose() << ", imu: " << imu / M_PI * 180.0 << endl;
 
 		// Compute the current
