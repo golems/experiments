@@ -201,13 +201,21 @@ void run () {
 		error = state - refState;
 
 		// If we are in the sit down mode, over write the reference
-		if(MODE == 3) error(0) = imu - ((-103.0 / 180.0) * M_PI);
+		if(MODE == 3) {
+			static const double limit = ((-103.0 / 180.0) * M_PI);
+			if(imu < limit) {
+				printf("imu (%lf) < limit (%lf): changing to mode 1\n", imu, limit);
+				MODE = 1;
+				K = K_ground;
+			}
+			else error(0) = imu - limit;
+		}
 		if(debug) cout << "error: " << error.transpose() << ", imu: " << imu / M_PI * 180.0 << endl;
 
 		// Compute the current
 		double u = K.topLeftCorner<4,1>().dot(error.topLeftCorner<4,1>());
 		double u_spin =  -K.bottomLeftCorner<2,1>().dot(error.bottomLeftCorner<2,1>());
-		u_spin = max(-15.0, min(15.0, u_spin));
+		u_spin = max(-20.0, min(20.0, u_spin));
     	
 		// Compute the input for left and right wheels
 		double input [2] = {u + u_spin, u - u_spin};

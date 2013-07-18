@@ -197,12 +197,12 @@ void *kbhit(void *) {
 		else if(input=='2') {
 			printf("Mode 2\n"); 
 			K = K_stand;
-			MODE = 1;
+			MODE = 2;
 		}
 		else if(input=='3') {
 			printf("Mode 3\n"); 
 			K = K_sit;
-			MODE = 1;
+			MODE = 3;
 		}
 
 
