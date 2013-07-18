@@ -80,6 +80,8 @@ extern Vector6d K_sit;
 extern Vector2d J_sit;
 extern Vector6d K_balLow;
 extern Vector2d J_balLow;
+extern Vector6d K_balHigh;
+extern Vector2d J_balHigh;
 extern Vector6d K;	
 
 /* ******************************************************************************************** */

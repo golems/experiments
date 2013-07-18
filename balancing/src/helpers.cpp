@@ -26,6 +26,8 @@ Vector6d K_sit;
 Vector2d J_sit;
 Vector6d K_balLow;
 Vector2d J_balLow;
+Vector6d K_balHigh;
+Vector2d J_balHigh;
 Vector6d K;
 
 /* ******************************************************************************************** */
@@ -150,6 +152,9 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 	else if(MODE == 4) {
 		js_forw = -J_balLow(0) * x[1], js_spin = J_balLow(1) * x[2];
 	}
+	else if(MODE == 5) {
+		js_forw = -J_balHigh(0) * x[1], js_spin = J_balHigh(1) * x[2];
+	}
 	else {
 		js_forw = -x[1] * jsFwdAmp;
 		js_spin = x[2] * jsSpinAmp;; 
@@ -161,12 +166,12 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 /// Read file for gains
 void readGains () {
 
-	Vector6d* kgains [] = {&K_ground, &K_stand, &K_sit, &K_balLow};
-	Vector2d* jgains [] = {&J_ground, &J_stand, &J_sit, &J_balLow};
+	Vector6d* kgains [] = {&K_ground, &K_stand, &K_sit, &K_balLow, &K_balHigh};
+	Vector2d* jgains [] = {&J_ground, &J_stand, &J_sit, &J_balLow, &J_balHigh};
 	ifstream file ("../gains.txt");
 	assert(file.is_open());
 	char line [1024];
-	for(size_t k_idx = 0; k_idx < 4; k_idx++) {
+	for(size_t k_idx = 0; k_idx < 5; k_idx++) {
 		*kgains[k_idx] = Vector6d::Zero();
 		*jgains[k_idx] = Vector2d::Zero();
 		file.getline(line, 1024);
@@ -186,6 +191,8 @@ void readGains () {
 	pv(J_sit);
 	pv(K_balLow);
 	pv(J_balLow);
+	pv(K_balHigh);
+	pv(J_balHigh);
 }
 
 /* ********************************************************************************************* */
@@ -217,7 +224,11 @@ void *kbhit(void *) {
 			K = K_balLow;
 			MODE = 4;
 		}
-
+		else if(input=='5') {
+			printf("Mode 5\n"); 
+			K = K_balHigh;
+			MODE = 5;
+		}
 
 	}
 	start = true;

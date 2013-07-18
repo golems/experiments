@@ -166,6 +166,7 @@ void run () {
 		double imu = 0.0;
 		getState(state, dt, &com, &imu);
 		if(debug) cout << "\nstate: " << state.transpose() << endl;
+		if(debug) cout << "com: " << com.transpose() << endl;
 
 		// Print the information about the last iteration (after reading effects of it from sensors)
 		// NOTE: Constructor order is NOT the print order
@@ -227,6 +228,9 @@ void run () {
 				mode4iter = 0;
 				K = K_balLow;
 			}
+		}
+		else if(MODE == 5) {
+			error(0) -= 0.005;	
 		}
 		if(debug) cout << "error: " << error.transpose() << ", imu: " << imu / M_PI * 180.0 << endl;
 
