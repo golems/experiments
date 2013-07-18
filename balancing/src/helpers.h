@@ -64,11 +64,19 @@ SkeletonDynamics* robot;			///< the robot representation in dart
 
 bool start = false;						///< Giving time to the user to get the robot in balancing angle
 bool complyTorque = false;
-Vector6d K_bal;								///< The gains for the balancing controller
-Vector6d K_stand;							///< The gains for the standing controller
 
 double jsFwdAmp;				///< The gains for joystick forward/reverse input
 double jsSpinAmp;				///< The gains for joystick left/right spin input
+
+/* ******************************************************************************************** */
+// All the freaking gains
+
+extern size_t MODE;
+extern Vector6d K_ground;
+extern Vector6d K_stand;
+extern Vector6d K_sit;
+extern Vector6d K_bal_low;
+extern Vector6d K;	
 
 /* ******************************************************************************************** */
 // The arm indices to set/get configurations from dart

@@ -58,6 +58,16 @@ Vector6d rightOffset;
 Vector6d rightWheelWrench;
 bool debugGlobal = false, logGlobal = true;
 
+/* ******************************************************************************************** *
+/// Read file for gains
+void readGains () {
+
+	ifstream file ("../gains.txt");
+	for(size_t i = 0; i < 1; i++) {
+		for(size_t j 
+	}
+}
+
 /* ******************************************************************************************** */
 /// Computes the wrench on the wheels due to external force from the f/t sensors' data
 void getExternalWrench (Vector6d& external) {
@@ -195,10 +205,10 @@ void run () {
 		// Apply control: compute error, threshold and send current
 
 		// Compute the error term between reference and current, and weight with gains (spin separate)
-		if(debug) cout << "K_bal: " << K_bal.transpose() << endl;
+		if(debug) cout << "K: " << K.transpose() << endl;
 		error = state - refState;
-		double u = K_bal.topLeftCorner<4,1>().dot(error.topLeftCorner<4,1>());
-		double u_spin =  -K_bal.bottomLeftCorner<2,1>().dot(error.bottomLeftCorner<2,1>());
+		double u = K.topLeftCorner<4,1>().dot(error.topLeftCorner<4,1>());
+		double u_spin =  -K.bottomLeftCorner<2,1>().dot(error.bottomLeftCorner<2,1>());
     	
 		// Compute the input for left and right wheels
 		double input [2] = {u + u_spin, u - u_spin};
@@ -386,12 +396,14 @@ int main(int argc, char* argv[]) {
 	robot = world->getSkeleton(0);
 
 	// Read the gains from the command line
+/*
 	assert(argc >= 7 && "Where is my gains for th, x and spin?");
-	K_bal << atof(argv[1]), atof(argv[2]), atof(argv[3]), atof(argv[4]), atof(argv[5]), atof(argv[6]);
+	K << atof(argv[1]), atof(argv[2]), atof(argv[3]), atof(argv[4]), atof(argv[5]), atof(argv[6]);
 	jsFwdAmp = 0.3;
 	jsSpinAmp = 0.4;
 	
 	cout << "K_bal: " << K_bal.transpose() << "\nPress enter: " << endl;
+*/
 
 	// Debug options from command line
 	debugGlobal = 1; logGlobal = 0;
