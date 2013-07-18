@@ -5,33 +5,33 @@
  *      Author: jscholz
  */
 
-#include "SpacenavTeleop.h"
+#include "SpacenavClient.h"
 
 
 #include <math/UtilsRotation.h>
 
 #include "util.h"
 
-SpacenavTeleop::SpacenavTeleop() {
+SpacenavClient::SpacenavClient() {
 	// TODO Auto-generated constructor stub
 
 }
 
-SpacenavTeleop::~SpacenavTeleop() {
+SpacenavClient::~SpacenavClient() {
 	// TODO Auto-generated destructor stub
 }
 
-void SpacenavTeleop::initialize(somatic_d_t *daemon_cx, const char* channel_name) {
+void SpacenavClient::initialize(somatic_d_t *daemon_cx, const char* channel_name) {
 
 	this->daemon_cx = daemon_cx;
 	somatic_d_channel_open(daemon_cx, &spacenav_chan, channel_name, NULL);
 }
 
-void SpacenavTeleop::setInitialTransform() {
+void SpacenavClient::setInitialTransform() {
 	//T_spn_init =
 }
 
-Eigen::VectorXd SpacenavTeleop::getConfig() {
+Eigen::VectorXd SpacenavClient::getConfig() {
 
 	Eigen::VectorXd config(6); config.setZero();
 
@@ -60,7 +60,7 @@ Eigen::VectorXd SpacenavTeleop::getConfig() {
 	return config;
 }
 
-bool SpacenavTeleop::getPose(Eigen::MatrixXd& pose, Eigen::VectorXd* config) {
+bool SpacenavClient::getPose(Eigen::MatrixXd& pose, Eigen::VectorXd* config) {
 
 	Eigen::VectorXd spnconfig = getConfig();
 	pose = eulerToTransform(spnconfig, math::XYZ);
@@ -71,7 +71,7 @@ bool SpacenavTeleop::getPose(Eigen::MatrixXd& pose, Eigen::VectorXd* config) {
 	return 0;
 }
 
-Eigen::VectorXi SpacenavTeleop::getButtons() {
+Eigen::VectorXi SpacenavClient::getButtons() {
 
 	Eigen::VectorXi buttons(2); buttons.setZero(2);
 

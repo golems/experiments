@@ -42,6 +42,7 @@ public:
 	// state update methods
 	void updateKrangSkeleton(simulation::World* world);
 	Eigen::VectorXd getArmConfig(simulation::World* world, lwa_arm_t arm);
+	void setArmConfig(simulation::World* world, lwa_arm_t arm, Eigen::VectorXd &config);
 
 	// control methods
 	void setControlMode(bool mode);

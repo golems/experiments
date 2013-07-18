@@ -19,10 +19,10 @@
 /*
  * Implements a basic workspace control client for the spacenav sensor
  */
-class SpacenavTeleop {
+class SpacenavClient {
 public:
-	SpacenavTeleop();
-	virtual ~SpacenavTeleop();
+	SpacenavClient();
+	virtual ~SpacenavClient();
 
 	// initialization
 	void initialize(somatic_d_t *daemon_cx, const char* channel_name = "spacenav-data");
