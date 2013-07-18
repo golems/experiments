@@ -62,21 +62,27 @@ void destroy();
 
 somatic_d_t daemon_cx;
 ach_channel_t ft_chan;
-ach_channel_t waist_chan; 
 ach_channel_t imu_chan;
 
 somatic_motor_t rlwa;
 somatic_motor_t waist;
+somatic_motor_t torso;
 double imu_angle;
 double waist_angle;
 
 Eigen::Vector6d r_ft_offset;
+std::vector<Eigen::Vector6d> r_ft_window;
 
 simulation::World* world;
 dynamics::SkeletonDynamics* krang;
 kinematics::BodyNode* end_effector_node;
 
 pid_state_t rpids[7];
+Eigen::Vector7d arm_torque_constants;
+
+std::ofstream log_file;
+double log_time_last;
+double log_time_start;
 
 // ################################################################################
 // ################################################################################
@@ -87,21 +93,31 @@ pid_state_t rpids[7];
 // whether we actually send commands
 bool do_send_cmds = true;
 
+// logging
+bool do_logging = true;
+char* logfile_name = "../data/04-force-compliance.log";
+
 // PID controller values
 bool use_pos[] = {true, true, true, true, true, true, true};
 bool use_vel[] = {true, true, true, true, true, true, true};
 
-double init_K_p_p[] = {15.0,  15.0, 15.0, 12.0, 15.0,  7.0,  7.0};
+double init_K_p_p[] = {5.0,  15.0, 15.0, 12.0, 15.0,  7.0,  7.0};
 double init_K_p_d[] = {0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0};
 double init_K_v_p[] = {1.0,   1.0,  1.0,  1.0,  1.0,  1.0,  1.0};
+// double init_K_v_p[] = {0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0};
 double init_K_v_d[] = {0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0};
+
+// crude torque constants for arm modules, used for gravity comp
+double arm_torque_constants_initializer[] = {0.00054, 0.00057, 0.00122, 0.00122, 0.0, 0.0, 0.0};
 
 // indices of joints in DART
 int rarm_ids_initializer[] = {12, 14, 16, 18, 20, 22, 24};
 int waist_ids_initializer[] = {8};
+int torso_ids_initializer[] = {9};
 int imu_ids_initializer[] = {5};
 std::vector<int> rarm_ids;
 std::vector<int> waist_ids;
+std::vector<int> torso_ids;
 std::vector<int> imu_ids;
 
 // number of iterations to use to gather clean data at beginning of
@@ -122,6 +138,9 @@ char* end_effector_node_name = "rGripper";
 // how many times per second we update our FT readings
 double ft_update_freq = 1000.0;
 
+// how often we save logs
+double log_frequency = 1000.0;
+
 // thresholds for force-torqe readings. We ignore anythign less than
 // these. Units are newtons and newton-meters.
 double compliance_threshold_force = 4.0;
@@ -139,23 +158,13 @@ double csr = -.7853981634;
 // #############################################################################
 // #############################################################################
 
-double timespec_to_double(struct timespec x) {
-    return (double)x.tv_sec + (double)x.tv_nsec / 1000000000.0;
-}
-
-double gettime() {
-    struct timespec temp;
-    clock_gettime(ACH_DEFAULT_CLOCK, &temp);
-    return timespec_to_double(temp);
-}
-
 double ssdmu_pitch(double x, double y, double z) {
     double newX;
     newX = x*cos(csr) - y*sin(csr);
     return atan2(newX, z); 
 }
 
-Eigen::Vector7d wrench_to_joint_vels(const Eigen::Vector6d& wrench) {
+Eigen::Vector7d wrench_to_joint_vels(const Eigen::Vector6d& wrench, double wrenchGain) {
     // Get the Jacobian for computing joint-space velocities
     const char* nodeName = "rGripper";
     Eigen::MatrixXd jacobian_linear = end_effector_node->getJacobianLinear().topRightCorner<3,7>();
@@ -165,11 +174,15 @@ Eigen::Vector7d wrench_to_joint_vels(const Eigen::Vector6d& wrench) {
 
     // Compute the inverse of the Jacobian
     Eigen::MatrixXd jacobian_transpose = jacobian.transpose();
-    Eigen::MatrixXd jacobian_inverse = jacobian_transpose * (jacobian * jacobian_transpose).inverse();
+    Eigen::MatrixXd jacobian_square = jacobian * jacobian_transpose;
+    for(int i = 0; i < jacobian_square.rows(); i++) jacobian_square(i,i) += 0.005;
+    Eigen::MatrixXd jacobian_inverse = jacobian_transpose * jacobian_square.inverse();
 
-    // Get the joint-space velocities by multiplying inverse Jacobian
-    // with the opposite wrench.
-    Eigen::Vector7d jointspace_velocities = jacobian_inverse * wrench / 300.0;
+    // Get the joint-space velocities by doing some fancy math
+    Eigen::MatrixXd I = Eigen::MatrixXd::Identity(7,7);
+    Eigen::Vector7d jointspace_velocities =
+        jacobian_inverse * wrench * wrenchGain // forces term
+        ;
 
     // Threshold the velocities
     for(size_t i = 0; i < 7; i++) {
@@ -204,9 +217,9 @@ Eigen::Vector6d compute_ft_offset(const Eigen::Vector6d& raw_ft_reading) {
     wrenchrotate_sensor_world.bottomRightCorner<3,3>() = ee_rotation;
 	
     // Get the weight vector (note that we use the world frame for
-    // gravity so towards -y)
+    // gravity so towards -z)
     Eigen::Vector6d end_effector_weight_in_world;
-    end_effector_weight_in_world << 0.0, end_effector_mass * -9.81, 0.0, 0.0, 0.0, 0.0;
+    end_effector_weight_in_world << 0.0, 0.0, end_effector_mass * -9.81, 0.0, 0.0, 0.0;
 	
     // Compute what the force and torque should be without any external values by multiplying the 
     // position and rotation transforms with the expected effect of the gravity 
@@ -243,9 +256,9 @@ Eigen::Vector6d compute_external_force(const Eigen::Vector6d& input) {
     wrenchrotate_sensor_world.bottomRightCorner<3,3>() = ee_rotation;
 	
     // Get the weight vector (note that we use the world frame for
-    // gravity so towards -y)
+    // gravity so towards -z)
     Eigen::Vector6d end_effector_weight_in_world;
-    end_effector_weight_in_world << 0.0, end_effector_mass * -9.81, 0.0, 0.0, 0.0, 0.0;
+    end_effector_weight_in_world << 0.0, 0.0, end_effector_mass * -9.81, 0.0, 0.0, 0.0;
 	
     // Compute what the force and torque should be without any
     // external values by multiplying the position and rotation
@@ -259,6 +272,40 @@ Eigen::Vector6d compute_external_force(const Eigen::Vector6d& input) {
     Eigen::Vector6d external = input - expected_ft_reading;
     external = wrenchrotate_sensor_world.transpose() * external;
     return external;
+}
+
+// #############################################################################
+// #############################################################################
+// LOGGING
+// #############################################################################
+// #############################################################################
+
+void init_log_to_file() {
+    if (!do_logging) return;
+    log_file.open(logfile_name);
+    log_time_last = aa_tm_timespec2sec(aa_tm_now());
+    log_time_start = aa_tm_timespec2sec(aa_tm_now());
+}
+
+void end_log_to_file() {
+    if (!do_logging) return;
+    log_file.close();
+}
+
+void do_log_to_file(Eigen::Vector6d r_ft_external, pid_state_t* pids, somatic_motor_t* lwa) {
+    if (!do_logging) return;
+    
+    double now = aa_tm_timespec2sec(aa_tm_now());
+    if (now - log_time_last < 1.0/log_frequency) return;
+    log_time_last = now;
+
+    log_file
+        << now - log_time_start << ","
+        << r_ft_external[2] << ","
+        << pids[0].pos_target << ","
+        << pids[0].vel_target << ","
+        << lwa->pos[0] << ","
+        << lwa->vel[0] << std::endl;
 }
 
 // #############################################################################
@@ -319,12 +366,13 @@ void update_motor_state() {
     somatic_motor_update(&daemon_cx, &waist);
     waist_angle = (waist.pos[0] - waist.pos[1]) / 2.0;
 
-    // read the arm
+    // read the arm and the torso
     somatic_motor_update(&daemon_cx, &rlwa);
+    somatic_motor_update(&daemon_cx, &torso);
 }
 
 void update_dart_state() {
-    // update the waist and imu in dart
+    // update the waist, torso, and imu in dart
     Eigen::VectorXd imu_pos(1);
     imu_pos << imu_angle;
     krang->setConfig(imu_ids, imu_pos);
@@ -333,10 +381,21 @@ void update_dart_state() {
     waist_pos << waist_angle;
     krang->setConfig(waist_ids, waist_pos);
 
+    Eigen::VectorXd torso_pos(1);
+    torso_pos << torso.pos[0];
+    krang->setConfig(torso_ids, torso_pos);
+
     // update the arm
     Eigen::VectorXd arm_pos(7);
     for(int i = 0; i < 7; i++) arm_pos[i] = rlwa.pos[i];
     krang->setConfig(rarm_ids, arm_pos);
+
+    // TODO: figure out what our qdot actaully is based on motor
+    // inforamtion
+    Eigen::VectorXd qDotZero = Eigen::VectorXd::Zero(krang->getNumDofs());
+
+    // update dart's dynamics stuff
+    krang->computeDynamics(world->getGravity(), qDotZero, false);
 }
 
 // #############################################################################
@@ -347,7 +406,10 @@ void update_dart_state() {
 
 void run() {
     // controller variables
-    double rcur_command[7] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    Eigen::VectorXd r_current_command(7); r_current_command.setZero();
+
+    Eigen::VectorXd times(10);
+    int timeidx = 0;
 
     // force compliance variables
     Eigen::Vector6d r_ft_raw;
@@ -357,9 +419,9 @@ void run() {
     for(int i = 0; i < 7; i++) r_arm_vels[i] = 0.0; // in case we skip something important
 
     // loop variables
-    double last_ft_update_time = gettime();
-    double last_display_time = gettime();
-    double last_pid_time = gettime();
+    double last_ft_update_time = aa_tm_timespec2sec(aa_tm_now());
+    double last_display_time = aa_tm_timespec2sec(aa_tm_now());
+    double last_pid_time = aa_tm_timespec2sec(aa_tm_now());
     double now;
     
     // tell the user we're going
@@ -367,13 +429,17 @@ void run() {
     
     while(!somatic_sig_received) {
         // update our time
-        now = gettime();
+        now = aa_tm_timespec2sec(aa_tm_now());
+        timeidx = 0;
+        times[timeidx++] = aa_tm_timespec2sec(aa_tm_now());
         
         // update our motors
         update_motor_state();
+        times[timeidx++] = aa_tm_timespec2sec(aa_tm_now());
         
         // update DART from those
         update_dart_state();
+        times[timeidx++] = aa_tm_timespec2sec(aa_tm_now());
 
         // update the IMU and FT sensor, but don't do it too often
         // because those functions block until they've gotten data.
@@ -390,45 +456,69 @@ void run() {
             r_ft_raw = get_ft();
             r_ft_corrected = r_ft_raw + r_ft_offset;
         }
+        times[timeidx++] = aa_tm_timespec2sec(aa_tm_now());
         
         // figure out the external forces at this tick
         r_ft_external = compute_external_force(r_ft_corrected);
+        times[timeidx++] = aa_tm_timespec2sec(aa_tm_now());
 
         // threshold the external values.
         if ((r_ft_external.topLeftCorner<3,1>().norm() < compliance_threshold_force) &&
             (r_ft_external.bottomLeftCorner<3,1>().norm() < compliance_threshold_torque)) {
             // we're under the threshold, so ignore it and send zero current
             for(int i = 0; i < 7; i++) r_arm_vels[i] = 0.0;
-
-            // TODO: add gravity compensation here
         }
         else {
             // we're above the threshold, so figure out what we need
             // to send to comply
             
-            // first, increase our sensitivity to torques
-            r_ft_external(3) *= 20;
-            r_ft_external(4) *= 20;
-            r_ft_external(5) *= 40;
+            // ignore torques
+            r_ft_external(0) *= 0.0;
+            r_ft_external(1) *= 0.0;
+            r_ft_external(2) *= 1.0;
+            r_ft_external(3) *= 0.0;
+            r_ft_external(4) *= 0.0;
+            r_ft_external(5) *= 0.0;
             
             // figure out our necessary velocity
-            r_arm_vels = wrench_to_joint_vels(r_ft_external);
+            r_arm_vels = wrench_to_joint_vels(r_ft_external, 1.0/300.0);
         }
+        times[timeidx++] = aa_tm_timespec2sec(aa_tm_now());
+
+        // cheating way: just send velocity command raw
+        // somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, r_arm_vels.data(), 7, NULL);
+
+        // simple way: integrate velocity to get position, then
+        // use PID on current to achieve position and velocity.
+        for(int i = 0; i < 7; i++) {
+            rpids[i].vel_target = r_arm_vels[i];
+            rpids[i].pos_target += (now - last_pid_time) * r_arm_vels[i];
+        }
+
+        // for(int i = 0; i < 7; i++) { rpids[i].vel_target = 0.0; }
+        // rpids[0].vel_target = 0.05;
+        // rpids[0].pos_target += (now - last_pid_time) * rpids[0].vel_target;
+
+        update_pids(&rlwa, rpids, r_current_command);
+        times[timeidx++] = aa_tm_timespec2sec(aa_tm_now());
+
+        // figure out the torques that gravity will apply and
+        // oppose them
+        Eigen::VectorXd krang_gravity_vector = krang->getGravityVector();
+        Eigen::Vector7d rarm_gravity_torques;
+        for(int i = 0; i < rarm_ids.size(); i++) {
+            rarm_gravity_torques[i] = krang_gravity_vector[rarm_ids[i]];
+        }
+        times[timeidx++] = aa_tm_timespec2sec(aa_tm_now());
+
+        // turn that into currents and add on to what we're already planning to send
+        r_current_command += rarm_gravity_torques.cwiseProduct(arm_torque_constants);
 
         // now we figure out where to go
         // TODO: convert vels to currents
         if (do_send_cmds) {
-            // cheating way: just send velocity command raw
-            // somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, r_arm_vels.data(), 7, NULL);
-
-            // simple way: integrate velocity to get position, then
-            // use PID on current to achieve position and velocity.
-            for(int i = 0; i < 7; i++) {
-                rpids[i].vel_target = r_arm_vels[i];
-                rpids[i].pos_target += (now - last_pid_time) * r_arm_vels[i];
-            }
-            update_pids(&rlwa, rpids, rcur_command);
-            somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, rcur_command, 7, NULL);
+            // finally, send it
+            somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, r_current_command.data(), 7, NULL);
 
             // right way: use the jacobian to map necessary forces and
             // torques to joint torques, then map joint torques to
@@ -436,24 +526,31 @@ void run() {
 
             last_pid_time = now;
         }
+        times[timeidx++] = aa_tm_timespec2sec(aa_tm_now());
 
-        if (now - last_display_time > 1.0 / display_freq) {
-            last_display_time = now;
-            std::cout << std::setprecision(5);
+        for(int i = 0; i < times.size(); i++) { log_file << times[i] << ","; }
+        log_file << std::endl;
 
-            Eigen::Vector7d rpos_setpoint;
-            Eigen::Vector7d rpos_current;
-            for(int i = 0; i < 7; i++) {
-                rpos_setpoint[i] = rpids[i].pos_target;
-                rpos_current[i] = rlwa.pos[i];
-            }
-            
-            DISPLAY_VECTOR(r_ft_external);
-            DISPLAY_VECTOR(r_arm_vels);
-            DISPLAY_VECTOR(rpos_current);
-            DISPLAY_VECTOR(rpos_setpoint);
-            std::cout << std::endl;
-        }
+        // do_log_to_file(r_ft_external, rpids, &rlwa);
+
+        // if (now - last_display_time > 1.0 / display_freq) {
+        //     last_display_time = now;
+        //     std::cout << std::setprecision(5);
+
+        //     Eigen::Vector7d rpos_setpoint;
+        //     Eigen::Vector7d rpos_current;
+        //     for(int i = 0; i < 7; i++) {
+        //         rpos_setpoint[i] = rpids[i].pos_target;
+        //         rpos_current[i] = rlwa.pos[i];
+        //     }
+
+        //     DISPLAY_VECTOR(r_ft_external);
+        //     DISPLAY_VECTOR(r_arm_vels);
+        //     DISPLAY_VECTOR(rpos_current);
+        //     DISPLAY_VECTOR(rpos_setpoint);
+        //     DISPLAY_VECTOR(r_current_command);
+        //     std::cout << std::endl;
+        // }
     }
 }
 
@@ -464,9 +561,15 @@ void run() {
 // #############################################################################
 
 void init() {
-    // init dart and figure out our mappings. we do this _before_ we
-    // initialize our daemon because somatic_d_init will change our
-    // working directory to the place where somatic logs go.
+    // There are a few things we need to do _before_ we initialize our
+    // daemon because somatic_d_init will change our working directory
+    // to the place where somatic logs go. Specifically, logfiles and
+    // loading dart scenes.
+
+    // start logging.
+    init_log_to_file();
+
+    // init dart and figure out our mappings.
     DartLoader dl;
     world = dl.parseWorld("../../common/scenes/01-World-Robot.urdf");
     assert((world != NULL) && "Could not find the world");
@@ -475,6 +578,7 @@ void init() {
 
     for(int i = 0; i < 7; i++) rarm_ids.push_back(rarm_ids_initializer[i]);
     for(int i = 0; i < 1; i++) waist_ids.push_back(waist_ids_initializer[i]);
+    for(int i = 0; i < 1; i++) torso_ids.push_back(torso_ids_initializer[i]);
     for(int i = 0; i < 1; i++) imu_ids.push_back(imu_ids_initializer[i]);
 
     // init daemon
@@ -483,7 +587,8 @@ void init() {
     daemon_opt.ident = "arm-current-compliance";
     somatic_d_init(&daemon_cx, &daemon_opt);
 
-    // init waist
+    // init waist and torso
+    somatic_motor_init(&daemon_cx, &torso, 1, "torso-cmd", "torso-state");
     somatic_motor_init(&daemon_cx, &waist, 2, "waist-cmd", "waist-state");
 
     // init right arm
@@ -509,9 +614,20 @@ void init() {
     for(size_t i = 0; i < 4; i++) aa_fset(*waist_minimum_values[i], -1024.1, 2);
     for(size_t i = 0; i < 4; i++) aa_fset(*waist_maximum_values[i], 1024.1, 2);
 
+    // set torso joint limits
+    double** torso_minimum_values[] = { &torso.pos_valid_min, &torso.vel_valid_min,
+                                        &torso.pos_limit_min, &torso.vel_limit_min };
+    double** torso_maximum_values[] = { &torso.pos_valid_max, &torso.vel_valid_max,
+                                        &torso.pos_limit_max, &torso.vel_limit_max };
+    for(size_t i = 0; i < 4; i++) aa_fset(*torso_minimum_values[i], -1024.1, 1);
+    for(size_t i = 0; i < 4; i++) aa_fset(*torso_maximum_values[i], 1024.1, 1);
+
     // Open the ach channels for the IMU and FT sensor
     somatic_d_channel_open(&daemon_cx, &imu_chan, "imu-data", NULL);
     somatic_d_channel_open(&daemon_cx, &ft_chan, "rlwa_ft", NULL);
+
+    // initialize the torque constant vector
+    for(int i = 0; i < 7; i++) { arm_torque_constants[i] = arm_torque_constants_initializer[i]; }
 
     // start the daemon running
     somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
@@ -548,6 +664,12 @@ void init() {
         rpids[i].K_v_d = init_K_v_d[i];
         rpids[i].use_pos = use_pos[i];
         rpids[i].use_vel = use_vel[i];
+
+        std::cout << init_K_p_p[i] << ",";
+        std::cout << init_K_p_d[i] << ",";
+        std::cout << init_K_v_p[i] << ",";
+        std::cout << init_K_v_d[i] << ",";
+        std::cout << std::endl;
     }
 }
 
@@ -561,12 +683,16 @@ void destroy() {
     // Send stopping event
     somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, SOMATIC__EVENT__CODES__PROC_STOPPING, NULL, NULL);
 
+    // stop logging
+    end_log_to_file();
+
     // halt and close motors as appropriate
     if (do_send_cmds) {
         somatic_motor_cmd(&daemon_cx, &rlwa, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
     }
     somatic_motor_destroy(&daemon_cx, &rlwa);
     somatic_motor_destroy(&daemon_cx, &waist);
+    somatic_motor_destroy(&daemon_cx, &torso);
 
     // Close imu channel
     somatic_d_channel_close(&daemon_cx, &imu_chan);
