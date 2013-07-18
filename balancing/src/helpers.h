@@ -73,6 +73,7 @@ double jsSpinAmp;				///< The gains for joystick left/right spin input
 
 extern size_t MODE;
 extern Vector6d K_ground;
+extern Vector2d J_ground;
 extern Vector6d K_stand;
 extern Vector6d K_sit;
 extern Vector6d K_bal_low;
@@ -128,6 +129,9 @@ void computeExternal (const Vector6d& input, SkeletonDynamics& robot, Vector6d& 
 
 /// Given the wrench at the FT sensor givers the wrench on the wheels
 void computeWheelWrench(const Vector6d& wrenchSensor, SkeletonDynamics& robot, Vector6d& wheelWrench, bool left);
+
+/// ........
+void readGains();
 
 /* ******************************************************************************************** */
 // Useful macros

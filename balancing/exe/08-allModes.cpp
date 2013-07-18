@@ -58,16 +58,6 @@ Vector6d rightOffset;
 Vector6d rightWheelWrench;
 bool debugGlobal = false, logGlobal = true;
 
-/* ******************************************************************************************** *
-/// Read file for gains
-void readGains () {
-
-	ifstream file ("../gains.txt");
-	for(size_t i = 0; i < 1; i++) {
-		for(size_t j 
-	}
-}
-
 /* ******************************************************************************************** */
 /// Computes the wrench on the wheels due to external force from the f/t sensors' data
 void getExternalWrench (Vector6d& external) {
@@ -178,6 +168,7 @@ void run () {
 		// Get the joystick input for the js_forw and js_spin axes (to set the gains)
 		bool gotInput = false;
 		while(!gotInput) gotInput = getJoystickInput(js_forw, js_spin);
+		if(debug) cout << "js_forw: " << js_forw << ", js_spin: " << js_spin << endl;
 
 		// Get the wrench on the wheel due to external force
 		getExternalWrench(externalWrench);
@@ -199,7 +190,7 @@ void run () {
 		
 		// Compute the balancing angle reference using the center of mass, total mass and felt wrench.
 		if(complyTorque) computeBalAngleRef(com, averagedTorque, refState(0));
-		if(debug) cout << "\nrefState: " << refState.transpose() << endl;
+		if(debug) cout << "refState: " << refState.transpose() << endl;
 
 		// =======================================================================
 		// Apply control: compute error, threshold and send current
@@ -209,6 +200,7 @@ void run () {
 		error = state - refState;
 		double u = K.topLeftCorner<4,1>().dot(error.topLeftCorner<4,1>());
 		double u_spin =  -K.bottomLeftCorner<2,1>().dot(error.bottomLeftCorner<2,1>());
+		u_spin = max(-15.0, min(15.0, u_spin));
     	
 		// Compute the input for left and right wheels
 		double input [2] = {u + u_spin, u - u_spin};
@@ -404,6 +396,8 @@ int main(int argc, char* argv[]) {
 	
 	cout << "K_bal: " << K_bal.transpose() << "\nPress enter: " << endl;
 */
+
+	readGains();
 
 	// Debug options from command line
 	debugGlobal = 1; logGlobal = 0;
