@@ -64,11 +64,22 @@ SkeletonDynamics* robot;			///< the robot representation in dart
 
 bool start = false;						///< Giving time to the user to get the robot in balancing angle
 bool complyTorque = false;
-Vector6d K_bal;								///< The gains for the balancing controller
-Vector6d K_stand;							///< The gains for the standing controller
 
 double jsFwdAmp;				///< The gains for joystick forward/reverse input
 double jsSpinAmp;				///< The gains for joystick left/right spin input
+
+/* ******************************************************************************************** */
+// All the freaking gains
+
+extern size_t MODE;
+extern Vector6d K_ground;
+extern Vector2d J_ground;
+extern Vector6d K_stand;
+extern Vector2d J_stand;
+extern Vector6d K_sit;
+extern Vector2d J_sit;
+extern Vector6d K_bal_low;
+extern Vector6d K;	
 
 /* ******************************************************************************************** */
 // The arm indices to set/get configurations from dart
@@ -99,7 +110,7 @@ bool getJoystickInput(double& js_forw, double& js_spin);
 void updateReference (double js_forw, double js_spin, double dt, Vector6d& refState);
 
 /// Get the joint values from the encoders and the imu and compute the center of mass as well 
-void getState(Vector6d& state, double dt, Vector3d* com = NULL);
+void getState(Vector6d& state, double dt, Vector3d* com = NULL, double* imu = NULL);
 
 /// Updates the dart robot representation
 void updateDart (double imu);
@@ -120,6 +131,9 @@ void computeExternal (const Vector6d& input, SkeletonDynamics& robot, Vector6d& 
 
 /// Given the wrench at the FT sensor givers the wrench on the wheels
 void computeWheelWrench(const Vector6d& wrenchSensor, SkeletonDynamics& robot, Vector6d& wheelWrench, bool left);
+
+/// ........
+void readGains();
 
 /* ******************************************************************************************** */
 // Useful macros

@@ -7,8 +7,24 @@
 
 #include "helpers.h"
 
+#include <iostream>
+#include <fstream>
+#include <sstream>
+
 using namespace Eigen;
 using namespace std;
+
+/* ******************************************************************************************** */
+// Initialize the gains for controller and joystick
+
+size_t MODE = 0;
+Vector6d K_ground = (Vector6d() << 0.0, 0.0, 0.0, -20.0, 0.0, 20.0).finished();
+Vector2d J_ground (1.0, 1.0);
+Vector6d K_stand;
+Vector2d J_stand;
+Vector6d K_sit;
+Vector2d J_sit;
+Vector6d K;
 
 /* ******************************************************************************************** */
 // Constants for the robot kinematics
@@ -52,11 +68,12 @@ void updateDart (double imu) {
 
 /* ******************************************************************************************** */
 /// Get the joint values from the encoders and the imu and compute the center of mass as well 
-void getState(Vector6d& state, double dt, Vector3d* com_) {
+void getState(Vector6d& state, double dt, Vector3d* com_, double* imu_) {
 
 	// Read imu
 	double imu, imuSpeed;
 	getImu(&imuChan, imu, imuSpeed, dt, kf); 
+	if(imu_ != NULL) *imu_ = imu;
 
 	// Read Motors 
 	somatic_motor_update(&daemon_cx, &amc);
@@ -75,8 +92,8 @@ void getState(Vector6d& state, double dt, Vector3d* com_) {
 	state(1) = imuSpeed;
 	state(2) = (amc.pos[0] + amc.pos[1])/2.0 + imu;
 	state(3) = (amc.vel[0] + amc.vel[1])/2.0 + imuSpeed;
-	state(4) = wheelRadius * (amc.pos[0] - amc.pos[1]) / distanceBetweenWheels;
-	state(5) = wheelRadius * (amc.vel[0] - amc.vel[1]) / distanceBetweenWheels;
+	state(4) = (amc.pos[0] - amc.pos[1]) / 2.0;
+	state(5) = (amc.vel[0] - amc.vel[1]) / 2.0;
 
 	// Making adjustment in com to make it consistent with the hack above for state(0)
 	com(0) = com(2) * tan(state(0));
@@ -90,9 +107,8 @@ void updateReference (double js_forw, double js_spin, double dt, Vector6d& refSt
 	refState(0) = refState(1) = 0.0;
 
 	// Set the distance and heading velocities using the joystick input
-	static const double kMaxForwVel = 2.0, kMaxSpinVel = 3.0;
-	refState(3) = kMaxForwVel * js_forw;
-	refState(5) = kMaxSpinVel * js_spin;
+	refState(3) = js_forw;
+	refState(5) = js_spin;
 
 	// Integrate the reference positions with the current reference velocities
 	refState(2) += dt * refState(3);
@@ -113,8 +129,8 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 	double deltaTH = 0.2, deltaX = 0.02;
 	int64_t* b = &(js_msg->buttons->data[0]);
 	for(size_t i = 0; i < 4; i++) {
-		if((b[5] == 0) && (b[i] == 1)) K_bal(i % 2) += ((i < 2) ? deltaTH : -deltaTH);
-		else if((b[5] == 1) && (b[i] == 1)) K_bal((i % 2) + 2) += ((i < 2) ? deltaX : -deltaX);
+		if((b[5] == 0) && (b[i] == 1)) K(i % 2) += ((i < 2) ? deltaTH : -deltaTH);
+		else if((b[5] == 1) && (b[i] == 1)) K((i % 2) + 2) += ((i < 2) ? deltaX : -deltaX);
 	}
 	
 	// Ignore the joystick statements for the arm control 
@@ -125,9 +141,43 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 
 	// Set the values for the axis
 	double* x = &(js_msg->axes->data[0]);
-	js_forw = -x[1] * jsFwdAmp;
-	js_spin = x[2] * jsSpinAmp;; 
+	if(MODE == 1) {
+		js_forw = -J_ground(0) * x[1], js_spin = J_ground(1) * x[2];
+	}
+	else {
+		js_forw = -x[1] * jsFwdAmp;
+		js_spin = x[2] * jsSpinAmp;; 
+	}
 	return true;
+}
+
+/* ******************************************************************************************** */
+/// Read file for gains
+void readGains () {
+
+	Vector6d* kgains [] = {&K_ground, &K_stand, &K_sit};
+	Vector2d* jgains [] = {&J_ground, &J_stand, &J_sit};
+	ifstream file ("../gains.txt");
+	assert(file.is_open());
+	char line [1024];
+	for(size_t k_idx = 0; k_idx < 3; k_idx++) {
+		*kgains[k_idx] = Vector6d::Zero();
+		*jgains[k_idx] = Vector2d::Zero();
+		file.getline(line, 1024);
+		std::stringstream stream(line, std::stringstream::in);
+		size_t i = 0;
+		double newDouble;
+		while ((i < 6) && (stream >> newDouble)) (*kgains[k_idx])(i++) = newDouble;
+		while (stream >> newDouble) (*jgains[k_idx])(i++ - 6) = newDouble;
+	}
+	file.close();
+
+	pv(K_ground);
+	pv(J_ground);
+	pv(K_stand);
+	pv(J_stand);
+	pv(K_sit);
+	pv(J_sit);
 }
 
 /* ********************************************************************************************* */
@@ -138,6 +188,24 @@ void *kbhit(void *) {
 		input=cin.get(); 
 		if(input=='s') start = true; 
 		else if(input=='t') complyTorque = true; 
+		else if(input=='.') readGains();
+		else if(input=='1') {
+			printf("Mode 1\n"); 
+			K = K_ground;
+			MODE = 1;
+		}
+		else if(input=='2') {
+			printf("Mode 2\n"); 
+			K = K_stand;
+			MODE = 1;
+		}
+		else if(input=='3') {
+			printf("Mode 3\n"); 
+			K = K_sit;
+			MODE = 1;
+		}
+
+
 	}
 	start = true;
 }
