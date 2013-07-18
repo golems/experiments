@@ -15,6 +15,7 @@
 #include <somatic/motor.h>
 #include <somatic.pb-c.h>
 #include <robotiqd.h>
+#include <filter.h>
 
 #include <Eigen/Dense>
 #include <simulation/World.h>
@@ -69,9 +70,12 @@ protected:
 	std::vector<int> waistIDs;
 
 	// IMU stuff
-	static const double csr = -.7853981634; // Angle that the DMU is mounted at: 45 degrees.
 	ach_channel_t imu_chan;
-	double ssdmu_pitch(double x, double y, double z); ///< helper for converting IMU data to a scalar pitch
+	filter_kalman_t *kf;					///< the kalman filter to smooth the imu readings
+	double imu_angle;
+	double imu_speed;
+	//double ssdmu_pitch(double x, double y, double z); ///< helper for converting IMU data to a scalar pitch
+
 
 	// initialization helpers
 	void setDartIDs(simulation::World* world); ///< sets all relevant skeleton Dof IDs for the robot
@@ -84,7 +88,8 @@ protected:
 	void initIMU(somatic_d_t& daemon_cx, ach_channel_t &imu_chan);
 
 	// update method helpers
-	double getIMUPitch();
+	//double getIMUPitch();
+	void getIMU();
 	void updateRobotSkelFromSomaticMotor(simulation::World* world, somatic_d_t &daemon_cx, somatic_motor_t &mot, std::vector<int> &IDs);
 	void updateRobotSkelFromSomaticWaist(simulation::World* world, somatic_d_t &daemon_cx, somatic_motor_t &waist, std::vector<int> &waistIDs);
 	void updateRobotSkelFromIMU(simulation::World* world);

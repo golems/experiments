@@ -55,6 +55,10 @@ enum DynamicSimulationTabEvents {
 	id_checkbox_ToggleRightTrackLeftMode,
 };
 
+enum sliderNames{
+	GAIN_SLIDER = 1000,
+};
+
 // control globals
 enum UI_MODES {
 	UI_LIBERTY = 0,
@@ -65,6 +69,7 @@ static bool motor_input_mode = 0;
 static bool motor_output_mode = 0;
 static bool motors_initialized = 0;
 static bool right_track_left_mode = 0;
+double xdot_gain = 5.0;
 static int ui_input_mode = UI_JOYSTICK;
 
 // Pointers to frequently used dart data structures
@@ -144,7 +149,18 @@ void handleSpacenavButtons(const VectorXi &buttons, ach_channel_t &grip_chan) {
 }
 
 /* ********************************************************************************************* */
-void SimTab::OnSlider(wxCommandEvent &evt) {}
+void SimTab::OnSlider(wxCommandEvent &evt) {
+	int slnum = evt.GetId();
+	double pos = *(double*)evt.GetClientData();
+	switch(slnum) {
+	      //-- Change joint value
+	    case GAIN_SLIDER: {
+	    	xdot_gain = pos;
+	    	cout << "set xdot gain: " << xdot_gain << endl;
+	    	break;
+	    }
+	}
+}
 
 /* ********************************************************************************************* */
 // Handler for events
@@ -169,7 +185,6 @@ void Timer::Notify() {
 	double dt = current_time - last_movement_time;
 	last_movement_time = current_time;
 
-
 	// update robot state from ach if we're controlling the actual robot
 	if (motor_input_mode)
 		krang.updateKrangSkeleton(mWorld);
@@ -189,8 +204,8 @@ void Timer::Notify() {
 
 	VectorXd qL = krang.getArmConfig(mWorld, LEFT_ARM);
 	VectorXd qR = krang.getArmConfig(mWorld, RIGHT_ARM);
-	VectorXd qdotL = wrkCtl.xdotToQdot(LEFT_ARM, 5.0, 0.01, &qL, NULL);
-	VectorXd qdotR = wrkCtl.xdotToQdot(RIGHT_ARM, 5.0, 0.01, &qR, NULL);
+	VectorXd qdotL = wrkCtl.xdotToQdot(LEFT_ARM, xdot_gain, 0.01, &qL, NULL);
+	VectorXd qdotR = wrkCtl.xdotToQdot(RIGHT_ARM, xdot_gain, 0.01, &qR, NULL);
 
 	krang.setRobotArmVelocities(mWorld, LEFT_ARM, qdotL, dt);
 	krang.setRobotArmVelocities(mWorld, RIGHT_ARM, qdotR, dt);
@@ -198,8 +213,8 @@ void Timer::Notify() {
 	// handle grippers
 	VectorXi buttons1 = spn1.getButtons();
 	VectorXi buttons2 = spn2.getButtons();
-	cout << "buttons1 "<< buttons1.transpose() << endl;
-	cout << "buttons2 "<< buttons2.transpose() << endl;
+//	cout << "buttons1 "<< buttons1.transpose() << endl;
+//	cout << "buttons2 "<< buttons2.transpose() << endl;
 	krang.setRobotiqGripperAction(LEFT_ARM, buttons1);
 	krang.setRobotiqGripperAction(RIGHT_ARM, buttons2);
 
@@ -232,6 +247,7 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 
 	ss3BoxS->Add(new wxCheckBox(this, id_checkbox_ToggleMotorOutputMode, wxT("Send Motor Commands")), 0, wxALL, 1);
 	ss3BoxS->Add(new wxCheckBox(this, id_checkbox_ToggleRightTrackLeftMode, wxT("Track left arm with right")), 0, wxALL, 1);
+	ss3BoxS->Add(new GRIPSlider("Gain",0,20,500,5.0,100,500,this,GAIN_SLIDER), 0, wxALL, 1);
 
 	sizerFull->Add(ss1BoxS, 1, wxEXPAND | wxALL, 6);
 	sizerFull->Add(ss2BoxS, 1, wxEXPAND | wxALL, 6);

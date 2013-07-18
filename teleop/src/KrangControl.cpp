@@ -118,12 +118,12 @@ void KrangControl::halt() {
 	initialized = false;
 }
 
-double KrangControl::ssdmu_pitch(double x, double y, double z) {
-
-    double newX;
-    newX = x*cos(csr) - y*sin(csr);
-    return atan2(newX, z);
-}
+//double KrangControl::ssdmu_pitch(double x, double y, double z) {
+//
+//    double newX;
+//    newX = x*cos(csr) - y*sin(csr);
+//    return atan2(newX, z);
+//}
 
 void KrangControl::setDartIDs(simulation::World* world) {
 	// IDs for various krang body parts, hard-coded for now
@@ -201,6 +201,19 @@ void KrangControl::haltArm(somatic_d_t& daemon_cx, somatic_motor_t& arm) {
 void KrangControl::initIMU(somatic_d_t& daemon_cx, ach_channel_t& imu_chan) {
 
 	somatic_d_channel_open(&daemon_cx, &imu_chan, "imu-data", NULL);
+
+	// Set the offset values to amc motor group so initial wheel pos readings are zero
+	getIMU();
+
+	usleep(1e5);
+
+	// Initialize kalman filter for the imu and set the measurement and meas. noise matrices
+	// Also, set the initial reading to the current imu reading to stop moving from 0 to current
+	kf = new filter_kalman_t;
+	filter_kalman_init(kf, 2, 0, 2);
+	kf->C[0] = kf->C[3] = 1.0;
+	kf->Q[0] = kf->Q[3] = 1e-3;
+	kf->x[0] = imu_angle, kf->x[1] = imu_speed;
 }
 
 void KrangControl::initWaist(somatic_d_t& daemon_cx, somatic_motor_t& waist) {
@@ -270,115 +283,75 @@ void KrangControl::initSchunkGripper(somatic_d_t& daemon_cx, somatic_motor_t& gr
 	usleep(1e5);
 }
 
-double KrangControl::getIMUPitch() {
-    // Get a message
-    int r;
-    struct timespec timeout = aa_tm_future(aa_tm_sec2timespec(1.0/30.0));
-    Somatic__Vector *imu_msg = SOMATIC_WAIT_LAST_UNPACK(r, somatic__vector,
-                                                        &protobuf_c_system_allocator,
-                                                        IMU_CHANNEL_SIZE,
-                                                        &imu_chan,
-                                                        &timeout);
-    assert((imu_msg != NULL) && "Didn't get IMU message!");
-
-    // extract the data into something we can use
-    double imu_sample_x  = imu_msg->data[0];
-    double imu_sample_y  = imu_msg->data[1];
-    double imu_sample_z  = imu_msg->data[2];
-
-    // Free the unpacked message
-    somatic__vector__free_unpacked( imu_msg, &protobuf_c_system_allocator );
-
-    // compute our result and return it
-    //return -ssdmu_pitch(imu_sample_x, imu_sample_y, imu_sample_z) + M_PI/2;
-    return 3.4418;
-}
-
 void KrangControl::updateRobotSkelFromIMU(simulation::World* world) {
 	dynamics::SkeletonDynamics* krang = world->getSkeleton("Krang");
+
 	Eigen::VectorXd imu_pos(1);
-	imu_pos << getIMUPitch();
+	getIMU();
+	imu_pos << -imu_angle + M_PI/2;
 	krang->setConfig(imuIDs, imu_pos);
 }
 
 
+/// Computes the imu value from the imu readings
+void KrangControl::getIMU() {
 
-/*
- * SANDBOX FOR HACKING
- */
+	// ======================================================================
+	// Get the readings
 
-//filter_kalman_t *kf;					///< the kalman filter to smooth the imu readings
-//
-///// Computes the imu value from the imu readings
-//void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt,
-//		filter_kalman_t* kf) {
-//
-//	// ======================================================================
-//	// Get the readings
-//
-//	// Get the value
-//	int r;
-//	struct timespec currTime;
-//	clock_gettime(CLOCK_MONOTONIC, &currTime);
-//	struct timespec abstime = aa_tm_add(aa_tm_sec2timespec(1.0/30.0), currTime);
-//	Somatic__Vector *imu_msg = SOMATIC_WAIT_LAST_UNPACK(r, somatic__vector,
-//			&protobuf_c_system_allocator, IMU_CHANNEL_SIZE, imuChan, &abstime );
-//	assert((imu_msg != NULL) && "Imu message is faulty!");
-//
-//	// Get the imu position and velocity value from the readings (note imu mounted at 45 deg).
-//	static const double mountAngle = -.7853981634;
-//	double newX = imu_msg->data[0] * cos(mountAngle) - imu_msg->data[1] * sin(mountAngle);
-//	_imu = atan2(newX, imu_msg->data[2]);
-//	_imuSpeed = imu_msg->data[3] * sin(mountAngle) + imu_msg->data[4] * cos(mountAngle);
-//
-//	// Free the unpacked message
-//	somatic__vector__free_unpacked( imu_msg, &protobuf_c_system_allocator );
-//
-//	// ======================================================================
-//	// Filter the readings
-//
-//	// Skip if a filter is not provided
-//	if(kf == NULL) return;
-//
-//	// Setup the data
-//	kf->z[0] = _imu, kf->z[1] = _imuSpeed;
-//
-//	// Setup the time-dependent process matrix
-//	kf->A[0] = kf->A[3] = 1.0;
-//	kf->A[2] = dt;
-//
-//	// Setup the process noise matrix
-//	static const double k1 = 2.0;
-//	static const double k1b = 5.0;
-//	kf->R[0] = (dt*dt*dt*dt) * k1 * (1.0 / 4.0);
-//	kf->R[1] = (dt*dt*dt) * k1 * (1.0 / 2.0);
-//	kf->R[2] = (dt*dt*dt) * k1 * (1.0 / 2.0);
-//	kf->R[3] = (dt*dt) * k1b;
-//
-//	// First make a prediction of what the reading should have been, then correct it
-//	filter_kalman_predict(kf);
-//	filter_kalman_correct(kf);
-//
-//	// Set the values
-//	_imu = kf->x[0], _imuSpeed = kf->x[1];
-//}
-//
-//void initIMUFilter() {
-//
-//	// Set the offset values to amc motor group so initial wheel pos readings are zero
-//	double imu, imuSpeed;
-//	getImu(&imuChan, imu, imuSpeed, 0.0, NULL);
-//
-//	usleep(1e5);
-//
-//	// Initialize kalman filter for the imu and set the measurement and meas. noise matrices
-//	// Also, set the initial reading to the current imu reading to stop moving from 0 to current
-//	kf = new filter_kalman_t;
-//	filter_kalman_init(kf, 2, 0, 2);
-//	kf->C[0] = kf->C[3] = 1.0;
-//	kf->Q[0] = kf->Q[3] = 1e-3;
-//	kf->x[0] = imu, kf->x[1] = imuSpeed;
-//}
+	// Compute timestep
+	static double last_movement_time = aa_tm_timespec2sec(aa_tm_now());
+	double current_time = aa_tm_timespec2sec(aa_tm_now());
+	double dt = current_time - last_movement_time;
+	last_movement_time = current_time;
+
+	// Get the value
+	int r;
+	struct timespec currTime;
+	clock_gettime(CLOCK_MONOTONIC, &currTime);
+	struct timespec abstime = aa_tm_add(aa_tm_sec2timespec(1.0/30.0), currTime);
+	Somatic__Vector *imu_msg = SOMATIC_WAIT_LAST_UNPACK(r, somatic__vector,
+			&protobuf_c_system_allocator, IMU_CHANNEL_SIZE, &imu_chan, &abstime);
+	assert((imu_msg != NULL) && "Imu message is faulty!");
+
+	// Get the imu position and velocity value from the readings (note imu mounted at 45 deg).
+	static const double mountAngle = -.7853981634;
+	double newX = imu_msg->data[0] * cos(mountAngle) - imu_msg->data[1] * sin(mountAngle);
+	imu_angle = atan2(newX, imu_msg->data[2]);
+	imu_speed = imu_msg->data[3] * sin(mountAngle) + imu_msg->data[4] * cos(mountAngle);
+
+	// Free the unpacked message
+	somatic__vector__free_unpacked( imu_msg, &protobuf_c_system_allocator );
+
+	// ======================================================================
+	// Filter the readings
+
+	// Skip if a filter is not provided
+	if(kf == NULL) return;
+
+	// Setup the data
+	kf->z[0] = imu_angle, kf->z[1] = imu_speed;
+
+	// Setup the time-dependent process matrix
+	kf->A[0] = kf->A[3] = 1.0;
+	kf->A[2] = dt;
+
+	// Setup the process noise matrix
+	static const double k1 = 2.0;
+	static const double k1b = 5.0;
+	kf->R[0] = (dt*dt*dt*dt) * k1 * (1.0 / 4.0);
+	kf->R[1] = (dt*dt*dt) * k1 * (1.0 / 2.0);
+	kf->R[2] = (dt*dt*dt) * k1 * (1.0 / 2.0);
+	kf->R[3] = (dt*dt) * k1b;
+
+	// First make a prediction of what the reading should have been, then correct it
+	filter_kalman_predict(kf);
+	filter_kalman_correct(kf);
+
+	// Set the values
+	imu_angle = kf->x[0], imu_speed = kf->x[1];
+}
+
 
 /*
  * ENDSANDBOX

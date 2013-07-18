@@ -31,8 +31,11 @@ protected:
 	// Channel members
 	somatic_d_t daemon_cx;
 	uint8_t *achbuf_liberty;
-	size_t n_achbuf_liberty = 1024;
+	static const size_t n_achbuf_liberty = 1024;
 	ach_channel_t liberty_chan; // global b/c why would you change it
+
+	std::vector<Eigen::Matrix4d> initPoses;
+	std::vector<Eigen::Matrix4d> curPoses;
 
 };
 

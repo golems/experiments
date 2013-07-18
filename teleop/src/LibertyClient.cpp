@@ -16,12 +16,11 @@ LibertyClient::~LibertyClient() {
 	// TODO Auto-generated destructor stub
 }
 
-void LibertyClient::initLiberty() {
-	int r = ach_open(&js_chan, channel_name, NULL);
-	aa_hard_assert(r == ACH_OK, "Ach failure '%s' on opening Joystick channel (%s, line %d)\n",
-			ach_result_to_string(static_cast<ach_status_t>(r)), __FILE__, __LINE__);
+void LibertyClient::initLiberty(somatic_d_t *daemon_cx, const char* chan_name) {
+	somatic_d_channel_open(daemon_cx, &liberty_chan, chan_name, NULL);
 }
 
-bool LibertyClient::getLibertyPoses(Eigen::MatrixXd* poses[], size_t n_chan,
-		int* chan_ids) {
+bool LibertyClient::getLibertyPoses(Eigen::MatrixXd* poses[], size_t n_chan, int* chan_ids) {
+
+
 }
