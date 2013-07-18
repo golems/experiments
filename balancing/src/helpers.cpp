@@ -24,6 +24,8 @@ Vector6d K_stand;
 Vector2d J_stand;
 Vector6d K_sit;
 Vector2d J_sit;
+Vector6d K_balLow;
+Vector2d J_balLow;
 Vector6d K;
 
 /* ******************************************************************************************** */
@@ -92,8 +94,8 @@ void getState(Vector6d& state, double dt, Vector3d* com_, double* imu_) {
 	state(1) = imuSpeed;
 	state(2) = (amc.pos[0] + amc.pos[1])/2.0 + imu;
 	state(3) = (amc.vel[0] + amc.vel[1])/2.0 + imuSpeed;
-	state(4) = (amc.pos[0] - amc.pos[1]) / 2.0;
-	state(5) = (amc.vel[0] - amc.vel[1]) / 2.0;
+	state(4) = (amc.pos[1] - amc.pos[0]) / 2.0;
+	state(5) = (amc.vel[1] - amc.vel[0]) / 2.0;
 
 	// Making adjustment in com to make it consistent with the hack above for state(0)
 	com(0) = com(2) * tan(state(0));
@@ -126,11 +128,12 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 	if(!(ACH_OK == r || ACH_MISSED_FRAME == r) || (js_msg == NULL)) return false;
 
 	// Change the gains with the given joystick input
-	double deltaTH = 0.2, deltaX = 0.02;
+	double deltaTH = 0.2, deltaX = 0.02, deltaSpin = 0.02;
 	int64_t* b = &(js_msg->buttons->data[0]);
 	for(size_t i = 0; i < 4; i++) {
-		if((b[5] == 0) && (b[i] == 1)) K(i % 2) += ((i < 2) ? deltaTH : -deltaTH);
+		if(((b[5] == 0) && (b[7] == 0)) && (b[i] == 1)) K(i % 2) += ((i < 2) ? deltaTH : -deltaTH);
 		else if((b[5] == 1) && (b[i] == 1)) K((i % 2) + 2) += ((i < 2) ? deltaX : -deltaX);
+		else if((b[7] == 1) && (b[i] == 1)) K((i % 2) + 4) += ((i < 2) ? deltaSpin : -deltaSpin);
 	}
 	
 	// Ignore the joystick statements for the arm control 
@@ -144,6 +147,9 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 	if(MODE == 1) {
 		js_forw = -J_ground(0) * x[1], js_spin = J_ground(1) * x[2];
 	}
+	else if(MODE == 4) {
+		js_forw = -J_balLow(0) * x[1], js_spin = J_balLow(1) * x[2];
+	}
 	else {
 		js_forw = -x[1] * jsFwdAmp;
 		js_spin = x[2] * jsSpinAmp;; 
@@ -155,12 +161,12 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 /// Read file for gains
 void readGains () {
 
-	Vector6d* kgains [] = {&K_ground, &K_stand, &K_sit};
-	Vector2d* jgains [] = {&J_ground, &J_stand, &J_sit};
+	Vector6d* kgains [] = {&K_ground, &K_stand, &K_sit, &K_balLow};
+	Vector2d* jgains [] = {&J_ground, &J_stand, &J_sit, &J_balLow};
 	ifstream file ("../gains.txt");
 	assert(file.is_open());
 	char line [1024];
-	for(size_t k_idx = 0; k_idx < 3; k_idx++) {
+	for(size_t k_idx = 0; k_idx < 4; k_idx++) {
 		*kgains[k_idx] = Vector6d::Zero();
 		*jgains[k_idx] = Vector2d::Zero();
 		file.getline(line, 1024);
@@ -178,6 +184,8 @@ void readGains () {
 	pv(J_stand);
 	pv(K_sit);
 	pv(J_sit);
+	pv(K_balLow);
+	pv(J_balLow);
 }
 
 /* ********************************************************************************************* */
@@ -203,6 +211,11 @@ void *kbhit(void *) {
 			printf("Mode 3\n"); 
 			K = K_sit;
 			MODE = 3;
+		}
+		else if(input=='4') {
+			printf("Mode 4\n"); 
+			K = K_balLow;
+			MODE = 4;
 		}
 
 

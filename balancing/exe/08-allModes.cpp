@@ -140,10 +140,18 @@ void run () {
 	
 	// Continue processing data until stop received
 	double js_forw = 0.0, js_spin = 0.0, averagedTorque = 0.0, lastUleft = 0.0, lastUright = 0.0;
+	size_t mode4iter = 0, mode4iterLimit = 100;
+	size_t lastMode = MODE;
 	while(!somatic_sig_received) {
 
 		bool debug = debugGlobal & (c_++ % 20 == 0);
 		if(debug) cout << "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv\n" << endl;
+
+		// Cancel any position built up in previous mode
+		if(lastMode != MODE) {
+			refState(2) = state(2), refState(4) = state(4);
+			lastMode = MODE;
+		}
 
 		// =======================================================================
 		// Get inputs: time, joint states, joystick and external forces
@@ -207,15 +215,25 @@ void run () {
 				printf("imu (%lf) < limit (%lf): changing to mode 1\n", imu, limit);
 				MODE = 1;
 				K = K_ground;
+
 			}
 			else error(0) = imu - limit;
+		}
+		else if(MODE == 2) {
+			if(fabs(state(0)) < 0.01) mode4iter++;
+			// Change to mode 4 (balance low) if stood up enough
+			if(mode4iter > mode4iterLimit) {
+				MODE = 4;
+				mode4iter = 0;
+				K = K_balLow;
+			}
 		}
 		if(debug) cout << "error: " << error.transpose() << ", imu: " << imu / M_PI * 180.0 << endl;
 
 		// Compute the current
 		double u = K.topLeftCorner<4,1>().dot(error.topLeftCorner<4,1>());
 		double u_spin =  -K.bottomLeftCorner<2,1>().dot(error.bottomLeftCorner<2,1>());
-		u_spin = max(-20.0, min(20.0, u_spin));
+		u_spin = max(-15.0, min(15.0, u_spin));
     	
 		// Compute the input for left and right wheels
 		double input [2] = {u + u_spin, u - u_spin};
