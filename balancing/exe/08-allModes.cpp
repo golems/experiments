@@ -155,7 +155,8 @@ void run () {
 		time += dt;
 
 		// Get the current state and ask the user if they want to start
-		getState(state, dt, &com);
+		double imu = 0.0;
+		getState(state, dt, &com, &imu);
 		if(debug) cout << "\nstate: " << state.transpose() << endl;
 
 		// Print the information about the last iteration (after reading effects of it from sensors)
@@ -198,6 +199,12 @@ void run () {
 		// Compute the error term between reference and current, and weight with gains (spin separate)
 		if(debug) cout << "K: " << K.transpose() << endl;
 		error = state - refState;
+
+		// If we are in the sit down mode, over write the reference
+		if(MODE == 3) error(0) = imu - ((-103.0 / 180.0) * M_PI);
+		if(debug) cout << "error: " << error.transpose() << ", imu: " << imu / M_PI * 180.0 << endl;
+
+		// Compute the current
 		double u = K.topLeftCorner<4,1>().dot(error.topLeftCorner<4,1>());
 		double u_spin =  -K.bottomLeftCorner<2,1>().dot(error.bottomLeftCorner<2,1>());
 		u_spin = max(-15.0, min(15.0, u_spin));

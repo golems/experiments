@@ -75,7 +75,9 @@ extern size_t MODE;
 extern Vector6d K_ground;
 extern Vector2d J_ground;
 extern Vector6d K_stand;
+extern Vector2d J_stand;
 extern Vector6d K_sit;
+extern Vector2d J_sit;
 extern Vector6d K_bal_low;
 extern Vector6d K;	
 
@@ -108,7 +110,7 @@ bool getJoystickInput(double& js_forw, double& js_spin);
 void updateReference (double js_forw, double js_spin, double dt, Vector6d& refState);
 
 /// Get the joint values from the encoders and the imu and compute the center of mass as well 
-void getState(Vector6d& state, double dt, Vector3d* com = NULL);
+void getState(Vector6d& state, double dt, Vector3d* com = NULL, double* imu = NULL);
 
 /// Updates the dart robot representation
 void updateDart (double imu);

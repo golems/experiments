@@ -22,6 +22,8 @@ Vector6d K_ground = (Vector6d() << 0.0, 0.0, 0.0, -20.0, 0.0, 20.0).finished();
 Vector2d J_ground (1.0, 1.0);
 Vector6d K_stand;
 Vector2d J_stand;
+Vector6d K_sit;
+Vector2d J_sit;
 Vector6d K;
 
 /* ******************************************************************************************** */
@@ -66,11 +68,12 @@ void updateDart (double imu) {
 
 /* ******************************************************************************************** */
 /// Get the joint values from the encoders and the imu and compute the center of mass as well 
-void getState(Vector6d& state, double dt, Vector3d* com_) {
+void getState(Vector6d& state, double dt, Vector3d* com_, double* imu_) {
 
 	// Read imu
 	double imu, imuSpeed;
 	getImu(&imuChan, imu, imuSpeed, dt, kf); 
+	if(imu_ != NULL) *imu_ = imu;
 
 	// Read Motors 
 	somatic_motor_update(&daemon_cx, &amc);
@@ -152,12 +155,12 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 /// Read file for gains
 void readGains () {
 
-	Vector6d* kgains [] = {&K_ground, &K_stand};
-	Vector2d* jgains [] = {&J_ground, &J_stand};
+	Vector6d* kgains [] = {&K_ground, &K_stand, &K_sit};
+	Vector2d* jgains [] = {&J_ground, &J_stand, &J_sit};
 	ifstream file ("../gains.txt");
 	assert(file.is_open());
 	char line [1024];
-	for(size_t k_idx = 0; k_idx < 2; k_idx++) {
+	for(size_t k_idx = 0; k_idx < 3; k_idx++) {
 		*kgains[k_idx] = Vector6d::Zero();
 		*jgains[k_idx] = Vector2d::Zero();
 		file.getline(line, 1024);
@@ -173,6 +176,8 @@ void readGains () {
 	pv(J_ground);
 	pv(K_stand);
 	pv(J_stand);
+	pv(K_sit);
+	pv(J_sit);
 }
 
 /* ********************************************************************************************* */
@@ -194,6 +199,12 @@ void *kbhit(void *) {
 			K = K_stand;
 			MODE = 1;
 		}
+		else if(input=='3') {
+			printf("Mode 3\n"); 
+			K = K_sit;
+			MODE = 1;
+		}
+
 
 	}
 	start = true;
