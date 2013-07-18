@@ -20,7 +20,13 @@
 #include <Eigen/Dense>
 #include <simulation/World.h>
 
-#include "WorkspaceControl.h" // just for lwa_arm_t
+//#include "WorkspaceControl.h" // just for lwa_arm_t
+
+//TODO: should dump this in a namespace
+typedef enum arm {
+	LEFT_ARM = 0,
+	RIGHT_ARM
+} lwa_arm_t;
 
 ///< An enum for controlling whether we're dispatching actual motor commands or faking it
 //typedef enum CTL_MODES {
@@ -44,6 +50,7 @@ public:
 	void updateKrangSkeleton(simulation::World* world);
 	Eigen::VectorXd getArmConfig(simulation::World* world, lwa_arm_t arm);
 	void setArmConfig(simulation::World* world, lwa_arm_t arm, Eigen::VectorXd &config);
+	Eigen::Matrix4d getEffectorPose(simulation::World* world, lwa_arm_t arm);
 
 	// control methods
 	void setControlMode(bool mode);
@@ -65,6 +72,7 @@ protected:
 	std::vector<ach_channel_t> robotiq_gripper_channels; ///< ach channels for robotiq
 
 	// dart IDs
+	std::vector<std::string> armNodeNames;
 	std::vector< std::vector<int> > armIDs;
 	std::vector<int> imuIDs;
 	std::vector<int> waistIDs;

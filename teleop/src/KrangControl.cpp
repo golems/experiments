@@ -9,6 +9,8 @@
 #include <imud.h>
 #include "KrangControl.h"
 
+#include <kinematics/BodyNode.h> //FIXME
+
 KrangControl::KrangControl() {}
 
 KrangControl::~KrangControl() {
@@ -19,6 +21,7 @@ int KrangControl::initialize(simulation::World* world, somatic_d_t *daemon_cx, b
 	this->daemon_cx = daemon_cx;
 	this->arm_motors.resize(2);
 	this->armIDs.resize(2);
+	this->armNodeNames.resize(2);
 	this->schunk_gripper_motors.resize(2);
 	this->robotiq_gripper_channels.resize(2);
 	setDartIDs(world);
@@ -139,6 +142,10 @@ void KrangControl::setDartIDs(simulation::World* world) {
 
 	int waist_ids[] = {8};
 	waistIDs = std::vector<int>(waist_ids, waist_ids + sizeof(waist_ids)/sizeof(waist_ids[0]));
+
+	//TODO factor out to separate func for cleanness
+	armNodeNames[LEFT_ARM] = "lGripper";
+	armNodeNames[RIGHT_ARM] = "rGripper";
 }
 
 void KrangControl::updateRobotSkelFromSomaticMotor(simulation::World* world,
@@ -357,3 +364,6 @@ void KrangControl::getIMU() {
  * ENDSANDBOX
  */
 
+Eigen::Matrix4d KrangControl::getEffectorPose(simulation::World* world,	lwa_arm_t arm) {
+	return world->getSkeleton("Krang")->getNode(armNodeNames[arm].c_str())->getWorldTransform();
+}

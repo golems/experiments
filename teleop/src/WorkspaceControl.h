@@ -12,11 +12,9 @@
 #include <simulation/World.h>
 #include <kinematics/BodyNode.h>
 
-//TODO: should dump this in a namespace
-typedef enum arm {
-	LEFT_ARM = 0,
-	RIGHT_ARM
-} lwa_arm_t;
+#include "KrangControl.h" // TODO deleteme
+
+
 
 /*
  *
@@ -30,12 +28,14 @@ public:
 	virtual ~WorkspaceControl();
 
 	// initialization
-	void initialize(kinematics::BodyNode* eeNodeL = NULL, kinematics::BodyNode* eeNodeR = NULL);
+	void initialize();
 
 	// Update methods
 	void updateRelativeTransforms();
 	void updateXrefFromXdot(lwa_arm_t arm, Eigen::VectorXd &xdot);
-	void updateXrefFromOther(lwa_arm_t arm, lwa_arm_t other);
+	void updateXrefFromOther(lwa_arm_t arm, lwa_arm_t other,
+			Eigen::VectorXd *qdotOther = NULL, Eigen::VectorXd *qOther = NULL,
+			KrangControl *krang = NULL, simulation::World *world = NULL, double dt = 0);
 
 	// getters and setters
 	void setXref(lwa_arm_t arm, Eigen::Matrix4d &T);
@@ -54,8 +54,8 @@ public:
 	 * @param xdot: A desired xdot.  If Null, it is computed from the arm's current reference
 	 * @return: the jointspace velocities qdot
 	 */
-	Eigen::VectorXd xdotToQdot(lwa_arm_t arm, double xdotGain, double nullGain = 0.01,
-			Eigen::VectorXd *q = NULL, Eigen::VectorXd *xdot = NULL);
+	Eigen::VectorXd xdotToQdot(lwa_arm_t arm, kinematics::BodyNode* eeNode, double xdotGain,
+			double nullGain = 0.01, Eigen::VectorXd *q = NULL, Eigen::VectorXd *xdot = NULL);
 
 protected:
 	// initialization helpers
@@ -63,10 +63,10 @@ protected:
 
 	// update helpers
 	void setRelativeTransforms();
-	void setEffectorTransformFromSkel(lwa_arm_t arm);
+//	void setEffectorTransformFromSkel(lwa_arm_t arm, kinematics::BodyNode* eeNode);
 
 	// Returns an xdot for the given arm's current reference position
-	Eigen::VectorXd getXdotFromXref(lwa_arm_t arm);
+	Eigen::VectorXd getXdotFromXref(lwa_arm_t arm, const Eigen::Matrix4d &armCurT);
 
 	// flag for whether to have left arm track the right one (TODO de-hackify)
 	static const bool right_track_left_mode = 0;
@@ -78,7 +78,7 @@ protected:
 	std::vector<Eigen::Matrix4d> relTrans; 	///< named effector transform in other effector frame
 
 	// Pointers to frequently used dart data structures
-	std::vector<kinematics::BodyNode*> eeNodes;
+//	std::vector<kinematics::BodyNode*> eeNodes;
 };
 
 #endif /* WORKSPACETELEOP_H_ */

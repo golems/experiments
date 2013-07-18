@@ -45,6 +45,10 @@ WorkspaceControl wrkCtl;
 // Krang the monster
 KrangControl krang;
 
+// node pointers
+kinematics::BodyNode *eeNodeL;
+kinematics::BodyNode *eeNodeR;
+
 // UI Globals
 /* Events */
 enum BUTTON_EVENTS {
@@ -100,6 +104,8 @@ void init() {
 		mWorld = dl.parseWorld("common/scenes/04-World-Liberty.urdf"); // for eclipse
 	assert((mWorld != NULL) && "Could not find the world");
 
+	eeNodeL = mWorld->getSkeleton("Krang")->getNode("lGripper");
+	eeNodeR = mWorld->getSkeleton("Krang")->getNode("rGripper");
 
 	// Initialize this daemon (program!)
 	somatic_d_opts_t dopt;
@@ -126,7 +132,7 @@ void init() {
 	krang.initialize(mWorld, &daemon_cx, !(motor_input_mode || motor_output_mode));
 
 	// initialize workspace controller
-	wrkCtl.initialize(mWorld->getSkeleton("Krang")->getNode("lGripper"), mWorld->getSkeleton("Krang")->getNode("rGripper"));
+	wrkCtl.initialize();
 
 	// Manually set the initial arm configuration for the left arm
 	VectorXd larm_conf(7), rarm_conf(7);
@@ -177,8 +183,8 @@ void step() {
 
 	VectorXd qL = krang.getArmConfig(mWorld, LEFT_ARM);
 	VectorXd qR = krang.getArmConfig(mWorld, RIGHT_ARM);
-	VectorXd qdotL = wrkCtl.xdotToQdot(LEFT_ARM, 5.0, 0.01, &qL, NULL);
-	VectorXd qdotR = wrkCtl.xdotToQdot(RIGHT_ARM, 5.0, 0.01, &qR, NULL);
+	VectorXd qdotL = wrkCtl.xdotToQdot(LEFT_ARM, eeNodeL,  5.0, 0.01, &qL, NULL);
+	VectorXd qdotR = wrkCtl.xdotToQdot(RIGHT_ARM, eeNodeR, 5.0, 0.01, &qR, NULL);
 
 	krang.setRobotArmVelocities(mWorld, LEFT_ARM, qdotL, dt);
 	krang.setRobotArmVelocities(mWorld, RIGHT_ARM, qdotR, dt);

@@ -126,8 +126,14 @@ void SimTab::OnButton(wxCommandEvent &evt) {
 
 	case id_checkbox_ToggleRightTrackLeftMode: {
 		right_track_left_mode = evt.IsChecked();
-		if (right_track_left_mode)
+		if (right_track_left_mode) {
+			Matrix4d curTL = eeNodeL->getWorldTransform();
+			Matrix4d curTR = eeNodeR->getWorldTransform();
+			wrkCtl.setXcur(LEFT_ARM, curTL);
+			wrkCtl.setXcur(RIGHT_ARM, curTR);
 			wrkCtl.updateRelativeTransforms();
+		}
+
 		break;
 	}
 
@@ -192,20 +198,45 @@ void Timer::Notify() {
 	VectorXd cfgL = spn1.getConfig(0.4,0.4);
 	VectorXd cfgR = spn2.getConfig(0.4,0.4);
 	//goalSkelL->setConfig(dartRootDofOrdering, cfgL);
-	wrkCtl.updateXrefFromXdot(LEFT_ARM, cfgL);
 
-	if (right_track_left_mode)
-		wrkCtl.updateXrefFromOther(RIGHT_ARM, LEFT_ARM);
-	else
-		wrkCtl.updateXrefFromXdot(RIGHT_ARM, cfgR);
+	VectorXd qdotL(7);
+	VectorXd qdotR(7);
 
-	goalSkelL->setConfig(dartRootDofOrdering, transformToEuler(wrkCtl.getXref(LEFT_ARM), math::XYZ));
-	goalSkelR->setConfig(dartRootDofOrdering, transformToEuler(wrkCtl.getXref(RIGHT_ARM), math::XYZ));
+	bool vel_mode = true;
+	if (vel_mode) {
+		//method 1: direct velocity control
+		VectorXd qL = krang.getArmConfig(mWorld, LEFT_ARM);
+		VectorXd qR = krang.getArmConfig(mWorld, RIGHT_ARM);
+		qdotL = wrkCtl.xdotToQdot(LEFT_ARM, eeNodeL, xdot_gain, 0.01, &qL, &cfgL);
 
-	VectorXd qL = krang.getArmConfig(mWorld, LEFT_ARM);
-	VectorXd qR = krang.getArmConfig(mWorld, RIGHT_ARM);
-	VectorXd qdotL = wrkCtl.xdotToQdot(LEFT_ARM, xdot_gain, 0.01, &qL, NULL);
-	VectorXd qdotR = wrkCtl.xdotToQdot(RIGHT_ARM, xdot_gain, 0.01, &qR, NULL);
+		//TODO: add tracking mode using feed-forward vels
+		if (right_track_left_mode) {
+			wrkCtl.updateXrefFromOther(RIGHT_ARM, LEFT_ARM, &qdotL, &qL, &krang, mWorld, dt);
+			qdotR = wrkCtl.xdotToQdot(RIGHT_ARM, eeNodeR, xdot_gain, 0.01, &qR, NULL);
+		}
+		else {
+			qdotR = wrkCtl.xdotToQdot(RIGHT_ARM, eeNodeR, xdot_gain, 0.01, &qR, &cfgR);
+		}
+
+		goalSkelL->setConfig(dartRootDofOrdering, transformToEuler(wrkCtl.getXref(LEFT_ARM), math::XYZ));
+		goalSkelR->setConfig(dartRootDofOrdering, transformToEuler(wrkCtl.getXref(RIGHT_ARM), math::XYZ));
+	}
+	else {
+		//method 2: position control, which seems to crash
+		wrkCtl.updateXrefFromXdot(LEFT_ARM, cfgL);
+		if (right_track_left_mode)
+			wrkCtl.updateXrefFromOther(RIGHT_ARM, LEFT_ARM);
+		else
+			wrkCtl.updateXrefFromXdot(RIGHT_ARM, cfgR);
+
+		goalSkelL->setConfig(dartRootDofOrdering, transformToEuler(wrkCtl.getXref(LEFT_ARM), math::XYZ));
+		goalSkelR->setConfig(dartRootDofOrdering, transformToEuler(wrkCtl.getXref(RIGHT_ARM), math::XYZ));
+
+		VectorXd qL = krang.getArmConfig(mWorld, LEFT_ARM);
+		VectorXd qR = krang.getArmConfig(mWorld, RIGHT_ARM);
+		qdotL = wrkCtl.xdotToQdot(LEFT_ARM, eeNodeL, xdot_gain, 0.01, &qL, NULL);
+		qdotR = wrkCtl.xdotToQdot(RIGHT_ARM, eeNodeR, xdot_gain, 0.01, &qR, NULL);
+	}
 
 	krang.setRobotArmVelocities(mWorld, LEFT_ARM, qdotL, dt);
 	krang.setRobotArmVelocities(mWorld, RIGHT_ARM, qdotR, dt);
@@ -310,7 +341,7 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	krang.setArmConfig(mWorld, RIGHT_ARM, rarm_conf);
 
 	// initialize workspace controller
-	wrkCtl.initialize(eeNodeL, eeNodeR);
+	wrkCtl.initialize();
 }
 
 /* ********************************************************************************************* */

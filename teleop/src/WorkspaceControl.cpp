@@ -10,6 +10,7 @@
 
 #include "util.h" //TODO: rename, move, or do something good
 
+
 WorkspaceControl::WorkspaceControl() {
 
 }
@@ -18,13 +19,14 @@ WorkspaceControl::~WorkspaceControl() {
 	// TODO Auto-generated destructor stub
 }
 
-void WorkspaceControl::initialize(kinematics::BodyNode* eeNodeL, kinematics::BodyNode* eeNodeR) {
-	eeNodes.resize(2);
-	eeNodes[LEFT_ARM] = eeNodeL;
-	eeNodes[RIGHT_ARM] = eeNodeR;
+void WorkspaceControl::initialize() {
+	//TODO remove these node pointers, and make as args to the skel funciton
+//	eeNodes.resize(2);
+//	eeNodes[LEFT_ARM] = eeNodeL;
+//	eeNodes[RIGHT_ARM] = eeNodeR;
 	initializeTransforms();
-	setEffectorTransformFromSkel(LEFT_ARM);
-	setEffectorTransformFromSkel(RIGHT_ARM);
+//	setEffectorTransformFromSkel(LEFT_ARM, eeNodeL);
+//	setEffectorTransformFromSkel(RIGHT_ARM, eeNodeR);
 }
 
 /*
@@ -44,17 +46,17 @@ void WorkspaceControl::initializeTransforms() {
 	relTrans.push_back(T_dummy);
 	relTrans.push_back(T_dummy);
 
-	setEffectorTransformFromSkel(LEFT_ARM);
-	setEffectorTransformFromSkel(RIGHT_ARM);
-	refTrans[LEFT_ARM] = curTrans[LEFT_ARM];
-	refTrans[RIGHT_ARM] = curTrans[RIGHT_ARM];
+//	setEffectorTransformFromSkel(LEFT_ARM);
+//	setEffectorTransformFromSkel(RIGHT_ARM);
+//	refTrans[LEFT_ARM] = curTrans[LEFT_ARM];
+//	refTrans[RIGHT_ARM] = curTrans[RIGHT_ARM];
 }
 
-void WorkspaceControl::setEffectorTransformFromSkel(lwa_arm_t arm) {
-
-	assert(eeNodes[arm] != NULL);
-	curTrans[arm] = eeNodes[arm]->getWorldTransform();
-}
+//void WorkspaceControl::setEffectorTransformFromSkel(lwa_arm_t arm) {
+//
+//	assert(eeNodes[arm] != NULL);
+//	curTrans[arm] = eeNodes[arm]->getWorldTransform();
+//}
 
 void WorkspaceControl::updateRelativeTransforms() {
 	relTrans[LEFT_ARM] = curTrans[RIGHT_ARM].inverse() * curTrans[LEFT_ARM];
@@ -88,18 +90,17 @@ Eigen::Matrix4d WorkspaceControl::getXcur(lwa_arm_t arm) {
  * is treated as a relative transform applied to the current effector pose
  */
 void WorkspaceControl::updateXrefFromXdot(lwa_arm_t arm, Eigen::VectorXd& xdot) {
-	////////////// VERSION 1
+	////////////// VERSION 1: something dumb
 //	setEffectorTransformFromSkel(arm);
 //	Eigen::Matrix4d xdotM = eulerToTransform(xdot, math::XYZ);
 //	refTrans[arm] = xdotM * curTrans[arm];
 
-////////////// VERSION 2
-	// new version: apply to effector, but rotate into global frame first
+////////////// VERSION 2: apply to current pose
 //	Eigen::Matrix4d curRot = curTrans[arm];
 //	curRot.topRightCorner<3,1>().setZero();
 //	refTrans[arm] = curTrans[arm] * curRot.inverse() * xdotM;
 
-////////////// VERSION 2.5
+////////////// VERSION 2.5: apply to ref pose
 	Eigen::Matrix4d refRot = refTrans[arm];
 	refRot.topRightCorner<3,1>().setZero();
 	Eigen::Matrix4d xdotM = eulerToTransform(xdot, math::XYZ);
@@ -110,41 +111,21 @@ void WorkspaceControl::updateXrefFromXdot(lwa_arm_t arm, Eigen::VectorXd& xdot) 
 	//TODO or try doing feedforward in jointspace while we're just using euler for refs
 }
 
-/*
- * Sets xref of arm2 to track arm1
- */
-void WorkspaceControl::updateXrefFromOther(lwa_arm_t arm, lwa_arm_t other) {
+Eigen::VectorXd WorkspaceControl::getXdotFromXref(lwa_arm_t arm, const Eigen::Matrix4d &armCurT) {
+//	setEffectorTransformFromSkel(arm);
+	curTrans[arm] = armCurT;
 
-	// update arm current transforms
-	setEffectorTransformFromSkel(arm);
-	setEffectorTransformFromSkel(other);
-
-	// set arm reference based on cached relative transform
-	refTrans[arm] = curTrans[other] * relTrans[arm];
-
-	//TODO: feedforward the other arm's xdot before computing projected reftrans (will fix lag)
-}
-
-Eigen::VectorXd WorkspaceControl::getXdotFromXref(lwa_arm_t arm) {
-	setEffectorTransformFromSkel(arm);
-
-////////////// VERSION 1
-//	// get transform from effector to reference in global frame
-//	Eigen::Matrix4d xdotM = refTrans[arm] * curTrans[arm].inverse();
-//	// return as a config vector
-//	return transformToEuler(xdotM, math::XYZ);
-
-////////////// VERSION 2
-	// new version: reverse of above (is actually a reference, but crappy Euler conversion)
-	Eigen::Matrix4d curRot = curTrans[arm];
-	curRot.topRightCorner<3,1>().setZero();
-	Eigen::Matrix4d xdotM = curRot * curTrans[arm].inverse() * refTrans[arm];
-
-	 // return as a config vector
+////////////// VERSION 1: something dumb
+	Eigen::Matrix4d xdotM = refTrans[arm] * curTrans[arm].inverse();
 	return transformToEuler(xdotM, math::XYZ);
 
-////////////// VERSION 3
-//	// compute the position error
+////////////// VERSION 2: reverse of above (is actually a reference, but crappy Euler conversion)
+//	Eigen::Matrix4d curRot = curTrans[arm];
+//	curRot.topRightCorner<3,1>().setZero();
+//	Eigen::Matrix4d xdotM = curRot * curTrans[arm].inverse() * refTrans[arm];
+//	return transformToEuler(xdotM, math::XYZ);
+
+////////////// VERSION 3: same as version 2, but with quaternions
 //	Eigen::VectorXd goalPos = refTrans[arm].topRightCorner<3,1>();
 //	Eigen::VectorXd eePos = curTrans[arm].topRightCorner<3,1>();
 //	Eigen::VectorXd errPos = goalPos - eePos;
@@ -163,6 +144,44 @@ Eigen::VectorXd WorkspaceControl::getXdotFromXref(lwa_arm_t arm) {
 //	return xdot;
 }
 
+
+/*
+ * Sets xref of arm2 to track arm1
+ *
+ * NOTE:
+ * everything after other arm is for ff velocity control
+ */
+void WorkspaceControl::updateXrefFromOther(lwa_arm_t arm, lwa_arm_t other,
+		Eigen::VectorXd *qdotOther, Eigen::VectorXd *qOther, KrangControl *krang,
+		simulation::World *world, double dt) {
+
+	// update arm current transforms
+//	setEffectorTransformFromSkel(arm, eeNodeArm);
+//	setEffectorTransformFromSkel(other, eeNodeOther);
+	curTrans[arm] = krang->getEffectorPose(world, arm);
+	curTrans[other] = krang->getEffectorPose(world, other);
+
+//	std::cout << " curTrans[arm] " << curTrans[arm] << std::endl;
+//	std::cout << " curTrans[other] " << curTrans[other] << std::endl;
+	//TODO: feedforward the other arm's xdot before computing projected reftrans (will fix lag)
+	if (qdotOther == NULL || qOther == NULL) {
+		// set arm reference based on cached relative transform
+		refTrans[arm] = curTrans[other] * relTrans[arm];
+	} else {
+		// step1: integrate other arm in joint space (because we can't do in workspace stupid dart)
+		Eigen::VectorXd qOtherNext(7);
+		qOtherNext = *qOther + *qdotOther * dt*15;
+
+		// step3: set dart config and read back pose
+		krang->setArmConfig(world, other, qOtherNext);
+
+		// step4: use this pose instead of curTrans[other]
+		Eigen::Matrix4d curTransOtherNext = krang->getEffectorPose(world, other);
+		krang->setArmConfig(world, other, *qOther);
+		refTrans[arm] = curTransOtherNext * relTrans[arm];
+	}
+}
+
 /*
  * Main work-horse function: converts workspace velocities to jointspace
  * using the arm jacobians, as obtained from Dart.
@@ -171,19 +190,19 @@ Eigen::VectorXd WorkspaceControl::getXdotFromXref(lwa_arm_t arm) {
  * null-space projection thing to bias our solution towards
  * joint values in the middle of each joint's range of motion
  */
-Eigen::VectorXd WorkspaceControl::xdotToQdot(lwa_arm_t arm, double xdotGain,
+Eigen::VectorXd WorkspaceControl::xdotToQdot(lwa_arm_t arm, kinematics::BodyNode* eeNode, double xdotGain,
 		double nullGain, Eigen::VectorXd *q, Eigen::VectorXd *xdot) {
 
 	// obtain xdot from user or reference
 	Eigen::VectorXd xd(6);
 	if (xdot == NULL)
-		xd = getXdotFromXref(arm);
+		xd = getXdotFromXref(arm, eeNode->getWorldTransform());
 	else
 		xd = *xdot;
 
 	// Get the Jacobian towards computing joint-space velocities
-	Eigen::MatrixXd Jlin = eeNodes[arm]->getJacobianLinear().topRightCorner<3,7>();
-	Eigen::MatrixXd Jang = eeNodes[arm]->getJacobianAngular().topRightCorner<3,7>();
+	Eigen::MatrixXd Jlin = eeNode->getJacobianLinear().topRightCorner<3,7>();
+	Eigen::MatrixXd Jang = eeNode->getJacobianAngular().topRightCorner<3,7>();
 	Eigen::MatrixXd J (6,7);
 	J << Jlin, Jang;
 
