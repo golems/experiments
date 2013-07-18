@@ -22,7 +22,7 @@ void do_init_pids(somatic_motor_t* mot, pid_state_t* pids) {
     }
 }
 
-void update_pids(somatic_motor_t* mot, pid_state_t* pids, double* result) {
+void update_pids(somatic_motor_t* mot, pid_state_t* pids, Eigen::VectorXd &result) {
     double p_p_value;
     double p_d_value;
     double v_p_value;
