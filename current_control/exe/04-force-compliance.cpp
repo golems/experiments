@@ -61,8 +61,8 @@ void destroy();
 // ################################################################################
 
 somatic_d_t daemon_cx;
-ach_channel_t ft_chan;
 ach_channel_t imu_chan;
+ach_channel_t ft_chan;
 
 somatic_motor_t rlwa;
 somatic_motor_t waist;
