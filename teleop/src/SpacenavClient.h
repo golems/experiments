@@ -37,7 +37,6 @@ protected:
 	// Channel variables
 	somatic_d_t *daemon_cx;  ///< somatic daemon pointer
 	uint8_t *achbuf_joystick;
-	size_t n_achbuf_joystick = 1024;
 	ach_channel_t spacenav_chan;
 
 	// Transforms

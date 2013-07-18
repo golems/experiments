@@ -78,13 +78,11 @@ void handleButtons(VectorXi &buttons) {
 	}
 
 	if (buttons[id_button_ToggleMotorOutputMode] == 1) {
-
 		motor_output_mode = true;
 		krang.setControlMode(!(motor_output_mode && !motors_initialized));
 
 		if (!motor_output_mode)
 			krang.halt();
-
 	}
 
 	if (buttons[id_button_ToggleRightTrackLeftMode] == 1) {

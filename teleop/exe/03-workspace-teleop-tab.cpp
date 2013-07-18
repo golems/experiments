@@ -73,6 +73,90 @@ kinematics::BodyNode *eeNodeR;
 dynamics::SkeletonDynamics *goalSkelL;
 dynamics::SkeletonDynamics *goalSkelR;
 
+/* ********************************************************************************************* */
+void SimTab::GRIPEventSimulationBeforeTimestep() {}
+
+/**
+ * @function OnButton
+ * @brief Handles button events
+ */
+void SimTab::OnButton(wxCommandEvent &evt) {
+	int slnum = evt.GetId();
+	switch(slnum) {
+	// Set Start Arm Configuration
+	case id_button_ResetScene: {
+		break;
+	}
+
+	case id_button_ResetLiberty: {
+		//MatrixXd *Tlibs[] = {&T_lib1_init, &T_lib2_init};
+		//getLibertyPoses(Tlibs, 2, NULL);
+		break;
+	}
+
+	case id_button_ResetJoystick: {
+		break;
+		}
+
+	case id_button_SetInitialTransforms: {
+		break;
+	}
+
+	case id_checkbox_ToggleMotorInputMode: {
+		motor_input_mode = evt.IsChecked();
+		krang.setControlMode(!(motor_input_mode && !motors_initialized));
+
+		break;
+	}
+
+	case id_checkbox_ToggleMotorOutputMode: {
+
+		motor_output_mode = evt.IsChecked();
+		krang.setControlMode(!(motor_output_mode && !motors_initialized));
+
+		if (!motor_output_mode)
+			krang.halt();
+		break;
+	}
+
+	case id_checkbox_ToggleRightTrackLeftMode: {
+		right_track_left_mode = evt.IsChecked();
+		if (right_track_left_mode)
+			wrkCtl.updateRelativeTransforms();
+		break;
+	}
+
+	default: {}
+	}
+}
+
+void handleSpacenavButtons(const VectorXi &buttons, ach_channel_t &grip_chan) {
+	robotiqd_achcommand_t rqd_msg;
+	rqd_msg.mode = GRASP_BASIC;
+	rqd_msg.grasping_speed = 0xff;
+	rqd_msg.grasping_force = 0xff;
+
+	if (buttons[0]) rqd_msg.grasping_pos = 0x00;
+	if (buttons[1]) rqd_msg.grasping_pos = 0xff;
+
+	if (buttons[0] || buttons[1])
+		ach_put(&grip_chan, &rqd_msg, sizeof(rqd_msg));
+}
+
+/* ********************************************************************************************* */
+void SimTab::OnSlider(wxCommandEvent &evt) {}
+
+/* ********************************************************************************************* */
+// Handler for events
+
+BEGIN_EVENT_TABLE(SimTab, wxPanel)
+EVT_COMMAND (wxID_ANY, wxEVT_COMMAND_BUTTON_CLICKED, SimTab::OnButton)
+EVT_COMMAND (wxID_ANY, wxEVT_GRIP_SLIDER_CHANGE, SimTab::OnSlider)
+//EVT_CHECKBOX(wxEVT_COMMAND_CHECKBOX_CLICKED, SimTab::OnButton)
+EVT_CHECKBOX(id_checkbox_ToggleMotorInputMode, SimTab::OnButton)
+EVT_CHECKBOX(id_checkbox_ToggleMotorOutputMode, SimTab::OnButton)
+EVT_CHECKBOX(id_checkbox_ToggleRightTrackLeftMode, SimTab::OnButton)
+END_EVENT_TABLE()
 
 /* ********************************************************************************************* */
 /// Picks a random configuration for the robot, moves it, does f.k. for the right and left
@@ -89,11 +173,6 @@ void Timer::Notify() {
 	// update robot state from ach if we're controlling the actual robot
 	if (motor_input_mode)
 		krang.updateKrangSkeleton(mWorld);
-
-	// handle grippers
-//	VectorXi buttons = getSpacenavButtons(spn_chan);
-//	cout << "buttonsL "<< buttons.transpose() << endl;
-//	handleSpacenavButtons(buttons, rqd_chan);
 
 	VectorXd cfgL = spn1.getConfig() * 0.2;
 	VectorXd cfgR = spn2.getConfig() * 0.2;
@@ -115,6 +194,15 @@ void Timer::Notify() {
 
 	krang.setRobotArmVelocities(mWorld, LEFT_ARM, qdotL, dt);
 	krang.setRobotArmVelocities(mWorld, RIGHT_ARM, qdotR, dt);
+
+	// handle grippers
+	VectorXi buttons1 = spn1.getButtons();
+	VectorXi buttons2 = spn2.getButtons();
+	cout << "buttons1 "<< buttons1.transpose() << endl;
+	cout << "buttons2 "<< buttons2.transpose() << endl;
+	krang.setRobotiqGripperAction(LEFT_ARM, buttons1);
+	krang.setRobotiqGripperAction(RIGHT_ARM, buttons2);
+
 
 	// Visualize the arm motion
 	viewer->DrawGLScene();
@@ -228,77 +316,7 @@ SimTab::~SimTab() {
 	somatic_d_destroy(&daemon_cx);
 }
 
-/* ********************************************************************************************* */
-void SimTab::GRIPEventSimulationBeforeTimestep() {}
 
-/**
- * @function OnButton
- * @brief Handles button events
- */
-void SimTab::OnButton(wxCommandEvent &evt) {
-	int slnum = evt.GetId();
-	switch(slnum) {
-	// Set Start Arm Configuration
-	case id_button_ResetScene: {
-		break;
-	}
-
-	case id_button_ResetLiberty: {
-		//MatrixXd *Tlibs[] = {&T_lib1_init, &T_lib2_init};
-		//getLibertyPoses(Tlibs, 2, NULL);
-		break;
-	}
-
-	case id_button_ResetJoystick: {
-		break;
-		}
-
-	case id_button_SetInitialTransforms: {
-		break;
-	}
-
-	case id_checkbox_ToggleMotorInputMode: {
-		motor_input_mode = evt.IsChecked();
-		krang.setControlMode(!(motor_input_mode && !motors_initialized));
-
-		break;
-	}
-
-	case id_checkbox_ToggleMotorOutputMode: {
-
-		motor_output_mode = evt.IsChecked();
-		krang.setControlMode(!(motor_output_mode && !motors_initialized));
-
-		if (!motor_output_mode)
-			krang.halt();
-		break;
-	}
-
-	case id_checkbox_ToggleRightTrackLeftMode: {
-		right_track_left_mode = evt.IsChecked();
-		if (right_track_left_mode)
-			wrkCtl.updateRelativeTransforms();
-		break;
-	}
-
-	default: {}
-	}
-}
-
-/* ********************************************************************************************* */
-void SimTab::OnSlider(wxCommandEvent &evt) {}
-
-/* ********************************************************************************************* */
-// Handler for events
-
-BEGIN_EVENT_TABLE(SimTab, wxPanel)
-EVT_COMMAND (wxID_ANY, wxEVT_COMMAND_BUTTON_CLICKED, SimTab::OnButton)
-EVT_COMMAND (wxID_ANY, wxEVT_GRIP_SLIDER_CHANGE, SimTab::OnSlider)
-//EVT_CHECKBOX(wxEVT_COMMAND_CHECKBOX_CLICKED, SimTab::OnButton)
-EVT_CHECKBOX(id_checkbox_ToggleMotorInputMode, SimTab::OnButton)
-EVT_CHECKBOX(id_checkbox_ToggleMotorOutputMode, SimTab::OnButton)
-EVT_CHECKBOX(id_checkbox_ToggleRightTrackLeftMode, SimTab::OnButton)
-END_EVENT_TABLE()
 
 /* ********************************************************************************************* */
 // Class constructor for the tab: Each tab will be a subclass of GRIPTab

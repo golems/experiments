@@ -19,9 +19,28 @@ int KrangControl::initialize(simulation::World* world, somatic_d_t *daemon_cx, b
 	this->daemon_cx = daemon_cx;
 	this->arm_motors.resize(2);
 	this->armIDs.resize(2);
+	this->schunk_gripper_motors.resize(2);
+	this->robotiq_gripper_channels.resize(2);
 	setDartIDs(world);
 	setControlMode(fake_ctl_mode);
 	return 1;
+}
+
+void KrangControl::setControlMode(bool fake_ctl_mode) {
+	this->fake_ctl_mode = fake_ctl_mode;
+
+	if (!this->fake_ctl_mode && !initialized) {
+		initArm(*daemon_cx, arm_motors[LEFT_ARM], "llwa");
+		initArm(*daemon_cx, arm_motors[RIGHT_ARM], "rlwa");
+		//initSchunkGripper(*daemon_cx, schunk_gripper_motors[LEFT_ARM], "lGripper");
+		//initSchunkGripper(*daemon_cx, schunk_gripper_motors[RIGHT_ARM], "rGripper");
+		initRobotiqGripper(LEFT_ARM, "lgripper-cmd");
+		initRobotiqGripper(RIGHT_ARM, "rgripper-cmd");
+		initWaist(*daemon_cx, waist);
+		initIMU(*daemon_cx, imu_chan);
+
+		initialized = true;
+	}
 }
 
 /*
@@ -44,22 +63,6 @@ void KrangControl::setArmConfig(simulation::World* world, lwa_arm_t arm, Eigen::
 	world->getSkeleton("Krang")->setConfig(armIDs[arm], config);
 }
 
-void KrangControl::setControlMode(bool fake_ctl_mode) {
-	this->fake_ctl_mode = fake_ctl_mode;
-
-	if (!this->fake_ctl_mode && !initialized) {
-		initArm(*daemon_cx, arm_motors[LEFT_ARM], "llwa");
-		initArm(*daemon_cx, arm_motors[RIGHT_ARM], "rlwa");
-		initWaist(*daemon_cx, waist);
-		initIMU(*daemon_cx, imu_chan);
-
-		ach_open(&lgripper_chan, "lgripper-cmd", NULL);
-		ach_open(&rgripper_chan, "rgripper-cmd", NULL);
-
-		initialized = true;
-	}
-}
-
 void KrangControl::sendRobotArmVelocities(lwa_arm_t arm, Eigen::VectorXd& qdot, double dt) {
 
 	//somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, qdot.data()*dt, 7, NULL);
@@ -78,6 +81,28 @@ void KrangControl::setRobotArmVelocities(simulation::World* world,
 	else
 		sendRobotArmVelocities(arm, qdot, dt);
 }
+
+void KrangControl::initRobotiqGripper(lwa_arm_t arm, const char *chan) {
+    // for robotiq we currently talk over ach directly
+    ach_open(&robotiq_gripper_channels[arm], chan, NULL);
+}
+
+void KrangControl::setRobotiqGripperAction(lwa_arm_t arm, const Eigen::VectorXi& buttons) {
+
+	// super basic open and close actions, for now...
+
+	robotiqd_achcommand_t rqd_msg;
+	rqd_msg.mode = GRASP_BASIC;
+	rqd_msg.grasping_speed = 0xff;
+	rqd_msg.grasping_force = 0xff;
+
+	if (buttons[0]) rqd_msg.grasping_pos = 0x00;
+	if (buttons[1]) rqd_msg.grasping_pos = 0xff;
+
+	if (buttons[0] || buttons[1])
+		ach_put(&robotiq_gripper_channels[arm], &rqd_msg, sizeof(rqd_msg));
+}
+
 
 void KrangControl::fakeArmMovement(simulation::World* world, lwa_arm_t arm, Eigen::VectorXd& qdot, double dt) {
 
@@ -218,7 +243,7 @@ void KrangControl::initTorso(somatic_d_t& daemon_cx, somatic_motor_t& torso) {
 	somatic_motor_cmd(&daemon_cx, &torso, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 1, NULL);
 }
 
-void KrangControl::initGripper(somatic_d_t& daemon_cx, somatic_motor_t& gripper, const char* name) {
+void KrangControl::initSchunkGripper(somatic_d_t& daemon_cx, somatic_motor_t& gripper, const char* name) {
 
 	// Get the channel names
 	char cmd_name [16], state_name [16];
@@ -358,3 +383,4 @@ void KrangControl::updateRobotSkelFromIMU(simulation::World* world) {
 /*
  * ENDSANDBOX
  */
+

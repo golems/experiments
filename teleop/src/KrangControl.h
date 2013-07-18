@@ -47,6 +47,7 @@ public:
 	// control methods
 	void setControlMode(bool mode);
 	void setRobotArmVelocities(simulation::World* world, lwa_arm_t arm, Eigen::VectorXd &qdot, double dt);
+	void setRobotiqGripperAction(lwa_arm_t arm, const Eigen::VectorXi &buttons);
 	void halt();
 
 protected:
@@ -56,15 +57,11 @@ protected:
 
 	// somatic globals
 	somatic_d_t *daemon_cx;  ///< somatic daemon pointer
-	//somatic_motor_t llwa;	///< left arm motor
-	//somatic_motor_t rlwa;	///< right arm motor
 	somatic_motor_t waist;	///< waist motor
 	somatic_motor_t torso;	///< motor motor
 	std::vector<somatic_motor_t> arm_motors; ///< arm motors
-
-	// gripper stuff
-	ach_channel_t lgripper_chan;
-	ach_channel_t rgripper_chan;
+	std::vector<somatic_motor_t> schunk_gripper_motors; ///< gripper motors
+	std::vector<ach_channel_t> robotiq_gripper_channels; ///< ach channels for robotiq
 
 	// dart IDs
 	std::vector< std::vector<int> > armIDs;
@@ -80,10 +77,11 @@ protected:
 	void setDartIDs(simulation::World* world); ///< sets all relevant skeleton Dof IDs for the robot
 	void initArm (somatic_d_t& daemon_cx, somatic_motor_t& arm, const char* armName);
 	void haltArm(somatic_d_t &daemon_cx, somatic_motor_t &arm);
-	void initIMU(somatic_d_t& daemon_cx, ach_channel_t &imu_chan);
 	void initWaist(somatic_d_t& daemon_cx, somatic_motor_t& waist);
 	void initTorso (somatic_d_t& daemon_cx, somatic_motor_t& torso);
-	void initGripper (somatic_d_t& daemon_cx, somatic_motor_t& gripper, const char* name);
+	void initSchunkGripper(somatic_d_t& daemon_cx, somatic_motor_t& gripper, const char* name);
+	void initRobotiqGripper(lwa_arm_t arm, const char *chan);
+	void initIMU(somatic_d_t& daemon_cx, ach_channel_t &imu_chan);
 
 	// update method helpers
 	double getIMUPitch();
