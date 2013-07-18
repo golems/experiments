@@ -74,20 +74,23 @@ double getIMUPitch() {
     somatic__vector__free_unpacked( imu_msg, &protobuf_c_system_allocator );
 
     // compute our result and return it
-    return -ssdmu_pitch(imu_sample_x, imu_sample_y, imu_sample_z) + M_PI/2;
+    //return -ssdmu_pitch(imu_sample_x, imu_sample_y, imu_sample_z) + M_PI/2;
+    return 3.4418;
 }
 
 /*
  * Send joint velocities to robot over somatic
  */
 void sendRobotArmVelocities(somatic_d_t &daemon_cx, somatic_motor_t &arm, VectorXd &qdot,
-		double gain) {
+		double dt) {
 
-	qdot = qdot.normalized() * gain;
-//	double dq [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-//	for(size_t i = 0; i < 7; i++)
-//		dq[i] = qdot(i);
-	somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, qdot.data(), 7, NULL);
+	//somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, qdot.data()*dt, 7, NULL);
+
+	double dq [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+	for(size_t i = 0; i < 7; i++)
+		dq[i] = qdot(i) * dt;
+	somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7, NULL);
+	//somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, dq, 7, NULL);
 }
 
 /*

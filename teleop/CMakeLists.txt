@@ -37,7 +37,11 @@ file(GLOB scripts_source "exe/*.cpp")
 LIST(SORT scripts_source)
 
 # Build the library and set the executables that use it (have to hardcode for now)
-#add_library(Main SHARED ${main_source})
+add_library(Main SHARED ${main_source})
+
+# uncomment to break apart libraries
+#add_library(KrangControl SHARED "src/KrangControl.cpp")
+#add_library(WorkspaceControl SHARED "src/WorkspaceControl.cpp")
 
 # Build scripts
 message(STATUS "\n-- SCRIPTS: ")
@@ -45,7 +49,7 @@ foreach(script_src_file ${scripts_source})
 	get_filename_component(script_base ${script_src_file} NAME_WE)
 	message(STATUS "Adding script ${script_src_file} with base name ${script_base}" )
 	add_executable(${script_base} ${script_src_file})
-#	target_link_libraries(${script_base} Main) 
+	target_link_libraries(${script_base} Main) 
 	target_link_libraries(${script_base} ${GRIP_LIBRARIES} ${DART_LIBRARIES} ${DARTExt_LIBRARIES} ${wxWidgets_LIBRARIES}) 
 	add_custom_target(${script_base}.run ${script_base} ${ARGN})
 endforeach(script_src_file)

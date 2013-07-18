@@ -2,7 +2,7 @@
  * @file helpers.cpp
  * @author Can Erdogan, Peng Hou
  * @date July 08, 2013
- * @brief This file contains helper functions such as imu data retrieval and filtering...
+ * @brief This file contains helper functions such as imu data retrieval and -+++++++++ing...
  */
 
 #include "helpers.h"
