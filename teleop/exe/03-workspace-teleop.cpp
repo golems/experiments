@@ -129,17 +129,17 @@ void init() {
 	//initLiberty();
 
 	// initialize krang the monster
-	krang.initialize(mWorld, &daemon_cx, !(motor_input_mode || motor_output_mode));
+	krang.initialize(mWorld, &daemon_cx, "Krang", !(motor_input_mode || motor_output_mode));
 
 	// initialize workspace controller
-	wrkCtl.initialize();
+	wrkCtl.initialize(&krang);
 
 	// Manually set the initial arm configuration for the left arm
 	VectorXd larm_conf(7), rarm_conf(7);
 	larm_conf << 0.0, -M_PI / 3.0, 0.0, -M_PI / 3.0, 0.0, M_PI/6.0, 0.0;
 	rarm_conf << 0.0, M_PI / 3.0, 0.0, M_PI / 3.0, 0.0, -M_PI/6.0, 0.0;
-	krang.setArmConfig(mWorld, LEFT_ARM, larm_conf);
-	krang.setArmConfig(mWorld, RIGHT_ARM, rarm_conf);
+	krang.setArmConfig(LEFT_ARM, larm_conf);
+	krang.setArmConfig(RIGHT_ARM, rarm_conf);
 }
 
 void destroy() {
@@ -164,7 +164,7 @@ void step() {
 
 	// update robot state from ach if we're controlling the actual robot
 	if (motor_input_mode)
-		krang.updateKrangSkeleton(mWorld);
+		krang.updateKrangSkeleton();
 
 	// handle grippers
 	//	VectorXi buttons = getSpacenavButtons(spn_chan);
@@ -181,13 +181,13 @@ void step() {
 	else
 		wrkCtl.updateXrefFromXdot(RIGHT_ARM, cfgR);
 
-	VectorXd qL = krang.getArmConfig(mWorld, LEFT_ARM);
-	VectorXd qR = krang.getArmConfig(mWorld, RIGHT_ARM);
+	VectorXd qL = krang.getArmConfig(LEFT_ARM);
+	VectorXd qR = krang.getArmConfig(RIGHT_ARM);
 	VectorXd qdotL = wrkCtl.xdotToQdot(LEFT_ARM, eeNodeL,  5.0, 0.01, &qL, NULL);
 	VectorXd qdotR = wrkCtl.xdotToQdot(RIGHT_ARM, eeNodeR, 5.0, 0.01, &qR, NULL);
 
-	krang.setRobotArmVelocities(mWorld, LEFT_ARM, qdotL, dt);
-	krang.setRobotArmVelocities(mWorld, RIGHT_ARM, qdotR, dt);
+	krang.setRobotArmVelocities(LEFT_ARM, qdotL, dt);
+	krang.setRobotArmVelocities(RIGHT_ARM, qdotR, dt);
 }
 
 void run() {

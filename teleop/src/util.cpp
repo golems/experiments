@@ -6,7 +6,7 @@
  */
 
 #include "util.h"
-
+#include <iostream>
 /*
  * Converts a 4x4 homogeneous transform to a 6D euler.
  * Conversion convention corresponds to Grip's ZYX
@@ -39,7 +39,7 @@ Eigen::MatrixXd eulerToTransform(const Eigen::VectorXd &V, math::RotationOrder _
 	Eigen::MatrixXd T(4,4);
 	T.topLeftCorner<3,3>() = rotM;
 	T.topRightCorner<3,1>() = posV;
-	T(3,3) = 1.0;
+	T.row(3) << 0,0,0,1;
 
 	return T;
 }

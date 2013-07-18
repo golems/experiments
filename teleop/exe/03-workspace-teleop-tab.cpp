@@ -193,7 +193,7 @@ void Timer::Notify() {
 
 	// update robot state from ach if we're controlling the actual robot
 	if (motor_input_mode)
-		krang.updateKrangSkeleton(mWorld);
+		krang.updateKrangSkeleton();
 
 	VectorXd cfgL = spn1.getConfig(0.4,0.4);
 	VectorXd cfgR = spn2.getConfig(0.4,0.4);
@@ -202,16 +202,16 @@ void Timer::Notify() {
 	VectorXd qdotL(7);
 	VectorXd qdotR(7);
 
-	bool vel_mode = true;
+	bool vel_mode = false;
 	if (vel_mode) {
 		//method 1: direct velocity control
-		VectorXd qL = krang.getArmConfig(mWorld, LEFT_ARM);
-		VectorXd qR = krang.getArmConfig(mWorld, RIGHT_ARM);
+		VectorXd qL = krang.getArmConfig(LEFT_ARM);
+		VectorXd qR = krang.getArmConfig(RIGHT_ARM);
 		qdotL = wrkCtl.xdotToQdot(LEFT_ARM, eeNodeL, xdot_gain, 0.01, &qL, &cfgL);
 
 		//TODO: add tracking mode using feed-forward vels
 		if (right_track_left_mode) {
-			wrkCtl.updateXrefFromOther(RIGHT_ARM, LEFT_ARM, &qdotL, &qL, &krang, mWorld, dt);
+			wrkCtl.updateXrefFromOther(RIGHT_ARM, LEFT_ARM, &qdotL, &qL, dt);
 			qdotR = wrkCtl.xdotToQdot(RIGHT_ARM, eeNodeR, xdot_gain, 0.01, &qR, NULL);
 		}
 		else {
@@ -232,14 +232,14 @@ void Timer::Notify() {
 		goalSkelL->setConfig(dartRootDofOrdering, transformToEuler(wrkCtl.getXref(LEFT_ARM), math::XYZ));
 		goalSkelR->setConfig(dartRootDofOrdering, transformToEuler(wrkCtl.getXref(RIGHT_ARM), math::XYZ));
 
-		VectorXd qL = krang.getArmConfig(mWorld, LEFT_ARM);
-		VectorXd qR = krang.getArmConfig(mWorld, RIGHT_ARM);
+		VectorXd qL = krang.getArmConfig(LEFT_ARM);
+		VectorXd qR = krang.getArmConfig(RIGHT_ARM);
 		qdotL = wrkCtl.xdotToQdot(LEFT_ARM, eeNodeL, xdot_gain, 0.01, &qL, NULL);
 		qdotR = wrkCtl.xdotToQdot(RIGHT_ARM, eeNodeR, xdot_gain, 0.01, &qR, NULL);
 	}
 
-	krang.setRobotArmVelocities(mWorld, LEFT_ARM, qdotL, dt);
-	krang.setRobotArmVelocities(mWorld, RIGHT_ARM, qdotR, dt);
+	krang.setRobotArmVelocities(LEFT_ARM, qdotL, dt);
+	krang.setRobotArmVelocities(RIGHT_ARM, qdotR, dt);
 
 	// handle grippers
 	VectorXi buttons1 = spn1.getButtons();
@@ -331,17 +331,17 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	goalSkelR = mWorld->getSkeleton("g2");
 
 	// initialize krang the monster
-	krang.initialize(mWorld, &daemon_cx, !(motor_input_mode || motor_output_mode));
+	krang.initialize(mWorld, &daemon_cx, "Krang", !(motor_input_mode || motor_output_mode));
 
 	// Manually set the initial arm configuration for the left arm
 	VectorXd larm_conf(7), rarm_conf(7);
 	larm_conf << 0.0, -M_PI / 3.0, 0.0, -M_PI / 3.0, 0.0, M_PI/6.0, 0.0;
 	rarm_conf << 0.0, M_PI / 3.0, 0.0, M_PI / 3.0, 0.0, -M_PI/6.0, 0.0;
-	krang.setArmConfig(mWorld, LEFT_ARM, larm_conf);
-	krang.setArmConfig(mWorld, RIGHT_ARM, rarm_conf);
+	krang.setArmConfig(LEFT_ARM, larm_conf);
+	krang.setArmConfig(RIGHT_ARM, rarm_conf);
 
 	// initialize workspace controller
-	wrkCtl.initialize();
+	wrkCtl.initialize(&krang);
 }
 
 /* ********************************************************************************************* */

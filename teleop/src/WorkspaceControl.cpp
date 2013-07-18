@@ -19,14 +19,9 @@ WorkspaceControl::~WorkspaceControl() {
 	// TODO Auto-generated destructor stub
 }
 
-void WorkspaceControl::initialize() {
-	//TODO remove these node pointers, and make as args to the skel funciton
-//	eeNodes.resize(2);
-//	eeNodes[LEFT_ARM] = eeNodeL;
-//	eeNodes[RIGHT_ARM] = eeNodeR;
+void WorkspaceControl::initialize(KrangControl *krang) {
+	this->_krang = krang;
 	initializeTransforms();
-//	setEffectorTransformFromSkel(LEFT_ARM, eeNodeL);
-//	setEffectorTransformFromSkel(RIGHT_ARM, eeNodeR);
 }
 
 /*
@@ -46,17 +41,14 @@ void WorkspaceControl::initializeTransforms() {
 	relTrans.push_back(T_dummy);
 	relTrans.push_back(T_dummy);
 
-//	setEffectorTransformFromSkel(LEFT_ARM);
-//	setEffectorTransformFromSkel(RIGHT_ARM);
-//	refTrans[LEFT_ARM] = curTrans[LEFT_ARM];
-//	refTrans[RIGHT_ARM] = curTrans[RIGHT_ARM];
-}
+	// set initial poses
+	curTrans[LEFT_ARM] = _krang->getEffectorPose(LEFT_ARM);
+	curTrans[RIGHT_ARM] = _krang->getEffectorPose(RIGHT_ARM);
 
-//void WorkspaceControl::setEffectorTransformFromSkel(lwa_arm_t arm) {
-//
-//	assert(eeNodes[arm] != NULL);
-//	curTrans[arm] = eeNodes[arm]->getWorldTransform();
-//}
+	// set references to current poses
+	refTrans[LEFT_ARM] = curTrans[LEFT_ARM];
+	refTrans[RIGHT_ARM] = curTrans[RIGHT_ARM];
+}
 
 void WorkspaceControl::updateRelativeTransforms() {
 	relTrans[LEFT_ARM] = curTrans[RIGHT_ARM].inverse() * curTrans[LEFT_ARM];
@@ -111,19 +103,18 @@ void WorkspaceControl::updateXrefFromXdot(lwa_arm_t arm, Eigen::VectorXd& xdot) 
 	//TODO or try doing feedforward in jointspace while we're just using euler for refs
 }
 
-Eigen::VectorXd WorkspaceControl::getXdotFromXref(lwa_arm_t arm, const Eigen::Matrix4d &armCurT) {
-//	setEffectorTransformFromSkel(arm);
-	curTrans[arm] = armCurT;
+Eigen::VectorXd WorkspaceControl::getXdotFromXref(lwa_arm_t arm) {
+	curTrans[arm] = _krang->getEffectorPose(arm);
 
 ////////////// VERSION 1: something dumb
-	Eigen::Matrix4d xdotM = refTrans[arm] * curTrans[arm].inverse();
-	return transformToEuler(xdotM, math::XYZ);
+//	Eigen::Matrix4d xdotM = refTrans[arm] * curTrans[arm].inverse();
+//	return transformToEuler(xdotM, math::XYZ);
 
 ////////////// VERSION 2: reverse of above (is actually a reference, but crappy Euler conversion)
-//	Eigen::Matrix4d curRot = curTrans[arm];
-//	curRot.topRightCorner<3,1>().setZero();
-//	Eigen::Matrix4d xdotM = curRot * curTrans[arm].inverse() * refTrans[arm];
-//	return transformToEuler(xdotM, math::XYZ);
+	Eigen::Matrix4d curRot = curTrans[arm];
+	curRot.topRightCorner<3,1>().setZero();
+	Eigen::Matrix4d xdotM = curRot * curTrans[arm].inverse() * refTrans[arm];
+	return transformToEuler(xdotM, math::XYZ);
 
 ////////////// VERSION 3: same as version 2, but with quaternions
 //	Eigen::VectorXd goalPos = refTrans[arm].topRightCorner<3,1>();
@@ -152,18 +143,13 @@ Eigen::VectorXd WorkspaceControl::getXdotFromXref(lwa_arm_t arm, const Eigen::Ma
  * everything after other arm is for ff velocity control
  */
 void WorkspaceControl::updateXrefFromOther(lwa_arm_t arm, lwa_arm_t other,
-		Eigen::VectorXd *qdotOther, Eigen::VectorXd *qOther, KrangControl *krang,
-		simulation::World *world, double dt) {
+		Eigen::VectorXd *qdotOther, Eigen::VectorXd *qOther, double dt) {
 
 	// update arm current transforms
-//	setEffectorTransformFromSkel(arm, eeNodeArm);
-//	setEffectorTransformFromSkel(other, eeNodeOther);
-	curTrans[arm] = krang->getEffectorPose(world, arm);
-	curTrans[other] = krang->getEffectorPose(world, other);
+	curTrans[arm] = _krang->getEffectorPose(arm);
+	curTrans[other] = _krang->getEffectorPose(other);
 
-//	std::cout << " curTrans[arm] " << curTrans[arm] << std::endl;
-//	std::cout << " curTrans[other] " << curTrans[other] << std::endl;
-	//TODO: feedforward the other arm's xdot before computing projected reftrans (will fix lag)
+	//TODO: feedforward the other arm's xdot before computing projected reftrans (to fix lag)
 	if (qdotOther == NULL || qOther == NULL) {
 		// set arm reference based on cached relative transform
 		refTrans[arm] = curTrans[other] * relTrans[arm];
@@ -173,11 +159,11 @@ void WorkspaceControl::updateXrefFromOther(lwa_arm_t arm, lwa_arm_t other,
 		qOtherNext = *qOther + *qdotOther * dt*15;
 
 		// step3: set dart config and read back pose
-		krang->setArmConfig(world, other, qOtherNext);
+		_krang->setArmConfig(other, qOtherNext);
 
 		// step4: use this pose instead of curTrans[other]
-		Eigen::Matrix4d curTransOtherNext = krang->getEffectorPose(world, other);
-		krang->setArmConfig(world, other, *qOther);
+		Eigen::Matrix4d curTransOtherNext = _krang->getEffectorPose(other);
+		_krang->setArmConfig(other, *qOther);
 		refTrans[arm] = curTransOtherNext * relTrans[arm];
 	}
 }
@@ -196,7 +182,7 @@ Eigen::VectorXd WorkspaceControl::xdotToQdot(lwa_arm_t arm, kinematics::BodyNode
 	// obtain xdot from user or reference
 	Eigen::VectorXd xd(6);
 	if (xdot == NULL)
-		xd = getXdotFromXref(arm, eeNode->getWorldTransform());
+		xd = getXdotFromXref(arm);
 	else
 		xd = *xdot;
 
@@ -222,7 +208,10 @@ Eigen::VectorXd WorkspaceControl::xdotToQdot(lwa_arm_t arm, kinematics::BodyNode
 
 	Eigen::MatrixXd JinvJ = Jinv*J;
 	Eigen::MatrixXd I = Eigen::MatrixXd::Identity(7,7);
-	return Jinv * (xd * xdotGain) + (I - JinvJ) * (qDist * nullGain);
+
+	Eigen::VectorXd qdot = Jinv * (xd * xdotGain);// + (I - JinvJ) * (qDist * nullGain);
+
+	return qdot;
 }
 
 void WorkspaceControl::setRelativeTransforms() {

@@ -12,7 +12,7 @@
 #include <simulation/World.h>
 #include <kinematics/BodyNode.h>
 
-#include "KrangControl.h" // TODO deleteme
+#include "KrangControl.h"
 
 
 
@@ -28,14 +28,14 @@ public:
 	virtual ~WorkspaceControl();
 
 	// initialization
-	void initialize();
+	void initialize(KrangControl *krang);
 
 	// Update methods
 	void updateRelativeTransforms();
 	void updateXrefFromXdot(lwa_arm_t arm, Eigen::VectorXd &xdot);
 	void updateXrefFromOther(lwa_arm_t arm, lwa_arm_t other,
 			Eigen::VectorXd *qdotOther = NULL, Eigen::VectorXd *qOther = NULL,
-			KrangControl *krang = NULL, simulation::World *world = NULL, double dt = 0);
+			double dt = 0);
 
 	// getters and setters
 	void setXref(lwa_arm_t arm, Eigen::Matrix4d &T);
@@ -66,7 +66,7 @@ protected:
 //	void setEffectorTransformFromSkel(lwa_arm_t arm, kinematics::BodyNode* eeNode);
 
 	// Returns an xdot for the given arm's current reference position
-	Eigen::VectorXd getXdotFromXref(lwa_arm_t arm, const Eigen::Matrix4d &armCurT);
+	Eigen::VectorXd getXdotFromXref(lwa_arm_t arm);
 
 	// flag for whether to have left arm track the right one (TODO de-hackify)
 	static const bool right_track_left_mode = 0;
@@ -77,8 +77,9 @@ protected:
 	std::vector<Eigen::Matrix4d> refTrans; 	///< reference transforms (ie goal)
 	std::vector<Eigen::Matrix4d> relTrans; 	///< named effector transform in other effector frame
 
-	// Pointers to frequently used dart data structures
-//	std::vector<kinematics::BodyNode*> eeNodes;
+private:
+	// All important krang pointer
+	KrangControl* _krang;
 };
 
 #endif /* WORKSPACETELEOP_H_ */

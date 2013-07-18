@@ -17,14 +17,16 @@ KrangControl::~KrangControl() {
 	// TODO Auto-generated destructor stub
 }
 
-int KrangControl::initialize(simulation::World* world, somatic_d_t *daemon_cx, bool fake_ctl_mode) {
-	this->daemon_cx = daemon_cx;
-	this->arm_motors.resize(2);
-	this->armIDs.resize(2);
-	this->armNodeNames.resize(2);
-	this->schunk_gripper_motors.resize(2);
-	this->robotiq_gripper_channels.resize(2);
-	setDartIDs(world);
+int KrangControl::initialize(simulation::World* world, somatic_d_t *daemon_cx, const char *robot_name, bool fake_ctl_mode) {
+	this->_world = world;
+	this->_krang = _world->getSkeleton(robot_name);
+	this->_daemon_cx = daemon_cx;
+	this->_arm_motors.resize(2);
+	this->_armIDs.resize(2);
+	this->_gripperNodes.resize(2);
+	this->_schunk_gripper_motors.resize(2);
+	this->_robotiq_gripper_channels.resize(2);
+	setDartIDs();
 	setControlMode(fake_ctl_mode);
 	return 1;
 }
@@ -33,14 +35,15 @@ void KrangControl::setControlMode(bool fake_ctl_mode) {
 	this->fake_ctl_mode = fake_ctl_mode;
 
 	if (!this->fake_ctl_mode && !initialized) {
-		initArm(*daemon_cx, arm_motors[LEFT_ARM], "llwa");
-		initArm(*daemon_cx, arm_motors[RIGHT_ARM], "rlwa");
-		//initSchunkGripper(*daemon_cx, schunk_gripper_motors[LEFT_ARM], "lGripper");
-		//initSchunkGripper(*daemon_cx, schunk_gripper_motors[RIGHT_ARM], "rGripper");
+		initArm(LEFT_ARM, "llwa");
+		initArm(RIGHT_ARM, "rlwa");
+		//initSchunkGripper(LEFT_ARM, "lGripper");
+		//initSchunkGripper(RIGHT_ARM, "rGripper");
 		initRobotiqGripper(LEFT_ARM, "lgripper-cmd");
 		initRobotiqGripper(RIGHT_ARM, "rgripper-cmd");
-		initWaist(*daemon_cx, waist);
-		initIMU(*daemon_cx, imu_chan);
+		initWaist();
+		initTorso();
+		initIMU(imu_chan);
 
 		initialized = true;
 	}
@@ -50,21 +53,27 @@ void KrangControl::setControlMode(bool fake_ctl_mode) {
  * Reads the full Krang configuration from somatinc and updates the krang skeleton in the
  * provided world.
  */
-void KrangControl::updateKrangSkeleton(simulation::World* world) {
+void KrangControl::updateKrangSkeleton() {
 
-	updateRobotSkelFromSomaticMotor(world, *daemon_cx, arm_motors[LEFT_ARM], armIDs[LEFT_ARM]);
-	updateRobotSkelFromSomaticMotor(world, *daemon_cx, arm_motors[RIGHT_ARM], armIDs[RIGHT_ARM]);
-	updateRobotSkelFromSomaticWaist(world, *daemon_cx, waist, waistIDs);
-	updateRobotSkelFromIMU(world);
+	updateRobotSkelFromSomaticMotor(_arm_motors[LEFT_ARM], _armIDs[LEFT_ARM]);
+	updateRobotSkelFromSomaticMotor(_arm_motors[RIGHT_ARM], _armIDs[RIGHT_ARM]);
+	updateRobotSkelFromSomaticMotor(_torso, _torsoIDs);
+	updateRobotSkelFromSomaticWaist();
+	updateRobotSkelFromIMU();
 }
 
-Eigen::VectorXd KrangControl::getArmConfig(simulation::World* world, lwa_arm_t arm) {
-	return world->getSkeleton("Krang")->getConfig(armIDs[arm]);
+Eigen::VectorXd KrangControl::getArmConfig(lwa_arm_t arm) {
+	return _krang->getConfig(_armIDs[arm]);
 }
 
-void KrangControl::setArmConfig(simulation::World* world, lwa_arm_t arm, Eigen::VectorXd &config) {
-	world->getSkeleton("Krang")->setConfig(armIDs[arm], config);
+void KrangControl::setArmConfig(lwa_arm_t arm, Eigen::VectorXd &config) {
+	_krang->setConfig(_armIDs[arm], config);
 }
+
+Eigen::Matrix4d KrangControl::getEffectorPose(lwa_arm_t arm) {
+	return _gripperNodes[arm]->getWorldTransform();
+}
+
 
 void KrangControl::sendRobotArmVelocities(lwa_arm_t arm, Eigen::VectorXd& qdot, double dt) {
 
@@ -73,21 +82,20 @@ void KrangControl::sendRobotArmVelocities(lwa_arm_t arm, Eigen::VectorXd& qdot, 
 	double dq [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 	for(size_t i = 0; i < 7; i++)
 		dq[i] = qdot(i) * dt;
-	somatic_motor_cmd(daemon_cx, &arm_motors[arm], SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7, NULL);
+	somatic_motor_cmd(_daemon_cx, &_arm_motors[arm], SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7, NULL);
 }
 
-void KrangControl::setRobotArmVelocities(simulation::World* world,
-		lwa_arm_t arm, Eigen::VectorXd& qdot, double dt) {
+void KrangControl::setRobotArmVelocities(lwa_arm_t arm, Eigen::VectorXd& qdot, double dt) {
 
 	if (fake_ctl_mode)
-		fakeArmMovement(world, arm, qdot, dt);
+		fakeArmMovement(arm, qdot, dt);
 	else
 		sendRobotArmVelocities(arm, qdot, dt);
 }
 
 void KrangControl::initRobotiqGripper(lwa_arm_t arm, const char *chan) {
     // for robotiq we currently talk over ach directly
-    ach_open(&robotiq_gripper_channels[arm], chan, NULL);
+    ach_open(&_robotiq_gripper_channels[arm], chan, NULL);
 }
 
 void KrangControl::setRobotiqGripperAction(lwa_arm_t arm, const Eigen::VectorXi& buttons) {
@@ -103,76 +111,75 @@ void KrangControl::setRobotiqGripperAction(lwa_arm_t arm, const Eigen::VectorXi&
 	if (buttons[1]) rqd_msg.grasping_pos = 0xff;
 
 	if (buttons[0] || buttons[1])
-		ach_put(&robotiq_gripper_channels[arm], &rqd_msg, sizeof(rqd_msg));
+		ach_put(&_robotiq_gripper_channels[arm], &rqd_msg, sizeof(rqd_msg));
 }
 
+void KrangControl::fakeArmMovement(lwa_arm_t arm, Eigen::VectorXd& qdot, double dt) {
 
-void KrangControl::fakeArmMovement(simulation::World* world, lwa_arm_t arm, Eigen::VectorXd& qdot, double dt) {
-
-	Eigen::VectorXd q = world->getSkeleton("Krang")->getConfig(armIDs[arm]);
+	Eigen::VectorXd q = _krang->getConfig(_armIDs[arm]);
 	q += qdot * dt;
-	world->getSkeleton("Krang")->setConfig(armIDs[arm], q);
+	_krang->setConfig(_armIDs[arm], q);
 }
 
 void KrangControl::halt() {
 
-	haltArm(*daemon_cx, arm_motors[LEFT_ARM]);
-	haltArm(*daemon_cx, arm_motors[RIGHT_ARM]);
+	haltArm(LEFT_ARM);
+	haltArm(RIGHT_ARM);
 	initialized = false;
 }
 
-//double KrangControl::ssdmu_pitch(double x, double y, double z) {
-//
-//    double newX;
-//    newX = x*cos(csr) - y*sin(csr);
-//    return atan2(newX, z);
-//}
-
-void KrangControl::setDartIDs(simulation::World* world) {
+void KrangControl::setDartIDs() {
 	// IDs for various krang body parts, hard-coded for now
 
 	int idL[] = {11, 13, 15, 17, 19, 21, 23};
-	armIDs[LEFT_ARM] = std::vector<int>(idL, idL + sizeof(idL)/sizeof(idL[0]));
+	_armIDs[LEFT_ARM] = std::vector<int>(idL, idL + sizeof(idL)/sizeof(idL[0]));
 
 	int idR[] = {12, 14, 16, 18, 20, 22, 24};
-	armIDs[RIGHT_ARM] = std::vector<int>(idR, idR + sizeof(idR)/sizeof(idR[0]));
+	_armIDs[RIGHT_ARM] = std::vector<int>(idR, idR + sizeof(idR)/sizeof(idR[0]));
 
 	int imu_ids[] = {5};
-	imuIDs = std::vector<int>(imu_ids, imu_ids + sizeof(imu_ids)/sizeof(imu_ids[0]));
+	_imuIDs = std::vector<int>(imu_ids, imu_ids + sizeof(imu_ids)/sizeof(imu_ids[0]));
 
 	int waist_ids[] = {8};
-	waistIDs = std::vector<int>(waist_ids, waist_ids + sizeof(waist_ids)/sizeof(waist_ids[0]));
+	_waistIDs = std::vector<int>(waist_ids, waist_ids + sizeof(waist_ids)/sizeof(waist_ids[0]));
+
+	int torso_ids[] = {9};
+	_torsoIDs = std::vector<int>(torso_ids, torso_ids + sizeof(torso_ids)/sizeof(torso_ids[0]));
 
 	//TODO factor out to separate func for cleanness
-	armNodeNames[LEFT_ARM] = "lGripper";
-	armNodeNames[RIGHT_ARM] = "rGripper";
+	_gripperNodes[LEFT_ARM] = this->_krang->getNode("lGripper");
+	_gripperNodes[RIGHT_ARM] = this->_krang->getNode("rGripper");
 }
 
-void KrangControl::updateRobotSkelFromSomaticMotor(simulation::World* world,
-		somatic_d_t& daemon_cx, somatic_motor_t& mot, std::vector<int>& IDs) {
+void KrangControl::updateRobotSkelFromSomaticMotor(somatic_motor_t& mot, std::vector<int>& IDs) {
 
 	assert(mot.n == IDs.size());
 	Eigen::VectorXd vals(mot.n);
-	somatic_motor_update(&daemon_cx, &mot);
+	somatic_motor_update(_daemon_cx, &mot);
 	for(size_t i = 0; i < mot.n; i++)
 		vals(i) = mot.pos[i];
-	world->getSkeleton("Krang")->setConfig(IDs, vals);
+	_krang->setConfig(IDs, vals);
 }
 
-void KrangControl::updateRobotSkelFromSomaticWaist(simulation::World* world,
-		somatic_d_t& daemon_cx, somatic_motor_t& waist,
-		std::vector<int>& waistIDs) {
+void KrangControl::updateRobotSkelFromSomaticWaist() {
 
 	// Read the waist's state and update the averaged waist position
-    somatic_motor_update(&daemon_cx, &waist);
-    double waist_angle = (waist.pos[0] - waist.pos[1]) / 2.0;
+    somatic_motor_update(_daemon_cx, &_waist);
+    double waist_angle = (_waist.pos[0] - _waist.pos[1]) / 2.0;
 
     Eigen::VectorXd vals(1);
     vals << waist_angle;
-    world->getSkeleton("Krang")->setConfig(waistIDs, vals);
+    _krang->setConfig(_waistIDs, vals);
 }
 
-void KrangControl::initArm(somatic_d_t& daemon_cx, somatic_motor_t& arm, const char* armName) {
+void KrangControl::updateRobotSkelFromIMU() {
+	Eigen::VectorXd imu_pos(1);
+	getIMU();
+	imu_pos << -imu_angle + M_PI/2;
+	_krang->setConfig(_imuIDs, imu_pos);
+}
+
+void KrangControl::initArm(lwa_arm_t arm, const char* armName) {
 
 	// Get the channel names
 	char cmd_name [16], state_name [16];
@@ -180,34 +187,34 @@ void KrangControl::initArm(somatic_d_t& daemon_cx, somatic_motor_t& arm, const c
 	sprintf(state_name, "%s-state", armName);
 
 	// Initialize the arm with the daemon context, channel names and # of motors
-	somatic_motor_init(&daemon_cx, &arm, 7, cmd_name, state_name);
+	somatic_motor_init(_daemon_cx, &_arm_motors[arm], 7, cmd_name, state_name);
 	usleep(1e5);
 
 	// Set the min/max values for valid and limits values
 	double** limits [] = {
-		&arm.pos_valid_min, &arm.vel_valid_min,
-		&arm.pos_limit_min, &arm.pos_limit_min,
-		&arm.pos_valid_max, &arm.vel_valid_max,
-		&arm.pos_limit_max, &arm.pos_limit_max};
+		&_arm_motors[arm].pos_valid_min, &_arm_motors[arm].vel_valid_min,
+		&_arm_motors[arm].pos_limit_min, &_arm_motors[arm].pos_limit_min,
+		&_arm_motors[arm].pos_valid_max, &_arm_motors[arm].vel_valid_max,
+		&_arm_motors[arm].pos_limit_max, &_arm_motors[arm].pos_limit_max};
 	for(size_t i = 0; i < 4; i++) aa_fset(*limits[i], -1024.1, 7);
 	for(size_t i = 4; i < 8; i++) aa_fset(*limits[i], 1024.1, 7);
 
 	// Update and reset them
-	somatic_motor_update(&daemon_cx, &arm);
-	somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 7, NULL);
+	somatic_motor_update(_daemon_cx, &_arm_motors[arm]);
+	somatic_motor_cmd(_daemon_cx, &_arm_motors[arm], SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 7, NULL);
 	usleep(1e5);
 }
 
-void KrangControl::haltArm(somatic_d_t& daemon_cx, somatic_motor_t& arm) {
+void KrangControl::haltArm(lwa_arm_t arm) {
 
 	double dq [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-	somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7, NULL);
-	somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
+	somatic_motor_cmd(_daemon_cx, &_arm_motors[arm], SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7, NULL);
+	somatic_motor_cmd(_daemon_cx, &_arm_motors[arm], SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
 }
 
-void KrangControl::initIMU(somatic_d_t& daemon_cx, ach_channel_t& imu_chan) {
+void KrangControl::initIMU(ach_channel_t& imu_chan) {
 
-	somatic_d_channel_open(&daemon_cx, &imu_chan, "imu-data", NULL);
+	somatic_d_channel_open(_daemon_cx, &imu_chan, "imu-data", NULL);
 
 	// Set the offset values to amc motor group so initial wheel pos readings are zero
 	getIMU();
@@ -223,47 +230,47 @@ void KrangControl::initIMU(somatic_d_t& daemon_cx, ach_channel_t& imu_chan) {
 	kf->x[0] = imu_angle, kf->x[1] = imu_speed;
 }
 
-void KrangControl::initWaist(somatic_d_t& daemon_cx, somatic_motor_t& waist) {
+void KrangControl::initWaist() {
 
 	// Initialize the arm with the daemon context, channel names and # of motors
-	somatic_motor_init(&daemon_cx, &waist, 2, "waist-cmd", "waist-state");
+	somatic_motor_init(_daemon_cx, &_waist, 2, "waist-cmd", "waist-state");
 	usleep(1e5);
 
 	// Set the min/max values for valid and limits values
 	double** limits [] = {
-		&waist.pos_valid_min, &waist.vel_valid_min,
-		&waist.pos_limit_min, &waist.pos_limit_min,
-		&waist.pos_valid_max, &waist.vel_valid_max,
-		&waist.pos_limit_max, &waist.pos_limit_max};
+		&_waist.pos_valid_min, &_waist.vel_valid_min,
+		&_waist.pos_limit_min, &_waist.pos_limit_min,
+		&_waist.pos_valid_max, &_waist.vel_valid_max,
+		&_waist.pos_limit_max, &_waist.pos_limit_max};
 	for(size_t i = 0; i < 4; i++) aa_fset(*limits[i], -1024.1, 2);
 	for(size_t i = 4; i < 8; i++) aa_fset(*limits[i], 1024.1, 2);
 
 	// Update and reset them
-	somatic_motor_update(&daemon_cx, &waist);
-	somatic_motor_cmd(&daemon_cx, &waist, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 2, NULL);
+	somatic_motor_update(_daemon_cx, &_waist);
+	somatic_motor_cmd(_daemon_cx, &_waist, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 2, NULL);
 }
 
-void KrangControl::initTorso(somatic_d_t& daemon_cx, somatic_motor_t& torso) {
+void KrangControl::initTorso() {
 
 	// Initialize the arm with the daemon context, channel names and # of motors
-	somatic_motor_init(&daemon_cx, &torso, 1, "torso-cmd", "torso-state");
+	somatic_motor_init(_daemon_cx, &_torso, 1, "torso-cmd", "torso-state");
 	usleep(1e5);
 
 	// Set the min/max values for valid and limits values
 	double** limits [] = {
-		&torso.pos_valid_min, &torso.vel_valid_min,
-		&torso.pos_limit_min, &torso.pos_limit_min,
-		&torso.pos_valid_max, &torso.vel_valid_max,
-		&torso.pos_limit_max, &torso.pos_limit_max};
+		&_torso.pos_valid_min, &_torso.vel_valid_min,
+		&_torso.pos_limit_min, &_torso.pos_limit_min,
+		&_torso.pos_valid_max, &_torso.vel_valid_max,
+		&_torso.pos_limit_max, &_torso.pos_limit_max};
 	for(size_t i = 0; i < 4; i++) aa_fset(*limits[i], -1024.1, 1);
 	for(size_t i = 4; i < 8; i++) aa_fset(*limits[i], 1024.1, 1);
 
 	// Update and reset them
-	somatic_motor_update(&daemon_cx, &torso);
-	somatic_motor_cmd(&daemon_cx, &torso, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 1, NULL);
+	somatic_motor_update(_daemon_cx, &_torso);
+	somatic_motor_cmd(_daemon_cx, &_torso, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 1, NULL);
 }
 
-void KrangControl::initSchunkGripper(somatic_d_t& daemon_cx, somatic_motor_t& gripper, const char* name) {
+void KrangControl::initSchunkGripper(lwa_arm_t gripper, const char* name) {
 
 	// Get the channel names
 	char cmd_name [16], state_name [16];
@@ -271,34 +278,24 @@ void KrangControl::initSchunkGripper(somatic_d_t& daemon_cx, somatic_motor_t& gr
 	sprintf(state_name, "%s-state", name);
 
 	// Create the motor reference for the left gripper
-	somatic_motor_init(&daemon_cx, &gripper, 1, cmd_name, state_name);
+	somatic_motor_init(_daemon_cx, &_schunk_gripper_motors[gripper], 1, cmd_name, state_name);
 	usleep(1e5);
 
 	// Set the min/max values for valid and limits values
-	aa_fset(gripper.pos_valid_min, 0.009, 1);
-	aa_fset(gripper.pos_limit_min, 0.009, 1);
-	aa_fset(gripper.pos_valid_max, 0.068, 1);
-	aa_fset(gripper.pos_limit_max, 0.068, 1);
-	aa_fset(gripper.vel_valid_min, -0.008, 1);
-	aa_fset(gripper.vel_limit_min, -0.008, 1);
-	aa_fset(gripper.vel_valid_max, 0.008, 1);
-	aa_fset(gripper.vel_limit_max, 0.008, 1);
+	aa_fset(_schunk_gripper_motors[gripper].pos_valid_min, 0.009, 1);
+	aa_fset(_schunk_gripper_motors[gripper].pos_limit_min, 0.009, 1);
+	aa_fset(_schunk_gripper_motors[gripper].pos_valid_max, 0.068, 1);
+	aa_fset(_schunk_gripper_motors[gripper].pos_limit_max, 0.068, 1);
+	aa_fset(_schunk_gripper_motors[gripper].vel_valid_min, -0.008, 1);
+	aa_fset(_schunk_gripper_motors[gripper].vel_limit_min, -0.008, 1);
+	aa_fset(_schunk_gripper_motors[gripper].vel_valid_max, 0.008, 1);
+	aa_fset(_schunk_gripper_motors[gripper].vel_limit_max, 0.008, 1);
 
 	// Update and reset them
-	somatic_motor_update(&daemon_cx, &gripper);
-	somatic_motor_cmd(&daemon_cx, &gripper, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 1, NULL);
+	somatic_motor_update(_daemon_cx, &_schunk_gripper_motors[gripper]);
+	somatic_motor_cmd(_daemon_cx, &_schunk_gripper_motors[gripper], SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 1, NULL);
 	usleep(1e5);
 }
-
-void KrangControl::updateRobotSkelFromIMU(simulation::World* world) {
-	dynamics::SkeletonDynamics* krang = world->getSkeleton("Krang");
-
-	Eigen::VectorXd imu_pos(1);
-	getIMU();
-	imu_pos << -imu_angle + M_PI/2;
-	krang->setConfig(imuIDs, imu_pos);
-}
-
 
 /// Computes the imu value from the imu readings
 void KrangControl::getIMU() {
@@ -357,13 +354,4 @@ void KrangControl::getIMU() {
 
 	// Set the values
 	imu_angle = kf->x[0], imu_speed = kf->x[1];
-}
-
-
-/*
- * ENDSANDBOX
- */
-
-Eigen::Matrix4d KrangControl::getEffectorPose(simulation::World* world,	lwa_arm_t arm) {
-	return world->getSkeleton("Krang")->getNode(armNodeNames[arm].c_str())->getWorldTransform();
 }
