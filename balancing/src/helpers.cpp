@@ -20,6 +20,8 @@ using namespace std;
 size_t MODE = 0;
 Vector6d K_ground = (Vector6d() << 0.0, 0.0, 0.0, -20.0, 0.0, 20.0).finished();
 Vector2d J_ground (1.0, 1.0);
+Vector6d K_stand;
+Vector2d J_stand;
 Vector6d K;
 
 /* ******************************************************************************************** */
@@ -150,12 +152,12 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 /// Read file for gains
 void readGains () {
 
-	Vector6d* kgains [] = {&K_ground};
-	Vector2d* jgains [] = {&J_ground};
+	Vector6d* kgains [] = {&K_ground, &K_stand};
+	Vector2d* jgains [] = {&J_ground, &J_stand};
 	ifstream file ("../gains.txt");
 	assert(file.is_open());
 	char line [1024];
-	for(size_t k_idx = 0; k_idx < 1; k_idx++) {
+	for(size_t k_idx = 0; k_idx < 2; k_idx++) {
 		*kgains[k_idx] = Vector6d::Zero();
 		*jgains[k_idx] = Vector2d::Zero();
 		file.getline(line, 1024);
@@ -166,6 +168,11 @@ void readGains () {
 		while (stream >> newDouble) (*jgains[k_idx])(i++ - 6) = newDouble;
 	}
 	file.close();
+
+	pv(K_ground);
+	pv(J_ground);
+	pv(K_stand);
+	pv(J_stand);
 }
 
 /* ********************************************************************************************* */
@@ -182,6 +189,12 @@ void *kbhit(void *) {
 			K = K_ground;
 			MODE = 1;
 		}
+		else if(input=='2') {
+			printf("Mode 2\n"); 
+			K = K_stand;
+			MODE = 1;
+		}
+
 	}
 	start = true;
 }
