@@ -69,7 +69,7 @@ static bool motor_input_mode = 0;
 static bool motor_output_mode = 0;
 static bool motors_initialized = 0;
 static bool right_track_left_mode = 0;
-double xdot_gain = 5.0;
+double xdot_gain = 1.0;
 static int ui_input_mode = UI_JOYSTICK;
 
 // Pointers to frequently used dart data structures
@@ -189,9 +189,9 @@ void Timer::Notify() {
 	if (motor_input_mode)
 		krang.updateKrangSkeleton(mWorld);
 
-	VectorXd cfgL = spn1.getConfig() * 0.2;
-	VectorXd cfgR = spn2.getConfig() * 0.2;
-
+	VectorXd cfgL = spn1.getConfig(0.4,0.4);
+	VectorXd cfgR = spn2.getConfig(0.4,0.4);
+	//goalSkelL->setConfig(dartRootDofOrdering, cfgL);
 	wrkCtl.updateXrefFromXdot(LEFT_ARM, cfgL);
 
 	if (right_track_left_mode)
@@ -213,11 +213,8 @@ void Timer::Notify() {
 	// handle grippers
 	VectorXi buttons1 = spn1.getButtons();
 	VectorXi buttons2 = spn2.getButtons();
-//	cout << "buttons1 "<< buttons1.transpose() << endl;
-//	cout << "buttons2 "<< buttons2.transpose() << endl;
 	krang.setRobotiqGripperAction(LEFT_ARM, buttons1);
 	krang.setRobotiqGripperAction(RIGHT_ARM, buttons2);
-
 
 	// Visualize the arm motion
 	viewer->DrawGLScene();
@@ -305,9 +302,6 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	// initialize krang the monster
 	krang.initialize(mWorld, &daemon_cx, !(motor_input_mode || motor_output_mode));
 
-	// initialize workspace controller
-	wrkCtl.initialize(eeNodeL, eeNodeR);
-
 	// Manually set the initial arm configuration for the left arm
 	VectorXd larm_conf(7), rarm_conf(7);
 	larm_conf << 0.0, -M_PI / 3.0, 0.0, -M_PI / 3.0, 0.0, M_PI/6.0, 0.0;
@@ -315,6 +309,8 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	krang.setArmConfig(mWorld, LEFT_ARM, larm_conf);
 	krang.setArmConfig(mWorld, RIGHT_ARM, rarm_conf);
 
+	// initialize workspace controller
+	wrkCtl.initialize(eeNodeL, eeNodeR);
 }
 
 /* ********************************************************************************************* */

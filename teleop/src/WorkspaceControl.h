@@ -40,6 +40,8 @@ public:
 	// getters and setters
 	void setXref(lwa_arm_t arm, Eigen::Matrix4d &T);
 	Eigen::Matrix4d getXref(lwa_arm_t arm);
+	void setXcur(lwa_arm_t arm, Eigen::Matrix4d &T);
+	Eigen::Matrix4d getXcur(lwa_arm_t arm);
 
 
 	/**
@@ -80,5 +82,3 @@ protected:
 };
 
 #endif /* WORKSPACETELEOP_H_ */
-
-//void setRelativeTransforms(lwa_arm_t arm1, lwa_arm_t arm2)

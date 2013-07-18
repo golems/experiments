@@ -29,7 +29,7 @@ public:
 	void setInitialTransform();
 
 	// update methods
-	Eigen::VectorXd getConfig();
+	Eigen::VectorXd getConfig(double pos_scale = 1.0, double rot_scale = 1.0);
 	Eigen::VectorXi getButtons();
 	bool getPose(Eigen::MatrixXd &pose, Eigen::VectorXd* config = NULL);
 

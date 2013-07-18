@@ -43,6 +43,11 @@ void WorkspaceControl::initializeTransforms() {
 
 	relTrans.push_back(T_dummy);
 	relTrans.push_back(T_dummy);
+
+	setEffectorTransformFromSkel(LEFT_ARM);
+	setEffectorTransformFromSkel(RIGHT_ARM);
+	refTrans[LEFT_ARM] = curTrans[LEFT_ARM];
+	refTrans[RIGHT_ARM] = curTrans[RIGHT_ARM];
 }
 
 void WorkspaceControl::setEffectorTransformFromSkel(lwa_arm_t arm) {
@@ -65,6 +70,15 @@ Eigen::Matrix4d WorkspaceControl::getXref(lwa_arm_t arm) {
 	return refTrans[arm];
 }
 
+void WorkspaceControl::setXcur(lwa_arm_t arm, Eigen::Matrix4d& T) {
+
+	curTrans[arm] = T;
+}
+
+Eigen::Matrix4d WorkspaceControl::getXcur(lwa_arm_t arm) {
+	return curTrans[arm];
+}
+
 /*
  * Updates the reference transform for the target arm according to the provided
  * 6D config vector.  This vector is interpreted as a desired workspace velocity
@@ -74,10 +88,26 @@ Eigen::Matrix4d WorkspaceControl::getXref(lwa_arm_t arm) {
  * is treated as a relative transform applied to the current effector pose
  */
 void WorkspaceControl::updateXrefFromXdot(lwa_arm_t arm, Eigen::VectorXd& xdot) {
+	////////////// VERSION 1
+//	setEffectorTransformFromSkel(arm);
+//	Eigen::Matrix4d xdotM = eulerToTransform(xdot, math::XYZ);
+//	refTrans[arm] = xdotM * curTrans[arm];
 
-	setEffectorTransformFromSkel(arm);
+////////////// VERSION 2
+	// new version: apply to effector, but rotate into global frame first
+//	Eigen::Matrix4d curRot = curTrans[arm];
+//	curRot.topRightCorner<3,1>().setZero();
+//	refTrans[arm] = curTrans[arm] * curRot.inverse() * xdotM;
+
+////////////// VERSION 2.5
+	Eigen::Matrix4d refRot = refTrans[arm];
+	refRot.topRightCorner<3,1>().setZero();
 	Eigen::Matrix4d xdotM = eulerToTransform(xdot, math::XYZ);
-	refTrans[arm] = xdotM * curTrans[arm];
+	refTrans[arm] = refTrans[arm] * refRot.inverse() * xdotM;
+
+	//TODO write a custom eulerToTransform
+	//TODO also try not using transforms at all for reference
+	//TODO or try doing feedforward in jointspace while we're just using euler for refs
 }
 
 /*
@@ -89,17 +119,48 @@ void WorkspaceControl::updateXrefFromOther(lwa_arm_t arm, lwa_arm_t other) {
 	setEffectorTransformFromSkel(arm);
 	setEffectorTransformFromSkel(other);
 
-	// set arm2 reference based on cached relative transform
+	// set arm reference based on cached relative transform
 	refTrans[arm] = curTrans[other] * relTrans[arm];
+
+	//TODO: feedforward the other arm's xdot before computing projected reftrans (will fix lag)
 }
 
 Eigen::VectorXd WorkspaceControl::getXdotFromXref(lwa_arm_t arm) {
+	setEffectorTransformFromSkel(arm);
 
-	// get transform from effector to reference in global frame
-	Eigen::Matrix4d xdotM = refTrans[arm] * curTrans[arm].inverse();
+////////////// VERSION 1
+//	// get transform from effector to reference in global frame
+//	Eigen::Matrix4d xdotM = refTrans[arm] * curTrans[arm].inverse();
+//	// return as a config vector
+//	return transformToEuler(xdotM, math::XYZ);
 
-	// return as a config vector
+////////////// VERSION 2
+	// new version: reverse of above (is actually a reference, but crappy Euler conversion)
+	Eigen::Matrix4d curRot = curTrans[arm];
+	curRot.topRightCorner<3,1>().setZero();
+	Eigen::Matrix4d xdotM = curRot * curTrans[arm].inverse() * refTrans[arm];
+
+	 // return as a config vector
 	return transformToEuler(xdotM, math::XYZ);
+
+////////////// VERSION 3
+//	// compute the position error
+//	Eigen::VectorXd goalPos = refTrans[arm].topRightCorner<3,1>();
+//	Eigen::VectorXd eePos = curTrans[arm].topRightCorner<3,1>();
+//	Eigen::VectorXd errPos = goalPos - eePos;
+//
+//	// compute rotation error using quaternions
+//	Eigen::Quaternion<double> goalOri(refTrans[arm].topLeftCorner<3,3>());
+//	Eigen::Quaternion<double> eeOri(curTrans[arm].topLeftCorner<3,3>());
+//	Eigen::Quaternion<double> errOriQ = goalOri * eeOri.inverse();
+//	Eigen::Matrix3d errOriM = errOriM = errOriQ.matrix();
+//	Eigen::Vector3d errOri = math::matrixToEuler(errOriM, math::XYZ);
+//
+//	Eigen::VectorXd xdot(6);
+//	xdot.setZero();
+//	xdot << errPos, errOri;
+//
+//	return xdot;
 }
 
 /*
@@ -150,10 +211,3 @@ void WorkspaceControl::setRelativeTransforms() {
 	// cache the relative effector transforms
 	relTrans[LEFT_ARM] = curTrans[RIGHT_ARM].inverse() * curTrans[LEFT_ARM]; ///< left effector transform in right effector frame
 }
-
-
-
-//void WorkspaceControl::setEffectorTransform(lwa_arm_t arm, Eigen::Matrix4d T) {
-//
-//	curTrans[arm] = T;
-//}
