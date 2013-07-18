@@ -31,7 +31,7 @@ void SpacenavClient::setInitialTransform() {
 	//T_spn_init =
 }
 
-Eigen::VectorXd SpacenavClient::getConfig() {
+Eigen::VectorXd SpacenavClient::getConfig(double pos_scale, double rot_scale) {
 
 	Eigen::VectorXd config(6); config.setZero();
 
@@ -45,11 +45,13 @@ Eigen::VectorXd SpacenavClient::getConfig() {
 
 	// extract translation
 	Eigen::Vector3d pos(3);
-	for (int j=0; j < 3; j++) pos[j] = js_msg->axes[0].data[j];
+	for (int j=0; j < 3; j++)
+		pos[j] = js_msg->axes[0].data[j] * pos_scale;
 
 	// convert quat to rotation matrix
 	Eigen::Vector3d rotV(3);
-	for (int j=0; j < 3; j++) rotV[j] = js_msg->axes[0].data[j+3];
+	for (int j=0; j < 3; j++)
+		rotV[j] = js_msg->axes[0].data[j+3] * rot_scale;
 
 	// pack into config (spacenav has weird frame when read as a joystick)
 	config << -pos(1), -pos(0), -pos(2), -rotV(1), -rotV(0), -rotV(2);
