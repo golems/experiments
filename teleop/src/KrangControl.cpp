@@ -114,6 +114,15 @@ void KrangControl::setRobotiqGripperAction(lwa_arm_t arm, const Eigen::VectorXi&
 		ach_put(&_robotiq_gripper_channels[arm], &rqd_msg, sizeof(rqd_msg));
 }
 
+Eigen::MatrixXd KrangControl::getEffectorJacobian(lwa_arm_t arm) {
+	// Get the Jacobian of the indicated gripper, for computing joint-space velocities
+	Eigen::MatrixXd Jlin = _gripperNodes[arm]->getJacobianLinear().topRightCorner<3,7>();
+	Eigen::MatrixXd Jang = _gripperNodes[arm]->getJacobianAngular().topRightCorner<3,7>();
+	Eigen::MatrixXd J (6,7);
+	J << Jlin, Jang;
+	return J;
+}
+
 void KrangControl::fakeArmMovement(lwa_arm_t arm, Eigen::VectorXd& qdot, double dt) {
 
 	Eigen::VectorXd q = _krang->getConfig(_armIDs[arm]);

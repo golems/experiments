@@ -52,6 +52,7 @@ public:
 	Eigen::VectorXd getArmConfig(lwa_arm_t arm);
 	void setArmConfig(lwa_arm_t arm, Eigen::VectorXd &config);
 	Eigen::Matrix4d getEffectorPose(lwa_arm_t arm);
+	Eigen::MatrixXd getEffectorJacobian(lwa_arm_t arm);
 
 	// control methods
 	void setControlMode(bool mode);

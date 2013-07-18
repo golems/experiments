@@ -145,27 +145,8 @@ Eigen::VectorXd WorkspaceControl::getXdotFromXref(lwa_arm_t arm) {
 void WorkspaceControl::updateXrefFromOther(lwa_arm_t arm, lwa_arm_t other,
 		Eigen::VectorXd *qdotOther, Eigen::VectorXd *qOther, double dt) {
 
-	// update arm current transforms
-	curTrans[arm] = _krang->getEffectorPose(arm);
-	curTrans[other] = _krang->getEffectorPose(other);
-
-	//TODO: feedforward the other arm's xdot before computing projected reftrans (to fix lag)
-	if (qdotOther == NULL || qOther == NULL) {
-		// set arm reference based on cached relative transform
-		refTrans[arm] = curTrans[other] * relTrans[arm];
-	} else {
-		// step1: integrate other arm in joint space (because we can't do in workspace stupid dart)
-		Eigen::VectorXd qOtherNext(7);
-		qOtherNext = *qOther + *qdotOther * dt*15;
-
-		// step3: set dart config and read back pose
-		_krang->setArmConfig(other, qOtherNext);
-
-		// step4: use this pose instead of curTrans[other]
-		Eigen::Matrix4d curTransOtherNext = _krang->getEffectorPose(other);
-		_krang->setArmConfig(other, *qOther);
-		refTrans[arm] = curTransOtherNext * relTrans[arm];
-	}
+	// set arm reference based on cached relative transform
+	refTrans[arm] = refTrans[other] * relTrans[arm];
 }
 
 /*
