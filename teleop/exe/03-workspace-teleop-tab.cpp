@@ -86,6 +86,7 @@ double ft_gain = 0.02;
 double ui_gain = 1.0;
 
 wxCheckBox* checkbox_tracking;
+wxCheckBox* checkbox_motor_output_mode;
 
 // Pointers to frequently used dart data structures
 kinematics::BodyNode *eeNodeL;
@@ -141,11 +142,11 @@ void SimTab::OnButton(wxCommandEvent &evt) {
 	case id_checkbox_ToggleMotorOutputMode: {
 		motor_output_mode = evt.IsChecked();
 
-		checkbox_tracking->SetValue(false);
-		right_track_left_mode = false;
-
-		if (motor_output_mode)
+		if (motor_output_mode) {
+			checkbox_tracking->SetValue(false);
+			right_track_left_mode = false;
 			wrkCtl.initializeTransforms();
+		}
 
 		krang.setMotorOutputMode(motor_output_mode);
 
@@ -257,8 +258,13 @@ void Timer::Notify() {
 	last_movement_time = current_time;
 
 	// update robot state from ach if we're controlling the actual robot
-	if (motor_input_mode)
-		krang.updateKrangSkeleton();
+	if (motor_input_mode) {
+		if (!krang.updateKrangSkeleton()) {
+			motor_output_mode = false;
+			krang.setMotorOutputMode(false);
+			checkbox_motor_output_mode->SetValue(false);
+		}
+	}
 
 	switch (ui_mode) {
 	case UI_SPACENAV: {
@@ -336,6 +342,19 @@ void Timer::Notify() {
 	krang.setRobotiqGripperAction(LEFT_ARM, buttons1);
 	krang.setRobotiqGripperAction(RIGHT_ARM, buttons2);
 
+	// draw in joint angles in color so we can avoid joint limits
+	for(int i = 0; i < krang.getKrang()->getNumNodes(); i++) {
+		kinematics::BodyNode* node = krang.getKrang()->getNode(i);
+		if (node->getNumLocalDofs() == 0) continue;
+		kinematics::Dof* d = node->getDof(0);
+		kinematics::Shape* sh = node->getShape();
+		double joint_min = d->getMin();
+		double joint_max = d->getMax();
+		double mid = (joint_min + joint_max) / 2;
+		double value = fabs(2 * (mid - d->getValue()) / (joint_max- joint_min));
+		sh->setColor(Eigen::Vector3d(255 * value, 255 * (1 - value), 0.0));
+	}
+
 	// Visualize the arm motion
 	viewer->DrawGLScene();
 }
@@ -364,7 +383,8 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	ss2BoxS->Add(new wxButton(this, id_button_ResetJoystick, wxT("Reset Reference Transforms")), 0, wxALL, 1);
 	ss2BoxS->Add(new wxButton(this, id_button_SetInitialTransforms, wxT("Empty Button")), 0, wxALL, 1);
 
-	ss3BoxS->Add(new wxCheckBox(this, id_checkbox_ToggleMotorOutputMode, wxT("Send Motor Commands")), 0, wxALL, 1);
+	checkbox_motor_output_mode = new wxCheckBox(this, id_checkbox_ToggleMotorOutputMode, wxT("Send Motor Commands"));
+	ss3BoxS->Add(checkbox_motor_output_mode, 0, wxALL, 1);
 	checkbox_tracking = new wxCheckBox(this, id_checkbox_ToggleRightTrackLeftMode, wxT("Track left arm with right"));
 	ss3BoxS->Add(checkbox_tracking, 0, wxALL, 1);
 	ss3BoxS->Add(new wxCheckBox(this, id_checkbox_ToggleStationaryCurrentMode, wxT("Homing Mode")), 0, wxALL, 1); // Stationary Current Mode

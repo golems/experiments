@@ -78,7 +78,7 @@ public:
 	void initSomatic(); ///< initializes all of krangs body parts over somatic
 
 	// Robot update methods
-	void updateKrangSkeleton();
+	bool updateKrangSkeleton();
 	void setArmConfig(lwa_arm_t arm, Eigen::VectorXd &config);
 	void updateFTOffset(lwa_arm_t arm);
 
@@ -94,6 +94,8 @@ public:
 	void halt();
 	void resetMotors();
 	void setMotorOutputMode(bool mode);
+
+	dynamics::SkeletonDynamics* getKrang() const { return _krang; }
 
 protected:
 	// control mode
@@ -111,7 +113,7 @@ protected:
 	void initRobotiqGripper(lwa_arm_t arm, const char *chan);
 
 	// Update method helpers
-	void updateRobotSkelFromSomaticMotor(somatic_motor_t &mot, std::vector<int> &IDs);
+	bool updateRobotSkelFromSomaticMotor(somatic_motor_t &mot, std::vector<int> &IDs);
 	void updateRobotSkelFromSomaticWaist();
 	void updateRobotSkelFromIMU();
 	void getIMU();

@@ -40,6 +40,8 @@
  */
 
 #include "LibertyClient.h"
+#include <math/UtilsRotation.h>
+#include "util.h" //TODO: rename, move, or do something good
 
 LibertyClient::LibertyClient() {}
 
@@ -90,17 +92,12 @@ bool LibertyClient::updateRawPoses() {
 	// pack liberty data into arrowConfs
 	for (int i=0; i < liberty_chan_ids.size(); i++) {
 		Somatic__Vector* sensor = sensors[i];
-		Eigen::VectorXd pos(3);
-		for (int j=0; j < 3; j++) pos[j] = sensor->data[j];
-		rawPoses[liberty_chan_ids[i]].topRightCorner<3,1>() = pos;
 
-		// convert quat to rotation matrix
-		Eigen::Quaternion<double> rotQ(&sensor->data[3]);
-		Eigen::Matrix3d rotM(rotQ);
-		rawPoses[i].topLeftCorner<3,3>() = rotM;
+		Eigen::VectorXd config(6);
+		config << -sensor->data[0], sensor->data[1], -sensor->data[2],
+				-sensor->data[5], -sensor->data[4], sensor->data[3];
 
-		// set bottom row
-		rawPoses[liberty_chan_ids[i]].row(3) << 0,0,0,1;
+		rawPoses[liberty_chan_ids[i]] = eulerToTransform(config, math::XYZ);
 	}
 
 	// Free the liberty message

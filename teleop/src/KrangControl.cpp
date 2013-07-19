@@ -110,15 +110,16 @@ void KrangControl::setMotorOutputMode(bool mode) {
  * Reads the full Krang configuration from somatinc and updates the krang skeleton in the
  * provided world.
  */
-void KrangControl::updateKrangSkeleton() {
+bool KrangControl::updateKrangSkeleton() {
 	if (!initialized)
-		return;
+		return false;
 
-	updateRobotSkelFromSomaticMotor(_arm_motors[LEFT_ARM], _arm_ids[LEFT_ARM]);
-	updateRobotSkelFromSomaticMotor(_arm_motors[RIGHT_ARM], _arm_ids[RIGHT_ARM]);
+	if (!updateRobotSkelFromSomaticMotor(_arm_motors[LEFT_ARM], _arm_ids[LEFT_ARM])) return false;
+	if (!updateRobotSkelFromSomaticMotor(_arm_motors[RIGHT_ARM], _arm_ids[RIGHT_ARM])) return false;
 	updateRobotSkelFromSomaticMotor(_torso, _torso_ids);
 	updateRobotSkelFromSomaticWaist();
 	updateRobotSkelFromIMU();
+	return true;
 }
 
 void KrangControl::setArmConfig(lwa_arm_t arm, Eigen::VectorXd &config) {
@@ -269,9 +270,6 @@ void KrangControl::setRobotArmVelocities(lwa_arm_t arm, Eigen::VectorXd& qdot, d
 
 // super basic open and close actions, for now
 void KrangControl::setRobotiqGripperAction(lwa_arm_t arm, const Eigen::VectorXi& buttons) {
-
-	if (!send_motor_cmds)
-		return;
 
 	robotiqd_achcommand_t rqd_msg;
 	rqd_msg.mode = GRASP_BASIC;
@@ -480,9 +478,9 @@ void KrangControl::initRobotiqGripper(lwa_arm_t arm, const char *chan) {
 /*################################################################################################
   # UPDATE METHOD HELPERS
   ################################################################################################*/
-void KrangControl::updateRobotSkelFromSomaticMotor(somatic_motor_t& mot, std::vector<int>& IDs) {
+bool KrangControl::updateRobotSkelFromSomaticMotor(somatic_motor_t& mot, std::vector<int>& IDs) {
 	if (!initialized)
-		return;
+		return false;
 
 	assert(mot.n == IDs.size());
 	Eigen::VectorXd vals(mot.n);
@@ -492,11 +490,12 @@ void KrangControl::updateRobotSkelFromSomaticMotor(somatic_motor_t& mot, std::ve
 		//std::cout << "motor current " << i  << " " << mot.cur[i] << std::endl;
 		if (fabs(mot.cur[i]) > 12) {
 			halt();
-			exit(-1);
+			return false;
 		}
 	}
 
 	_krang->setConfig(IDs, vals);
+	return true;
 }
 
 void KrangControl::updateRobotSkelFromSomaticWaist() {
