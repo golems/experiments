@@ -33,12 +33,15 @@ void WorkspaceControl::initializeTransforms() {
 
 	T_dummy.setIdentity();
 
+	curTrans.resize(0);
 	curTrans.push_back(T_dummy);
 	curTrans.push_back(T_dummy);
 
+	refTrans.resize(0);
 	refTrans.push_back(T_dummy);
 	refTrans.push_back(T_dummy);
 
+	relTrans.resize(0);
 	relTrans.push_back(T_dummy);
 	relTrans.push_back(T_dummy);
 

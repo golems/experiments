@@ -110,12 +110,18 @@ void SimTab::OnButton(wxCommandEvent &evt) {
 		}
 
 	case id_button_SetInitialTransforms: {
+		wrkCtl.initializeTransforms();
 		break;
 	}
 
 	case id_checkbox_ToggleMotorInputMode: {
 		motor_input_mode = evt.IsChecked();
-		krang.setControlMode(!(motor_input_mode && !motors_initialized));
+
+		if (motor_input_mode) {
+			krang.initSomatic();
+			krang.updateKrangSkeleton();
+			wrkCtl.initializeTransforms();
+		}
 
 		break;
 	}
@@ -123,7 +129,7 @@ void SimTab::OnButton(wxCommandEvent &evt) {
 	case id_checkbox_ToggleMotorOutputMode: {
 
 		motor_output_mode = evt.IsChecked();
-		krang.setControlMode(!(motor_output_mode && !motors_initialized));
+		krang.setMotorOutputMode(motor_output_mode);
 
 		if (!motor_output_mode)
 			krang.halt();
@@ -361,7 +367,7 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	goalSkelR = mWorld->getSkeleton("g2");
 
 	// initialize krang the monster
-	krang.initialize(mWorld, &daemon_cx, "Krang", !(motor_input_mode || motor_output_mode));
+	krang.initialize(mWorld, &daemon_cx, "Krang");
 
 	// Manually set the initial arm configuration for the left arm
 	VectorXd larm_conf(7), rarm_conf(7);

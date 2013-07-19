@@ -78,12 +78,12 @@ void handleButtons(VectorXi &buttons) {
 
 	if (buttons[id_button_ToggleMotorInputMode] == 1) {
 		motor_input_mode = true;
-		krang.setControlMode(!(motor_input_mode && !motors_initialized));
+		krang.setMotorOutputMode(!(motor_input_mode && !motors_initialized));
 	}
 
 	if (buttons[id_button_ToggleMotorOutputMode] == 1) {
 		motor_output_mode = true;
-		krang.setControlMode(!(motor_output_mode && !motors_initialized));
+		krang.setMotorOutputMode(!(motor_output_mode && !motors_initialized));
 
 		if (!motor_output_mode)
 			krang.halt();
@@ -129,7 +129,7 @@ void init() {
 	//initLiberty();
 
 	// initialize krang the monster
-	krang.initialize(mWorld, &daemon_cx, "Krang", !(motor_input_mode || motor_output_mode));
+	krang.initialize(mWorld, &daemon_cx, "Krang");
 
 	// initialize workspace controller
 	wrkCtl.initialize(&krang);
