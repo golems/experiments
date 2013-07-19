@@ -1,8 +1,42 @@
+/* -*- mode: C; c-basic-offset: 4  -*- */
 /*
- * KrangControl.cpp
+ * Copyright (c) 2013, Georgia Tech Research Corporation
+ * All rights reserved.
  *
- *  Created on: Jul 17, 2013
- *      Author: jscholz
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *     * Redistributions of source code must retain the above
+ *       copyright notice, this list of conditions and the following
+ *       disclaimer.
+ *     * Redistributions in binary form must reproduce the above
+ *       copyright notice, this list of conditions and the following
+ *       disclaimer in the documentation and/or other materials
+ *       provided with the distribution.
+ *     * Neither the name of the Georgia Tech Research Corporation nor
+ *       the names of its contributors may be used to endorse or
+ *       promote products derived from this software without specific
+ *       prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY GEORGIA TECH RESEARCH CORPORATION ''AS
+ * IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL GEORGIA
+ * TECH RESEARCH CORPORATION BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
+ * OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ */
+/** \file KrangControl.cpp
+ *
+ *  \author Jonathan Scholz
+ *  \date 7/17/2013
  */
 
 #include <unistd.h>
@@ -85,13 +119,50 @@ void KrangControl::updateFTOffset(lwa_arm_t arm) {
 	// Get a nice, clean force-torque reading
 	Eigen::VectorXd ft_raw_initial_reading(6);
 	ft_raw_initial_reading << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
+
 	for(int i = 0; i < _ft_init_iters; i++)
-		ft_raw_initial_reading += getFT(arm);
-	_ft_offsets[arm] = ft_raw_initial_reading / (double)_ft_init_iters;
+		ft_raw_initial_reading += getFT(arm, true);
+
+	ft_raw_initial_reading /= (double)_ft_init_iters;
+
+    // Get the point transform wrench due to moving the affected
+    // position from com to sensor origin. The transform is an
+    // identity with the bottom left a skew symmetric of the point
+    // translation
+    Eigen::MatrixXd transform_eecom_sensor = Eigen::MatrixXd::Identity(6,6);
+    transform_eecom_sensor.bottomLeftCorner<3,3>() <<
+        0.0, -_robotiq_com(2), _robotiq_com(1),
+        _robotiq_com(2), 0.0, -_robotiq_com(0),
+        -_robotiq_com(1), _robotiq_com(0), 0.0;
+
+    // figure out the rotation of our end effector, just the rotation
+    Eigen::Matrix3d ee_rotation = getEffectorPose(arm).topLeftCorner<3,3>().transpose();
+
+    // Create the wrench with computed rotation to change the frame
+    // from the world to the sensor.
+    Eigen::MatrixXd wrenchrotate_sensor_world = Eigen::MatrixXd::Identity(6,6);
+    wrenchrotate_sensor_world.topLeftCorner<3,3>() = ee_rotation;
+    wrenchrotate_sensor_world.bottomRightCorner<3,3>() = ee_rotation;
+
+    // Get the weight vector (note that we use the world frame for
+    // gravity so towards -z)
+    Eigen::VectorXd end_effector_weight_in_world(6);
+    end_effector_weight_in_world << 0.0, 0.0, _robotiq_mass * -9.81, 0.0, 0.0, 0.0;
+
+    // Compute what the force and torque should be without any external values by multiplying the
+    // position and rotation transforms with the expected effect of the gravity
+    Eigen::VectorXd expected_ft_reading = transform_eecom_sensor * wrenchrotate_sensor_world * end_effector_weight_in_world;
+
+    // Compute the difference between the actual and expected f/t
+    // values and return the result
+    Eigen::VectorXd offset = expected_ft_reading - ft_raw_initial_reading;
+
+    // And store it
+    _ft_offsets[arm] = offset;
 }
 
 /*################################################################################################
-  # ROBOT QUERY METHODS
+  # PUBLIC ROBOT QUERY METHODS
   ################################################################################################*/
 Eigen::VectorXd KrangControl::getArmConfig(lwa_arm_t arm) {
 	return _krang->getConfig(_arm_ids[arm]);
@@ -117,7 +188,47 @@ Eigen::MatrixXd KrangControl::getEffectorJacobian(lwa_arm_t arm) {
  * in the world frame, with the gripper modeled off
  */
 Eigen::VectorXd KrangControl::getFtWorldWrench(lwa_arm_t arm) {
+	// get a measurement from the sensor
+	Eigen::VectorXd raw_ft_reading = getFT(arm);
 
+	// use the offset to correct it
+	Eigen::VectorXd corrected_ft_reading = raw_ft_reading + _ft_offsets[arm];
+
+    // Get the point transform wrench due to moving the affected
+    // position from com to sensor origin. The transform is an
+    // identity with the bottom left a skew symmetric of the point
+    // translation
+    Eigen::MatrixXd transform_eecom_sensor = Eigen::MatrixXd::Identity(6,6);
+    transform_eecom_sensor.bottomLeftCorner<3,3>() <<
+        0.0, -_robotiq_com(2), _robotiq_com(1),
+        _robotiq_com(2), 0.0, -_robotiq_com(0),
+        -_robotiq_com(1), _robotiq_com(0), 0.0;
+
+    // figure out how our end effector is rotated by giving dart the
+    // arm values and the imu/waist values
+    Eigen::Matrix3d ee_rotation = getEffectorPose(arm).topLeftCorner<3,3>().transpose();
+
+    // Create the wrench with computed rotation to change the frame
+    // from the world to the sensor
+    Eigen::MatrixXd wrenchrotate_sensor_world = Eigen::MatrixXd::Identity(6,6);
+    wrenchrotate_sensor_world.topLeftCorner<3,3>() = ee_rotation;
+    wrenchrotate_sensor_world.bottomRightCorner<3,3>() = ee_rotation;
+
+    // Get the weight vector (note that we use the world frame for
+    // gravity so towards -z)
+    Eigen::VectorXd end_effector_weight_in_world(6);
+    end_effector_weight_in_world << 0.0, 0.0, _robotiq_mass * -9.81, 0.0, 0.0, 0.0;
+
+    // Compute what the force and torque should be without any
+    // external values by multiplying the position and rotation
+    // transforms with the expected effect of the gravity
+    Eigen::VectorXd expected_ft_reading = transform_eecom_sensor * wrenchrotate_sensor_world * end_effector_weight_in_world;
+
+    // Remove the effect from the sensor value, convert the wrench
+    // into the world frame, and return the result
+    Eigen::VectorXd external = corrected_ft_reading - expected_ft_reading;
+    external = wrenchrotate_sensor_world.transpose() * external;
+    return external;
 }
 
 /*################################################################################################
@@ -264,7 +375,7 @@ void KrangControl::initIMU() {
 void KrangControl::initFT() {
 	_ft_offsets.resize(2);
 	_ft_channels.resize(2);
-	robotiq_com << 0.0, -0.008, 0.091; ///< COM: 0.065 for robotiq itself, 0.026 length of ext + 2nd
+	_robotiq_com << 0.0, -0.008, 0.091; ///< COM: 0.065 for robotiq itself, 0.026 length of ext + 2nd
 	somatic_d_channel_open(_daemon_cx, &_ft_channels[LEFT_ARM], "llwa_ft", NULL);
 	somatic_d_channel_open(_daemon_cx, &_ft_channels[RIGHT_ARM], "rlwa_ft", NULL);
 	updateFTOffset(LEFT_ARM);
@@ -303,6 +414,7 @@ void KrangControl::initArm(lwa_arm_t arm, const char* armName) {
 	somatic_motor_cmd(_daemon_cx, &_arm_motors[arm], SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 7, NULL);
 	usleep(1e5);
 }
+
 void KrangControl::initSchunkGripper(lwa_arm_t gripper, const char* name) {
 
 	// Get the channel names
@@ -428,9 +540,35 @@ void KrangControl::getIMU() {
 /*################################################################################################
   # FORCE-TORQUE HELPERS
   ################################################################################################*/
-Eigen::VectorXd KrangControl::getFT(lwa_arm_t arm) {
+Eigen::VectorXd KrangControl::getFT(lwa_arm_t arm, bool wait) {
+    // get a message
+    int r;
+    size_t num_bytes = 0;
+    Somatic__ForceMoment* ft_msg;
+    if (wait) {
+    	struct timespec timeout = aa_tm_future(aa_tm_sec2timespec(1.0/100.0));
+    	ft_msg = SOMATIC_WAIT_LAST_UNPACK(r, somatic__force_moment,
+    			&protobuf_c_system_allocator,
+    			1024,
+    			&_ft_channels[arm],
+    			&timeout);
+    }
+    else {
+    	ft_msg = SOMATIC_GET_LAST_UNPACK(r, somatic__force_moment,
+    			&protobuf_c_system_allocator,
+    			1024,
+    			&_ft_channels[arm]);
+    }
+    assert((ft_msg != NULL) && "Didn't get FT message!");
 
-}
+    // extract the data into something we can use
+    Eigen::VectorXd ft_reading(6);
+    for(size_t i = 0; i < 3; i++) ft_reading(i) = ft_msg->force->data[i];
+    for(size_t i = 0; i < 3; i++) ft_reading(i+3) = ft_msg->moment->data[i];
 
-Eigen::VectorXd KrangControl::getExpectedGripperFTWrench(lwa_arm_t arm) {
+    // free the unpacked message
+    somatic__force_moment__free_unpacked(ft_msg, &protobuf_c_system_allocator);
+
+    // and return our result
+    return ft_reading;
 }

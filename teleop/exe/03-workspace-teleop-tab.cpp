@@ -213,9 +213,14 @@ void Timer::Notify() {
 	VectorXd xdotToRefL = wrkCtl.getXdotFromXref(LEFT_ARM, 5.0);
 	VectorXd xdotToRefR = wrkCtl.getXdotFromXref(RIGHT_ARM, 5.0);
 
-	// TODO: grab FT readings and combine with xdotToRef
+	// grab FT readings and combine with xdotToRef
 	VectorXd xdotL = xdotToRefL;
 	VectorXd xdotR = xdotToRefR;
+	if (motor_input_mode) {
+		double ft_gain = 0.0;
+		xdotL += krang.getFtWorldWrench(LEFT_ARM) * ft_gain * dt;
+		xdotR += krang.getFtWorldWrench(RIGHT_ARM) * ft_gain * dt;
+	}
 
 	// get current arm configurations (for jacobian nullspace)
 	VectorXd qL = krang.getArmConfig(LEFT_ARM);
