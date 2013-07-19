@@ -54,13 +54,16 @@
 #include <Eigen/Dense>
 #include <simulation/World.h>
 
-//#include "WorkspaceControl.h" // just for lwa_arm_t
+#define EXPERIMENTAL
 
 //TODO: should dump this in a namespace
 typedef enum arm {
 	LEFT_ARM = 0,
 	RIGHT_ARM
 } lwa_arm_t;
+
+
+
 
 /*
  * This class bundles all the variables and methods necessary to control Krang
@@ -116,7 +119,6 @@ protected:
 
 	// force-torque helpers
 	Eigen::VectorXd getFT(lwa_arm_t arm, bool wait = false);
-	Eigen::VectorXd getExpectedGripperFTWrench(lwa_arm_t arm); ///< models off the gripper from the FT sensor
 
 	// control helpers
 	void sendRobotArmVelocities(lwa_arm_t arm, Eigen::VectorXd &qdot, double dt);
@@ -156,6 +158,37 @@ private:
 	Eigen::Vector3d _robotiq_com;	///<
 	static const double _robotiq_mass = 2.3 + 0.169 + 0.000; ///< mass of the end effector (gripper + collar + sensor)
 
-};
 
+
+#ifdef EXPERIMENTAL
+public:
+	// current control stuff
+	Eigen::VectorXd updatePIDs(lwa_arm_t arm);
+	void initPIDs(lwa_arm_t arm);
+	void setPIDQRef(lwa_arm_t arm, Eigen::VectorXd &q);
+	void setPIDQdotRef(lwa_arm_t arm, Eigen::VectorXd &qdot);
+	Eigen::VectorXd getPIDQref(lwa_arm_t arm);
+
+	bool _current_mode = 0;
+	/* a data type for holding on to the state of a single motor's PID controller */
+	typedef struct {
+	    bool use_pos;
+	    bool use_vel;
+
+	    double pos_target;
+	    double vel_target;
+
+	    double output;
+
+	    double K_p_p;
+	    double K_p_d;
+	    double K_v_p;
+	    double K_v_d;
+	    double pos_error_last;
+	    double vel_error_last;
+	} pid_state_t;
+	// PID controller values
+	std::vector<pid_state_t[7]> _pids;
+};
+#endif
 #endif /* KRANGCONTROL_H_ */

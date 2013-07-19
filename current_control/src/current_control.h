@@ -31,6 +31,8 @@ typedef struct {
     double pos_target;
     double vel_target;
 
+    double output;
+
     double K_p_p;
     double K_p_d;
     double K_v_p;

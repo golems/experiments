@@ -86,6 +86,11 @@ void KrangControl::setControlMode(bool fake_ctl_mode) {
 		initIMU();
 		initFT();
 
+#ifdef EXPERIMENTAL
+		initPIDs(LEFT_ARM);
+		initPIDs(RIGHT_ARM);
+#endif
+
 		initialized = true;
 	}
 }
@@ -125,40 +130,40 @@ void KrangControl::updateFTOffset(lwa_arm_t arm) {
 
 	ft_raw_initial_reading /= (double)_ft_init_iters;
 
-    // Get the point transform wrench due to moving the affected
-    // position from com to sensor origin. The transform is an
-    // identity with the bottom left a skew symmetric of the point
-    // translation
-    Eigen::MatrixXd transform_eecom_sensor = Eigen::MatrixXd::Identity(6,6);
-    transform_eecom_sensor.bottomLeftCorner<3,3>() <<
-        0.0, -_robotiq_com(2), _robotiq_com(1),
-        _robotiq_com(2), 0.0, -_robotiq_com(0),
-        -_robotiq_com(1), _robotiq_com(0), 0.0;
+	// Get the point transform wrench due to moving the affected
+	// position from com to sensor origin. The transform is an
+	// identity with the bottom left a skew symmetric of the point
+	// translation
+	Eigen::MatrixXd transform_eecom_sensor = Eigen::MatrixXd::Identity(6,6);
+	transform_eecom_sensor.bottomLeftCorner<3,3>() <<
+			0.0, -_robotiq_com(2), _robotiq_com(1),
+			_robotiq_com(2), 0.0, -_robotiq_com(0),
+			-_robotiq_com(1), _robotiq_com(0), 0.0;
 
-    // figure out the rotation of our end effector, just the rotation
-    Eigen::Matrix3d ee_rotation = getEffectorPose(arm).topLeftCorner<3,3>().transpose();
+	// figure out the rotation of our end effector, just the rotation
+	Eigen::Matrix3d ee_rotation = getEffectorPose(arm).topLeftCorner<3,3>().transpose();
 
-    // Create the wrench with computed rotation to change the frame
-    // from the world to the sensor.
-    Eigen::MatrixXd wrenchrotate_sensor_world = Eigen::MatrixXd::Identity(6,6);
-    wrenchrotate_sensor_world.topLeftCorner<3,3>() = ee_rotation;
-    wrenchrotate_sensor_world.bottomRightCorner<3,3>() = ee_rotation;
+	// Create the wrench with computed rotation to change the frame
+	// from the world to the sensor.
+	Eigen::MatrixXd wrenchrotate_sensor_world = Eigen::MatrixXd::Identity(6,6);
+	wrenchrotate_sensor_world.topLeftCorner<3,3>() = ee_rotation;
+	wrenchrotate_sensor_world.bottomRightCorner<3,3>() = ee_rotation;
 
-    // Get the weight vector (note that we use the world frame for
-    // gravity so towards -z)
-    Eigen::VectorXd end_effector_weight_in_world(6);
-    end_effector_weight_in_world << 0.0, 0.0, _robotiq_mass * -9.81, 0.0, 0.0, 0.0;
+	// Get the weight vector (note that we use the world frame for
+	// gravity so towards -z)
+	Eigen::VectorXd end_effector_weight_in_world(6);
+	end_effector_weight_in_world << 0.0, 0.0, _robotiq_mass * -9.81, 0.0, 0.0, 0.0;
 
-    // Compute what the force and torque should be without any external values by multiplying the
-    // position and rotation transforms with the expected effect of the gravity
-    Eigen::VectorXd expected_ft_reading = transform_eecom_sensor * wrenchrotate_sensor_world * end_effector_weight_in_world;
+	// Compute what the force and torque should be without any external values by multiplying the
+	// position and rotation transforms with the expected effect of the gravity
+	Eigen::VectorXd expected_ft_reading = transform_eecom_sensor * wrenchrotate_sensor_world * end_effector_weight_in_world;
 
-    // Compute the difference between the actual and expected f/t
-    // values and return the result
-    Eigen::VectorXd offset = expected_ft_reading - ft_raw_initial_reading;
+	// Compute the difference between the actual and expected f/t
+	// values and return the result
+	Eigen::VectorXd offset = expected_ft_reading - ft_raw_initial_reading;
 
-    // And store it
-    _ft_offsets[arm] = offset;
+	// And store it
+	_ft_offsets[arm] = offset;
 }
 
 /*################################################################################################
@@ -182,7 +187,6 @@ Eigen::MatrixXd KrangControl::getEffectorJacobian(lwa_arm_t arm) {
 	return J;
 }
 
-
 /*
  * Returns the current force-torque sensor reading for the given arm
  * in the world frame, with the gripper modeled off
@@ -194,41 +198,41 @@ Eigen::VectorXd KrangControl::getFtWorldWrench(lwa_arm_t arm) {
 	// use the offset to correct it
 	Eigen::VectorXd corrected_ft_reading = raw_ft_reading + _ft_offsets[arm];
 
-    // Get the point transform wrench due to moving the affected
-    // position from com to sensor origin. The transform is an
-    // identity with the bottom left a skew symmetric of the point
-    // translation
-    Eigen::MatrixXd transform_eecom_sensor = Eigen::MatrixXd::Identity(6,6);
-    transform_eecom_sensor.bottomLeftCorner<3,3>() <<
-        0.0, -_robotiq_com(2), _robotiq_com(1),
-        _robotiq_com(2), 0.0, -_robotiq_com(0),
-        -_robotiq_com(1), _robotiq_com(0), 0.0;
+	// Get the point transform wrench due to moving the affected
+	// position from com to sensor origin. The transform is an
+	// identity with the bottom left a skew symmetric of the point
+	// translation
+	Eigen::MatrixXd transform_eecom_sensor = Eigen::MatrixXd::Identity(6,6);
+	transform_eecom_sensor.bottomLeftCorner<3,3>() <<
+			0.0, -_robotiq_com(2), _robotiq_com(1),
+			_robotiq_com(2), 0.0, -_robotiq_com(0),
+			-_robotiq_com(1), _robotiq_com(0), 0.0;
 
-    // figure out how our end effector is rotated by giving dart the
-    // arm values and the imu/waist values
-    Eigen::Matrix3d ee_rotation = getEffectorPose(arm).topLeftCorner<3,3>().transpose();
+	// figure out how our end effector is rotated by giving dart the
+	// arm values and the imu/waist values
+	Eigen::Matrix3d ee_rotation = getEffectorPose(arm).topLeftCorner<3,3>().transpose();
 
-    // Create the wrench with computed rotation to change the frame
-    // from the world to the sensor
-    Eigen::MatrixXd wrenchrotate_sensor_world = Eigen::MatrixXd::Identity(6,6);
-    wrenchrotate_sensor_world.topLeftCorner<3,3>() = ee_rotation;
-    wrenchrotate_sensor_world.bottomRightCorner<3,3>() = ee_rotation;
+	// Create the wrench with computed rotation to change the frame
+	// from the world to the sensor
+	Eigen::MatrixXd wrenchrotate_sensor_world = Eigen::MatrixXd::Identity(6,6);
+	wrenchrotate_sensor_world.topLeftCorner<3,3>() = ee_rotation;
+	wrenchrotate_sensor_world.bottomRightCorner<3,3>() = ee_rotation;
 
-    // Get the weight vector (note that we use the world frame for
-    // gravity so towards -z)
-    Eigen::VectorXd end_effector_weight_in_world(6);
-    end_effector_weight_in_world << 0.0, 0.0, _robotiq_mass * -9.81, 0.0, 0.0, 0.0;
+	// Get the weight vector (note that we use the world frame for
+	// gravity so towards -z)
+	Eigen::VectorXd end_effector_weight_in_world(6);
+	end_effector_weight_in_world << 0.0, 0.0, _robotiq_mass * -9.81, 0.0, 0.0, 0.0;
 
-    // Compute what the force and torque should be without any
-    // external values by multiplying the position and rotation
-    // transforms with the expected effect of the gravity
-    Eigen::VectorXd expected_ft_reading = transform_eecom_sensor * wrenchrotate_sensor_world * end_effector_weight_in_world;
+	// Compute what the force and torque should be without any
+	// external values by multiplying the position and rotation
+	// transforms with the expected effect of the gravity
+	Eigen::VectorXd expected_ft_reading = transform_eecom_sensor * wrenchrotate_sensor_world * end_effector_weight_in_world;
 
-    // Remove the effect from the sensor value, convert the wrench
-    // into the world frame, and return the result
-    Eigen::VectorXd external = corrected_ft_reading - expected_ft_reading;
-    external = wrenchrotate_sensor_world.transpose() * external;
-    return external;
+	// Remove the effect from the sensor value, convert the wrench
+	// into the world frame, and return the result
+	Eigen::VectorXd external = corrected_ft_reading - expected_ft_reading;
+	external = wrenchrotate_sensor_world.transpose() * external;
+	return external;
 }
 
 /*################################################################################################
@@ -271,13 +275,17 @@ void KrangControl::halt() {
   # PROTECTED CONTROL HELPERS
   ################################################################################################*/
 void KrangControl::sendRobotArmVelocities(lwa_arm_t arm, Eigen::VectorXd& qdot, double dt) {
-
-	//somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, qdot.data()*dt, 7, NULL);
-
-	double dq [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-	for(size_t i = 0; i < 7; i++)
-		dq[i] = qdot(i) * dt;
-	somatic_motor_cmd(_daemon_cx, &_arm_motors[arm], SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7, NULL);
+#ifdef EXPERIMENTAL
+	if (this->_current_mode) {
+		setPIDQdotRef(arm, qdot);
+		Eigen::VectorXd qRef = getPIDQref(arm);
+		qRef += qdot*dt;
+		setPIDQRef(arm, qRef);
+		Eigen::VectorXd currents = updatePIDs(arm);
+		somatic_motor_cmd(_daemon_cx, &_arm_motors[arm], SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, currents.data(), 7, NULL);
+	} else
+#endif
+		somatic_motor_cmd(_daemon_cx, &_arm_motors[arm], SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, qdot.data(), 7, NULL);
 }
 
 void KrangControl::fakeArmMovement(lwa_arm_t arm, Eigen::VectorXd& qdot, double dt) {
@@ -322,10 +330,10 @@ void KrangControl::initWaist() {
 
 	// Set the min/max values for valid and limits values
 	double** limits [] = {
-		&_waist.pos_valid_min, &_waist.vel_valid_min,
-		&_waist.pos_limit_min, &_waist.pos_limit_min,
-		&_waist.pos_valid_max, &_waist.vel_valid_max,
-		&_waist.pos_limit_max, &_waist.pos_limit_max};
+			&_waist.pos_valid_min, &_waist.vel_valid_min,
+			&_waist.pos_limit_min, &_waist.pos_limit_min,
+			&_waist.pos_valid_max, &_waist.vel_valid_max,
+			&_waist.pos_limit_max, &_waist.pos_limit_max};
 	for(size_t i = 0; i < 4; i++) aa_fset(*limits[i], -1024.1, 2);
 	for(size_t i = 4; i < 8; i++) aa_fset(*limits[i], 1024.1, 2);
 
@@ -342,10 +350,10 @@ void KrangControl::initTorso() {
 
 	// Set the min/max values for valid and limits values
 	double** limits [] = {
-		&_torso.pos_valid_min, &_torso.vel_valid_min,
-		&_torso.pos_limit_min, &_torso.pos_limit_min,
-		&_torso.pos_valid_max, &_torso.vel_valid_max,
-		&_torso.pos_limit_max, &_torso.pos_limit_max};
+			&_torso.pos_valid_min, &_torso.vel_valid_min,
+			&_torso.pos_limit_min, &_torso.pos_limit_min,
+			&_torso.pos_valid_max, &_torso.vel_valid_max,
+			&_torso.pos_limit_max, &_torso.pos_limit_max};
 	for(size_t i = 0; i < 4; i++) aa_fset(*limits[i], -1024.1, 1);
 	for(size_t i = 4; i < 8; i++) aa_fset(*limits[i], 1024.1, 1);
 
@@ -402,10 +410,10 @@ void KrangControl::initArm(lwa_arm_t arm, const char* armName) {
 
 	// Set the min/max values for valid and limits values
 	double** limits [] = {
-		&_arm_motors[arm].pos_valid_min, &_arm_motors[arm].vel_valid_min,
-		&_arm_motors[arm].pos_limit_min, &_arm_motors[arm].pos_limit_min,
-		&_arm_motors[arm].pos_valid_max, &_arm_motors[arm].vel_valid_max,
-		&_arm_motors[arm].pos_limit_max, &_arm_motors[arm].pos_limit_max};
+			&_arm_motors[arm].pos_valid_min, &_arm_motors[arm].vel_valid_min,
+			&_arm_motors[arm].pos_limit_min, &_arm_motors[arm].pos_limit_min,
+			&_arm_motors[arm].pos_valid_max, &_arm_motors[arm].vel_valid_max,
+			&_arm_motors[arm].pos_limit_max, &_arm_motors[arm].pos_limit_max};
 	for(size_t i = 0; i < 4; i++) aa_fset(*limits[i], -1024.1, 7);
 	for(size_t i = 4; i < 8; i++) aa_fset(*limits[i], 1024.1, 7);
 
@@ -443,8 +451,8 @@ void KrangControl::initSchunkGripper(lwa_arm_t gripper, const char* name) {
 }
 
 void KrangControl::initRobotiqGripper(lwa_arm_t arm, const char *chan) {
-    // for robotiq we currently talk over ach directly
-    ach_open(&_robotiq_gripper_channels[arm], chan, NULL);
+	// for robotiq we currently talk over ach directly
+	ach_open(&_robotiq_gripper_channels[arm], chan, NULL);
 }
 
 /*################################################################################################
@@ -463,12 +471,12 @@ void KrangControl::updateRobotSkelFromSomaticMotor(somatic_motor_t& mot, std::ve
 void KrangControl::updateRobotSkelFromSomaticWaist() {
 
 	// Read the waist's state and update the averaged waist position
-    somatic_motor_update(_daemon_cx, &_waist);
-    double waist_angle = (_waist.pos[0] - _waist.pos[1]) / 2.0;
+	somatic_motor_update(_daemon_cx, &_waist);
+	double waist_angle = (_waist.pos[0] - _waist.pos[1]) / 2.0;
 
-    Eigen::VectorXd vals(1);
-    vals << waist_angle;
-    _krang->setConfig(_waist_ids, vals);
+	Eigen::VectorXd vals(1);
+	vals << waist_angle;
+	_krang->setConfig(_waist_ids, vals);
 }
 
 void KrangControl::updateRobotSkelFromIMU() {
@@ -541,34 +549,121 @@ void KrangControl::getIMU() {
   # FORCE-TORQUE HELPERS
   ################################################################################################*/
 Eigen::VectorXd KrangControl::getFT(lwa_arm_t arm, bool wait) {
-    // get a message
-    int r;
-    size_t num_bytes = 0;
-    Somatic__ForceMoment* ft_msg;
-    if (wait) {
-    	struct timespec timeout = aa_tm_future(aa_tm_sec2timespec(1.0/100.0));
-    	ft_msg = SOMATIC_WAIT_LAST_UNPACK(r, somatic__force_moment,
-    			&protobuf_c_system_allocator,
-    			1024,
-    			&_ft_channels[arm],
-    			&timeout);
-    }
-    else {
-    	ft_msg = SOMATIC_GET_LAST_UNPACK(r, somatic__force_moment,
-    			&protobuf_c_system_allocator,
-    			1024,
-    			&_ft_channels[arm]);
-    }
-    assert((ft_msg != NULL) && "Didn't get FT message!");
+	// get a message
+	int r;
+	size_t num_bytes = 0;
+	Somatic__ForceMoment* ft_msg;
+	if (wait) {
+		struct timespec timeout = aa_tm_future(aa_tm_sec2timespec(1.0/100.0));
+		ft_msg = SOMATIC_WAIT_LAST_UNPACK(r, somatic__force_moment,
+				&protobuf_c_system_allocator,
+				1024,
+				&_ft_channels[arm],
+				&timeout);
+	}
+	else {
+		ft_msg = SOMATIC_GET_LAST_UNPACK(r, somatic__force_moment,
+				&protobuf_c_system_allocator,
+				1024,
+				&_ft_channels[arm]);
+	}
+	assert((ft_msg != NULL) && "Didn't get FT message!");
 
-    // extract the data into something we can use
-    Eigen::VectorXd ft_reading(6);
-    for(size_t i = 0; i < 3; i++) ft_reading(i) = ft_msg->force->data[i];
-    for(size_t i = 0; i < 3; i++) ft_reading(i+3) = ft_msg->moment->data[i];
+	// extract the data into something we can use
+	Eigen::VectorXd ft_reading(6);
+	for(size_t i = 0; i < 3; i++) ft_reading(i) = ft_msg->force->data[i];
+	for(size_t i = 0; i < 3; i++) ft_reading(i+3) = ft_msg->moment->data[i];
 
-    // free the unpacked message
-    somatic__force_moment__free_unpacked(ft_msg, &protobuf_c_system_allocator);
+	// free the unpacked message
+	somatic__force_moment__free_unpacked(ft_msg, &protobuf_c_system_allocator);
 
-    // and return our result
-    return ft_reading;
+	// and return our result
+	return ft_reading;
 }
+
+#ifdef EXPERIMENTAL
+/*################################################################################################
+  # EXPERIMENTAL
+  ################################################################################################*/
+
+Eigen::VectorXd KrangControl::updatePIDs(lwa_arm_t arm) {
+	Eigen::VectorXd result(7);
+
+	double p_p_value;
+    double p_d_value;
+    double v_p_value;
+    double v_d_value;
+
+    double pos_error;
+    double vel_error;
+
+    for(int i = 0; i < _arm_motors[arm].n; i++) {
+        result[i] = 0;
+
+        if(_pids[arm][i].use_pos) {
+            pos_error = _pids[arm][i].pos_target - _arm_motors[arm].pos[i];
+
+            p_p_value = _pids[arm][i].K_p_p * pos_error;
+            p_d_value = _pids[arm][i].K_p_d * (pos_error - _pids[arm][i].pos_error_last);
+
+            result[i] += p_p_value + p_d_value;
+
+            _pids[arm][i].pos_error_last = pos_error;
+        }
+        if (_pids[arm][i].use_vel) {
+            vel_error = _pids[arm][i].vel_target - _arm_motors[arm].vel[i];
+
+            v_p_value = _pids[arm][i].K_v_p * vel_error;
+            v_d_value = _pids[arm][i].K_v_d * (vel_error - _pids[arm][i].vel_error_last);
+
+            result[i] += v_p_value + v_d_value;
+
+            _pids[arm][i].vel_error_last = vel_error;
+        }
+    }
+    return result;
+}
+
+void KrangControl::initPIDs(lwa_arm_t arm) {
+	bool use_pos[] = {true, true, true, true, true, true, true};
+	bool use_vel[] = {true, true, true, true, true, true, true};
+	double init_K_p_p[] = {5.0,  15.0, 15.0, 12.0, 15.0,  7.0,  7.0};
+	double init_K_p_d[] = {0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0};
+	double init_K_v_p[] = {1.0,   1.0,  1.0,  1.0,  1.0,  1.0,  1.0};
+	// double init_K_v_p[] = {0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0};
+	double init_K_v_d[] = {0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0};
+
+    for(int i = 0; i < _arm_motors[arm].n; i++) {
+        _pids[arm][i].pos_target = 0.0;
+        _pids[arm][i].vel_target = 0.0;
+        _pids[arm][i].pos_error_last = 0.0;
+        _pids[arm][i].vel_error_last = 0.0;
+        _pids[arm][i].pos_target = _arm_motors[arm].pos[i];
+
+        _pids[arm][i].K_p_p = init_K_p_p[i];
+		_pids[arm][i].K_p_d = init_K_p_d[i];
+		_pids[arm][i].K_v_p = init_K_v_p[i];
+		_pids[arm][i].K_v_d = init_K_v_d[i];
+		_pids[arm][i].use_pos = use_pos[i];
+		_pids[arm][i].use_vel = use_vel[i];
+    }
+}
+
+void KrangControl::setPIDQRef(lwa_arm_t arm, Eigen::VectorXd& q) {
+	for (int i=0; i<_arm_motors[arm].n; i++)
+		_pids[arm][i].pos_target = q[i];
+}
+
+void KrangControl::setPIDQdotRef(lwa_arm_t arm, Eigen::VectorXd& qdot) {
+	for (int i=0; i<_arm_motors[arm].n; i++)
+		_pids[arm][i].vel_target = qdot[i];
+}
+
+Eigen::VectorXd KrangControl::getPIDQref(lwa_arm_t arm) {
+	Eigen::VectorXd qref(7);
+	for (int i=0; i<7; i++)
+		qref[i] = _pids[arm][i].pos_target;
+	return qref;
+}
+
+#endif // Experimental
