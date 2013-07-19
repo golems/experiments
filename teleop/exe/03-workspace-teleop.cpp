@@ -45,6 +45,10 @@ WorkspaceControl wrkCtl;
 // Krang the monster
 KrangControl krang;
 
+// node pointers
+kinematics::BodyNode *eeNodeL;
+kinematics::BodyNode *eeNodeR;
+
 // UI Globals
 /* Events */
 enum BUTTON_EVENTS {
@@ -95,11 +99,13 @@ void handleButtons(VectorXi &buttons) {
 
 void init() {
 	DartLoader dl;
-	mWorld = dl.parseWorld("../../common/scenes/04-World-Liberty.urdf");
+	mWorld = dl.parseWorld("../../common/scenes/05-World-Krang-Teleop.urdf");
 	if (mWorld == NULL)
-		mWorld = dl.parseWorld("common/scenes/04-World-Liberty.urdf"); // for eclipse
+		mWorld = dl.parseWorld("common/scenes/05-World-Krang-Teleop.urdf"); // for eclipse
 	assert((mWorld != NULL) && "Could not find the world");
 
+	eeNodeL = mWorld->getSkeleton("Krang")->getNode("lGripper");
+	eeNodeR = mWorld->getSkeleton("Krang")->getNode("rGripper");
 
 	// Initialize this daemon (program!)
 	somatic_d_opts_t dopt;
@@ -123,17 +129,17 @@ void init() {
 	//initLiberty();
 
 	// initialize krang the monster
-	krang.initialize(mWorld, &daemon_cx, !(motor_input_mode || motor_output_mode));
+	krang.initialize(mWorld, &daemon_cx, "Krang", !(motor_input_mode || motor_output_mode));
 
 	// initialize workspace controller
-	wrkCtl.initialize(mWorld->getSkeleton("Krang")->getNode("lGripper"), mWorld->getSkeleton("Krang")->getNode("rGripper"));
+	wrkCtl.initialize(&krang);
 
 	// Manually set the initial arm configuration for the left arm
 	VectorXd larm_conf(7), rarm_conf(7);
 	larm_conf << 0.0, -M_PI / 3.0, 0.0, -M_PI / 3.0, 0.0, M_PI/6.0, 0.0;
 	rarm_conf << 0.0, M_PI / 3.0, 0.0, M_PI / 3.0, 0.0, -M_PI/6.0, 0.0;
-	krang.setArmConfig(mWorld, LEFT_ARM, larm_conf);
-	krang.setArmConfig(mWorld, RIGHT_ARM, rarm_conf);
+	krang.setArmConfig(LEFT_ARM, larm_conf);
+	krang.setArmConfig(RIGHT_ARM, rarm_conf);
 }
 
 void destroy() {
@@ -155,18 +161,13 @@ void step() {
 	double dt = current_time - last_movement_time;
 	last_movement_time = current_time;
 
-
 	// update robot state from ach if we're controlling the actual robot
 	if (motor_input_mode)
-		krang.updateKrangSkeleton(mWorld);
+		krang.updateKrangSkeleton();
 
-	// handle grippers
-	//	VectorXi buttons = getSpacenavButtons(spn_chan);
-	//	cout << "buttonsL "<< buttons.transpose() << endl;
-	//	handleSpacenavButtons(buttons, rqd_chan);
-
-	VectorXd cfgL = spn1.getConfig() * 0.2;
-	VectorXd cfgR = spn2.getConfig() * 0.2;
+	VectorXd cfgL = spn1.getConfig(0.1,0.3);
+	VectorXd cfgR = spn2.getConfig(0.1,0.3);
+	//goalSkelL->setConfig(dartRootDofOrdering, cfgL); // uncomment to visualize spacenav directly
 
 	wrkCtl.updateXrefFromXdot(LEFT_ARM, cfgL);
 
@@ -175,13 +176,34 @@ void step() {
 	else
 		wrkCtl.updateXrefFromXdot(RIGHT_ARM, cfgR);
 
-	VectorXd qL = krang.getArmConfig(mWorld, LEFT_ARM);
-	VectorXd qR = krang.getArmConfig(mWorld, RIGHT_ARM);
-	VectorXd qdotL = wrkCtl.xdotToQdot(LEFT_ARM, 5.0, 0.01, &qL, NULL);
-	VectorXd qdotR = wrkCtl.xdotToQdot(RIGHT_ARM, 5.0, 0.01, &qR, NULL);
+	// get xdot from references and force sensor
+	VectorXd xdotToRefL = wrkCtl.getXdotFromXref(LEFT_ARM, 5.0);
+	VectorXd xdotToRefR = wrkCtl.getXdotFromXref(RIGHT_ARM, 5.0);
 
-	krang.setRobotArmVelocities(mWorld, LEFT_ARM, qdotL, dt);
-	krang.setRobotArmVelocities(mWorld, RIGHT_ARM, qdotR, dt);
+	// grab FT readings and combine with xdotToRef
+	VectorXd xdotL = xdotToRefL;
+	VectorXd xdotR = xdotToRefR;
+	if (motor_input_mode) {
+		double ft_gain = 0.0;
+		xdotL += krang.getFtWorldWrench(LEFT_ARM) * ft_gain * dt;
+		xdotR += krang.getFtWorldWrench(RIGHT_ARM) * ft_gain * dt;
+	}
+
+	// get current arm configurations (for jacobian nullspace)
+	VectorXd qL = krang.getArmConfig(LEFT_ARM);
+	VectorXd qR = krang.getArmConfig(RIGHT_ARM);
+
+	VectorXd qdotL = wrkCtl.xdotToQdot(LEFT_ARM,  xdotL, 0.01);
+	VectorXd qdotR = wrkCtl.xdotToQdot(RIGHT_ARM, xdotR, 0.01);
+
+	krang.setRobotArmVelocities(LEFT_ARM, qdotL, dt);
+	krang.setRobotArmVelocities(RIGHT_ARM, qdotR, dt);
+
+	// handle grippers
+	VectorXi buttons1 = spn1.getButtons();
+	VectorXi buttons2 = spn2.getButtons();
+	krang.setRobotiqGripperAction(LEFT_ARM, buttons1);
+	krang.setRobotiqGripperAction(RIGHT_ARM, buttons2);
 }
 
 void run() {

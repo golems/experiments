@@ -53,24 +53,30 @@ enum DynamicSimulationTabEvents {
 	id_checkbox_ToggleMotorInputMode,
 	id_checkbox_ToggleMotorOutputMode,
 	id_checkbox_ToggleRightTrackLeftMode,
+	id_checkbox_ToggleLibertySpacenavMode,
+	id_checkbox_ToggleStationaryCurrentMode,
 };
 
 enum sliderNames{
-	GAIN_SLIDER = 1000,
+	XDOT_GAIN_SLIDER = 1000,
+	FT_GAIN_SLIDER,
 };
 
 // control globals
-enum UI_MODES {
-	UI_LIBERTY = 0,
+typedef enum {
+	UI_NONE= 0,
+	UI_SPACENAV,
+	UI_LIBERTY,
 	UI_JOYSTICK,
-	UI_MIXED,
-};
+} ui_mode_t;
+
+static ui_mode_t ui_mode = UI_SPACENAV;
 static bool motor_input_mode = 0;
 static bool motor_output_mode = 0;
 static bool motors_initialized = 0;
 static bool right_track_left_mode = 0;
-double xdot_gain = 1.0;
-static int ui_input_mode = UI_JOYSTICK;
+double xdot_gain = 5.0;
+double ft_gain = 0.0;
 
 // Pointers to frequently used dart data structures
 kinematics::BodyNode *eeNodeL;
@@ -126,11 +132,30 @@ void SimTab::OnButton(wxCommandEvent &evt) {
 
 	case id_checkbox_ToggleRightTrackLeftMode: {
 		right_track_left_mode = evt.IsChecked();
-		if (right_track_left_mode)
+		if (right_track_left_mode) {
+			Matrix4d curTL = eeNodeL->getWorldTransform();
+			Matrix4d curTR = eeNodeR->getWorldTransform();
+			wrkCtl.setXcur(LEFT_ARM, curTL);
+			wrkCtl.setXcur(RIGHT_ARM, curTR);
 			wrkCtl.updateRelativeTransforms();
+		}
 		break;
 	}
 
+	case id_checkbox_ToggleLibertySpacenavMode: {
+		if (evt.IsChecked())
+			ui_mode = UI_LIBERTY;
+		else
+			ui_mode = UI_SPACENAV;
+		break;
+	}
+
+	case id_checkbox_ToggleStationaryCurrentMode: {
+		krang._current_mode = evt.IsChecked();
+		if (krang._current_mode)
+			ui_mode = UI_NONE;
+		break;
+	}
 	default: {}
 	}
 }
@@ -154,10 +179,14 @@ void SimTab::OnSlider(wxCommandEvent &evt) {
 	double pos = *(double*)evt.GetClientData();
 	switch(slnum) {
 	      //-- Change joint value
-	    case GAIN_SLIDER: {
+	    case XDOT_GAIN_SLIDER: {
 	    	xdot_gain = pos;
 	    	cout << "set xdot gain: " << xdot_gain << endl;
 	    	break;
+	    }
+	    case FT_GAIN_SLIDER: {
+	    	ft_gain = pos;
+	    	cout << "set ft gain: " << ft_gain << endl;
 	    }
 	}
 }
@@ -172,6 +201,8 @@ EVT_COMMAND (wxID_ANY, wxEVT_GRIP_SLIDER_CHANGE, SimTab::OnSlider)
 EVT_CHECKBOX(id_checkbox_ToggleMotorInputMode, SimTab::OnButton)
 EVT_CHECKBOX(id_checkbox_ToggleMotorOutputMode, SimTab::OnButton)
 EVT_CHECKBOX(id_checkbox_ToggleRightTrackLeftMode, SimTab::OnButton)
+EVT_CHECKBOX(id_checkbox_ToggleLibertySpacenavMode, SimTab::OnButton)
+EVT_CHECKBOX(id_checkbox_ToggleStationaryCurrentMode, SimTab::OnButton)
 END_EVENT_TABLE()
 
 /* ********************************************************************************************* */
@@ -187,28 +218,55 @@ void Timer::Notify() {
 
 	// update robot state from ach if we're controlling the actual robot
 	if (motor_input_mode)
-		krang.updateKrangSkeleton(mWorld);
+		krang.updateKrangSkeleton();
 
-	VectorXd cfgL = spn1.getConfig(0.4,0.4);
-	VectorXd cfgR = spn2.getConfig(0.4,0.4);
-	//goalSkelL->setConfig(dartRootDofOrdering, cfgL);
-	wrkCtl.updateXrefFromXdot(LEFT_ARM, cfgL);
+	switch (ui_mode) {
+	case UI_SPACENAV: {
+		VectorXd cfgL = spn1.getConfig(0.1,0.3);
+		VectorXd cfgR = spn2.getConfig(0.1,0.3);
+		//goalSkelL->setConfig(dartRootDofOrdering, cfgL); // uncomment to visualize spacenav directly
 
-	if (right_track_left_mode)
-		wrkCtl.updateXrefFromOther(RIGHT_ARM, LEFT_ARM);
-	else
-		wrkCtl.updateXrefFromXdot(RIGHT_ARM, cfgR);
+		wrkCtl.updateXrefFromXdot(LEFT_ARM, cfgL);
+
+		if (right_track_left_mode)
+			wrkCtl.updateXrefFromOther(RIGHT_ARM, LEFT_ARM);
+		else
+			wrkCtl.updateXrefFromXdot(RIGHT_ARM, cfgR);
+		break;
+	}
+	case UI_LIBERTY:
+		// do something that involves:
+		//wrkCtl.setXcur(LEFT_ARM, liberty.left)
+		break;
+
+	case UI_NONE:
+		break;
+	}
 
 	goalSkelL->setConfig(dartRootDofOrdering, transformToEuler(wrkCtl.getXref(LEFT_ARM), math::XYZ));
 	goalSkelR->setConfig(dartRootDofOrdering, transformToEuler(wrkCtl.getXref(RIGHT_ARM), math::XYZ));
 
-	VectorXd qL = krang.getArmConfig(mWorld, LEFT_ARM);
-	VectorXd qR = krang.getArmConfig(mWorld, RIGHT_ARM);
-	VectorXd qdotL = wrkCtl.xdotToQdot(LEFT_ARM, xdot_gain, 0.01, &qL, NULL);
-	VectorXd qdotR = wrkCtl.xdotToQdot(RIGHT_ARM, xdot_gain, 0.01, &qR, NULL);
+	// get xdot from references and force sensor
+	VectorXd xdotToRefL = wrkCtl.getXdotFromXref(LEFT_ARM, xdot_gain);
+	VectorXd xdotToRefR = wrkCtl.getXdotFromXref(RIGHT_ARM, xdot_gain);
 
-	krang.setRobotArmVelocities(mWorld, LEFT_ARM, qdotL, dt);
-	krang.setRobotArmVelocities(mWorld, RIGHT_ARM, qdotR, dt);
+	// grab FT readings and combine with xdotToRef
+	VectorXd xdotL = xdotToRefL;
+	VectorXd xdotR = xdotToRefR;
+	if (motor_input_mode) {
+		xdotL += krang.getFtWorldWrench(LEFT_ARM) * ft_gain * dt;
+		xdotR += krang.getFtWorldWrench(RIGHT_ARM) * ft_gain * dt;
+	}
+
+	// get current arm configurations (for jacobian nullspace)
+	VectorXd qL = krang.getArmConfig(LEFT_ARM);
+	VectorXd qR = krang.getArmConfig(RIGHT_ARM);
+
+	VectorXd qdotL = wrkCtl.xdotToQdot(LEFT_ARM,  xdotL, 0.01);
+	VectorXd qdotR = wrkCtl.xdotToQdot(RIGHT_ARM, xdotR, 0.01);
+
+	krang.setRobotArmVelocities(LEFT_ARM, qdotL, dt);
+	krang.setRobotArmVelocities(RIGHT_ARM, qdotR, dt);
 
 	// handle grippers
 	VectorXi buttons1 = spn1.getButtons();
@@ -236,6 +294,7 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	wxStaticBoxSizer* ss3BoxS = new wxStaticBoxSizer(ss3Box, wxVERTICAL);
 
 	ss1BoxS->Add(new wxCheckBox(this, id_checkbox_ToggleMotorInputMode, wxT("Read Motor State")), 0, wxALL, 1);
+	ss1BoxS->Add(new wxCheckBox(this, id_checkbox_ToggleLibertySpacenavMode, wxT("Use Liberty not spacenav")), 0, wxALL, 1);
 
 	ss2BoxS->Add(new wxButton(this, id_button_ResetScene, wxT("Reset Scene")), 0, wxALL, 1);
 	ss2BoxS->Add(new wxButton(this, id_button_ResetLiberty, wxT("Set Liberty Initial Transforms")), 0, wxALL, 1);
@@ -244,7 +303,9 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 
 	ss3BoxS->Add(new wxCheckBox(this, id_checkbox_ToggleMotorOutputMode, wxT("Send Motor Commands")), 0, wxALL, 1);
 	ss3BoxS->Add(new wxCheckBox(this, id_checkbox_ToggleRightTrackLeftMode, wxT("Track left arm with right")), 0, wxALL, 1);
-	ss3BoxS->Add(new GRIPSlider("Gain",0,20,500,5.0,100,500,this,GAIN_SLIDER), 0, wxALL, 1);
+	ss3BoxS->Add(new wxCheckBox(this, id_checkbox_ToggleStationaryCurrentMode, wxT("Stationary Current Mode")), 0, wxALL, 1);
+	ss3BoxS->Add(new GRIPSlider("Xdot Gain",0,20,500,xdot_gain,100,500,this,XDOT_GAIN_SLIDER), 0, wxALL, 1);
+	ss3BoxS->Add(new GRIPSlider("FT Gain",0,20,500,ft_gain,100,500,this,FT_GAIN_SLIDER), 0, wxALL, 1);
 
 	sizerFull->Add(ss1BoxS, 1, wxEXPAND | wxALL, 6);
 	sizerFull->Add(ss2BoxS, 1, wxEXPAND | wxALL, 6);
@@ -254,9 +315,9 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 
 	// ============================================================================
 	// load hard-coded scene
-	frame->DoLoad("../../common/scenes/04-World-Liberty.urdf");
+	frame->DoLoad("../../common/scenes/05-World-Krang-Teleop.urdf");
 	if (mWorld == NULL)
-		frame->DoLoad("common/scenes/04-World-Liberty.urdf"); // for eclipse
+		frame->DoLoad("common/scenes/05-World-Krang-Teleop.urdf"); // for eclipse
 
 	// ============================================================================
 	// set viewer
@@ -300,17 +361,17 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	goalSkelR = mWorld->getSkeleton("g2");
 
 	// initialize krang the monster
-	krang.initialize(mWorld, &daemon_cx, !(motor_input_mode || motor_output_mode));
+	krang.initialize(mWorld, &daemon_cx, "Krang", !(motor_input_mode || motor_output_mode));
 
 	// Manually set the initial arm configuration for the left arm
 	VectorXd larm_conf(7), rarm_conf(7);
 	larm_conf << 0.0, -M_PI / 3.0, 0.0, -M_PI / 3.0, 0.0, M_PI/6.0, 0.0;
 	rarm_conf << 0.0, M_PI / 3.0, 0.0, M_PI / 3.0, 0.0, -M_PI/6.0, 0.0;
-	krang.setArmConfig(mWorld, LEFT_ARM, larm_conf);
-	krang.setArmConfig(mWorld, RIGHT_ARM, rarm_conf);
+	krang.setArmConfig(LEFT_ARM, larm_conf);
+	krang.setArmConfig(RIGHT_ARM, rarm_conf);
 
 	// initialize workspace controller
-	wrkCtl.initialize(eeNodeL, eeNodeR);
+	wrkCtl.initialize(&krang);
 }
 
 /* ********************************************************************************************* */
