@@ -53,6 +53,7 @@ enum DynamicSimulationTabEvents {
 	id_checkbox_ToggleMotorInputMode,
 	id_checkbox_ToggleMotorOutputMode,
 	id_checkbox_ToggleRightTrackLeftMode,
+	id_checkbox_ToggleLibertySpacenavMode,
 };
 
 enum sliderNames{
@@ -60,17 +61,20 @@ enum sliderNames{
 };
 
 // control globals
-enum UI_MODES {
-	UI_LIBERTY = 0,
+typedef enum {
+	UI_NONE= 0,
+	UI_SPACENAV,
+	UI_LIBERTY,
 	UI_JOYSTICK,
-	UI_MIXED,
-};
+} ui_mode_t;
+
+static ui_mode_t ui_mode = UI_JOYSTICK;
 static bool motor_input_mode = 0;
 static bool motor_output_mode = 0;
 static bool motors_initialized = 0;
 static bool right_track_left_mode = 0;
 double xdot_gain = 1.0;
-static int ui_input_mode = UI_JOYSTICK;
+
 
 // Pointers to frequently used dart data structures
 kinematics::BodyNode *eeNodeL;
@@ -133,7 +137,14 @@ void SimTab::OnButton(wxCommandEvent &evt) {
 			wrkCtl.setXcur(RIGHT_ARM, curTR);
 			wrkCtl.updateRelativeTransforms();
 		}
+		break;
+	}
 
+	case id_checkbox_ToggleLibertySpacenavMode: {
+		if (evt.IsChecked())
+			ui_mode = UI_LIBERTY;
+		else
+			ui_mode = UI_SPACENAV;
 		break;
 	}
 
@@ -178,6 +189,7 @@ EVT_COMMAND (wxID_ANY, wxEVT_GRIP_SLIDER_CHANGE, SimTab::OnSlider)
 EVT_CHECKBOX(id_checkbox_ToggleMotorInputMode, SimTab::OnButton)
 EVT_CHECKBOX(id_checkbox_ToggleMotorOutputMode, SimTab::OnButton)
 EVT_CHECKBOX(id_checkbox_ToggleRightTrackLeftMode, SimTab::OnButton)
+EVT_CHECKBOX(id_checkbox_ToggleLibertySpacenavMode, SimTab::OnButton)
 END_EVENT_TABLE()
 
 /* ********************************************************************************************* */
@@ -258,6 +270,7 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	wxStaticBoxSizer* ss3BoxS = new wxStaticBoxSizer(ss3Box, wxVERTICAL);
 
 	ss1BoxS->Add(new wxCheckBox(this, id_checkbox_ToggleMotorInputMode, wxT("Read Motor State")), 0, wxALL, 1);
+	ss1BoxS->Add(new wxCheckBox(this, id_checkbox_ToggleLibertySpacenavMode, wxT("Use Liberty not spacenav")), 0, wxALL, 1);
 
 	ss2BoxS->Add(new wxButton(this, id_button_ResetScene, wxT("Reset Scene")), 0, wxALL, 1);
 	ss2BoxS->Add(new wxButton(this, id_button_ResetLiberty, wxT("Set Liberty Initial Transforms")), 0, wxALL, 1);
@@ -276,9 +289,9 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 
 	// ============================================================================
 	// load hard-coded scene
-	frame->DoLoad("../../common/scenes/04-World-Liberty.urdf");
+	frame->DoLoad("../../common/scenes/05-World-Krang-Teleop.urdf");
 	if (mWorld == NULL)
-		frame->DoLoad("common/scenes/04-World-Liberty.urdf"); // for eclipse
+		frame->DoLoad("common/scenes/05-World-Krang-Teleop.urdf"); // for eclipse
 
 	// ============================================================================
 	// set viewer

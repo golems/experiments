@@ -55,22 +55,45 @@ public:
 	virtual ~LibertyClient();
 
 	// initialization
-	void initLiberty(somatic_d_t *daemon_cx, const char* channel_name = "liberty");
+	void initLiberty(somatic_d_t *daemon_cx, const char* channel_name = "liberty",
+			size_t liberty_n_channels = 8, int *liberty_chan_ids = NULL);
+	void setInitialPoses();
 
-	// update methods
-	bool getLibertyPoses(Eigen::MatrixXd *poses[], size_t n_chan, int *chan_ids = NULL);
+	// Update method
+	bool updateRawPoses();
+	bool updateRelPoses();
 
+	// Getters
+	const std::vector<Eigen::Matrix4d>& getInitPoses() const {
+		return initPoses;
+	}
+
+	const std::vector<Eigen::Matrix4d>& getRawPoses(bool update = true) {
+		if (update)
+			updateRawPoses();
+		return rawPoses;
+	}
+
+	const std::vector<Eigen::Matrix4d>& getRelPoses(bool update = true) {
+		if (update) {
+			updateRawPoses();
+			updateRelPoses();
+		}
+
+		return relPoses;
+	}
 
 protected:
 	// Channel members
-	somatic_d_t daemon_cx;
+	somatic_d_t *daemon_cx;
 	uint8_t *achbuf_liberty;
 	static const size_t n_achbuf_liberty = 1024;
-	ach_channel_t liberty_chan; // global b/c why would you change it
+	ach_channel_t liberty_ach_chan;
 
+	Eigen::VectorXi liberty_chan_ids;
 	std::vector<Eigen::Matrix4d> initPoses;
-	std::vector<Eigen::Matrix4d> curPoses;
-
+	std::vector<Eigen::Matrix4d> rawPoses;
+	std::vector<Eigen::Matrix4d> relPoses;
 };
 
 #endif /* LIBERTYCLIENT_H_ */

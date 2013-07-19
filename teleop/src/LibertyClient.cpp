@@ -41,20 +41,70 @@
 
 #include "LibertyClient.h"
 
-LibertyClient::LibertyClient() {
-	// TODO Auto-generated constructor stub
+LibertyClient::LibertyClient() {}
 
+LibertyClient::~LibertyClient() {}
+
+void LibertyClient::initLiberty(somatic_d_t *daemon_cx, const char* chan_name,
+		size_t liberty_n_channels, int *liberty_chan_ids) {
+
+	this->daemon_cx = daemon_cx;
+
+	initPoses.resize(liberty_n_channels);
+	rawPoses.resize(liberty_n_channels);
+	relPoses.resize(liberty_n_channels);
+
+	this->liberty_chan_ids = Eigen::VectorXi(liberty_n_channels);
+	for (size_t i=0; i<liberty_n_channels; i++)
+		this->liberty_chan_ids[i] = liberty_chan_ids[i];
+
+	somatic_d_channel_open(daemon_cx, &liberty_ach_chan, chan_name, NULL);
 }
 
-LibertyClient::~LibertyClient() {
-	// TODO Auto-generated destructor stub
+void LibertyClient::setInitialPoses() {
+	updateRawPoses();
+
+	for (int i=0; i < initPoses.size(); i++)
+		initPoses[i] = rawPoses[i];
 }
 
-void LibertyClient::initLiberty(somatic_d_t *daemon_cx, const char* chan_name) {
-	somatic_d_channel_open(daemon_cx, &liberty_chan, chan_name, NULL);
+bool LibertyClient::updateRawPoses() {
+	// get liberty data
+	int r = 0;
+	Somatic__Liberty *ls_msg = SOMATIC_GET_LAST_UNPACK( r, somatic__liberty,
+			&protobuf_c_system_allocator,
+			n_achbuf_liberty, &liberty_ach_chan );
+
+	if(!(ACH_OK == r || ACH_MISSED_FRAME == r) || (ls_msg == NULL)) return -1;
+
+	// stack sensors into a single array for indexing
+	Somatic__Vector* sensors[] = {ls_msg->sensor1, ls_msg->sensor2, ls_msg->sensor3, ls_msg->sensor4,
+			ls_msg->sensor5, ls_msg->sensor6, ls_msg->sensor7, ls_msg->sensor8};
+
+	// pack liberty data into arrowConfs
+	for (int i=0; i < liberty_chan_ids.size(); i++) {
+		Somatic__Vector* sensor = sensors[i];
+		Eigen::VectorXd pos(3);
+		for (int j=0; j < 3; j++) pos[j] = sensor->data[j];
+		rawPoses[liberty_chan_ids[i]].topRightCorner<3,1>() = pos;
+
+		// convert quat to rotation matrix
+		Eigen::Quaternion<double> rotQ(&sensor->data[3]);
+		Eigen::Matrix3d rotM(rotQ);
+		rawPoses[i].topLeftCorner<3,3>() = rotM;
+
+		// set bottom row
+		rawPoses[liberty_chan_ids[i]].row(3) << 0,0,0,1;
+	}
+
+	// Free the liberty message
+	somatic__liberty__free_unpacked(ls_msg, &protobuf_c_system_allocator);
+
+	return 0;
 }
 
-bool LibertyClient::getLibertyPoses(Eigen::MatrixXd* poses[], size_t n_chan, int* chan_ids) {
-
-
+bool LibertyClient::updateRelPoses() {
+	for (int i=0; i < relPoses.size(); i++)
+		//relPoses[i] = rawPoses[i] * initPoses[i].inverse();
+		relPoses[i] = initPoses[i].inverse() * rawPoses[i];
 }

@@ -99,9 +99,9 @@ void handleButtons(VectorXi &buttons) {
 
 void init() {
 	DartLoader dl;
-	mWorld = dl.parseWorld("../../common/scenes/04-World-Liberty.urdf");
+	mWorld = dl.parseWorld("../../common/scenes/05-World-Krang-Teleop.urdf");
 	if (mWorld == NULL)
-		mWorld = dl.parseWorld("common/scenes/04-World-Liberty.urdf"); // for eclipse
+		mWorld = dl.parseWorld("common/scenes/05-World-Krang-Teleop.urdf"); // for eclipse
 	assert((mWorld != NULL) && "Could not find the world");
 
 	eeNodeL = mWorld->getSkeleton("Krang")->getNode("lGripper");
@@ -161,18 +161,13 @@ void step() {
 	double dt = current_time - last_movement_time;
 	last_movement_time = current_time;
 
-
 	// update robot state from ach if we're controlling the actual robot
 	if (motor_input_mode)
 		krang.updateKrangSkeleton();
 
-	// handle grippers
-	//	VectorXi buttons = getSpacenavButtons(spn_chan);
-	//	cout << "buttonsL "<< buttons.transpose() << endl;
-	//	handleSpacenavButtons(buttons, rqd_chan);
-
-	VectorXd cfgL = spn1.getConfig() * 0.2;
-	VectorXd cfgR = spn2.getConfig() * 0.2;
+	VectorXd cfgL = spn1.getConfig(0.1,0.3);
+	VectorXd cfgR = spn2.getConfig(0.1,0.3);
+	//goalSkelL->setConfig(dartRootDofOrdering, cfgL); // uncomment to visualize spacenav directly
 
 	wrkCtl.updateXrefFromXdot(LEFT_ARM, cfgL);
 
@@ -185,8 +180,14 @@ void step() {
 	VectorXd xdotToRefL = wrkCtl.getXdotFromXref(LEFT_ARM, 5.0);
 	VectorXd xdotToRefR = wrkCtl.getXdotFromXref(RIGHT_ARM, 5.0);
 
+	// grab FT readings and combine with xdotToRef
 	VectorXd xdotL = xdotToRefL;
 	VectorXd xdotR = xdotToRefR;
+	if (motor_input_mode) {
+		double ft_gain = 0.0;
+		xdotL += krang.getFtWorldWrench(LEFT_ARM) * ft_gain * dt;
+		xdotR += krang.getFtWorldWrench(RIGHT_ARM) * ft_gain * dt;
+	}
 
 	// get current arm configurations (for jacobian nullspace)
 	VectorXd qL = krang.getArmConfig(LEFT_ARM);
@@ -197,6 +198,12 @@ void step() {
 
 	krang.setRobotArmVelocities(LEFT_ARM, qdotL, dt);
 	krang.setRobotArmVelocities(RIGHT_ARM, qdotR, dt);
+
+	// handle grippers
+	VectorXi buttons1 = spn1.getButtons();
+	VectorXi buttons2 = spn2.getButtons();
+	krang.setRobotiqGripperAction(LEFT_ARM, buttons1);
+	krang.setRobotiqGripperAction(RIGHT_ARM, buttons2);
 }
 
 void run() {
