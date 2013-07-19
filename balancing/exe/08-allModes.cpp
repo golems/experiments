@@ -144,7 +144,8 @@ void run () {
 	size_t lastMode = MODE;
 	while(!somatic_sig_received) {
 
-		bool debug = debugGlobal & (c_++ % 20 == 0);
+		bool debug = (c_++ % 20 == 0);
+		debugGlobal = debug;
 		if(debug) cout << "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv\n" << endl;
 
 		// Cancel any position built up in previous mode

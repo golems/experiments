@@ -11,6 +11,7 @@
 
 #include <dirent.h>
 #include <iostream>
+
 #include <string>
 #include <stdlib.h>
 #include <stdio.h>
@@ -39,6 +40,7 @@ using namespace Eigen;
 using namespace dynamics;
 
 bool myDebug;
+extern bool debugGlobal;
 
 /* ******************************************************************************************** */
 typedef Matrix<double, 6, 1> Vector6d;			///< A typedef for convenience to contain f/t values

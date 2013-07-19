@@ -68,6 +68,9 @@ void updateDart (double imu) {
 	Vector7d larm_vals = eig7(llwa.pos), rarm_vals = eig7(rlwa.pos);
 	robot->setConfig(left_arm_ids, larm_vals);
 	robot->setConfig(right_arm_ids, rarm_vals);
+
+	if(debugGlobal) cout << "i: " << imu / M_PI * 180.0 << " w: " << waist_val << " l: " << larm_vals.transpose() <<
+    " r: " << rarm_vals.transpose() << endl;
 }
 
 /* ******************************************************************************************** */
