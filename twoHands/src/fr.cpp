@@ -155,7 +155,7 @@ bool fr::ikRight (const Node& nearestNode, Node& newNode) {
 inline void fr::retractConfig(Vector7d& sample, const Vector6d& error) {
 
 	// Get the Jacobian
-	kinematics::BodyNode* eeNode = world->getSkeleton(krang_id)->getNode("lgPlate1");
+	kinematics::BodyNode* eeNode = world->getSkeleton(0)->getNode("lgPlate1");
 	MatrixXd Jlin = eeNode->getJacobianLinear().topRightCorner<3,7>();
 	MatrixXd Jang = eeNode->getJacobianAngular().topRightCorner<3,7>();
 	MatrixXd J (6,7);
