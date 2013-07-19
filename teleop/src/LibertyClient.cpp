@@ -105,6 +105,5 @@ bool LibertyClient::updateRawPoses() {
 
 bool LibertyClient::updateRelPoses() {
 	for (int i=0; i < relPoses.size(); i++)
-		//relPoses[i] = rawPoses[i] * initPoses[i].inverse();
 		relPoses[i] = initPoses[i].inverse() * rawPoses[i];
 }

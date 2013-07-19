@@ -99,7 +99,7 @@ void WorkspaceControl::updateXrefFromXdot(lwa_arm_t arm, Eigen::VectorXd& xdot) 
  * Returns a workspace velocity xdot to move the arm towards its reference
  * pose from its current pose.
  */
-Eigen::VectorXd WorkspaceControl::getXdotFromXref(lwa_arm_t arm, double xdotGain) {
+Eigen::VectorXd WorkspaceControl::getXdotFromXref(lwa_arm_t arm) {
 
 	// update current transform of the arm we're moving
 	curTrans[arm] = _krang->getEffectorPose(arm);

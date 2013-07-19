@@ -72,6 +72,7 @@ int KrangControl::initialize(simulation::World* world, somatic_d_t *daemon_cx, c
 
 void KrangControl::initSomatic() {
 	if (!initialized) {
+		initialized = true;
 		initArm(LEFT_ARM, "llwa");
 		initArm(RIGHT_ARM, "rlwa");
 		//initSchunkGripper(LEFT_ARM, "lGripper");
@@ -82,7 +83,7 @@ void KrangControl::initSomatic() {
 		initTorso();
 		initIMU();
 		initFT();
-		initialized = true;
+
 #ifdef EXPERIMENTAL
 		initPIDs(LEFT_ARM);
 		initPIDs(RIGHT_ARM);
@@ -252,8 +253,7 @@ Eigen::VectorXd KrangControl::getFtWorldWrench(lwa_arm_t arm) {
 void KrangControl::setRobotArmVelocities(lwa_arm_t arm, Eigen::VectorXd& qdot, double dt) {
 
 	if (send_motor_cmds) {
-		std::cout << "sending qdot: " << qdot.transpose() << std::endl;
-//		sendRobotArmVelocities(arm, qdot, dt);
+		sendRobotArmVelocities(arm, qdot, dt);
 	}
 	else
 		fakeArmMovement(arm, qdot, dt);
@@ -301,7 +301,7 @@ void KrangControl::sendRobotArmVelocities(lwa_arm_t arm, Eigen::VectorXd& qdot, 
 //		somatic_motor_cmd(_daemon_cx, &_arm_motors[arm], SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, currents.data(), 7, NULL);
 	} else
 #endif
-//		somatic_motor_cmd(_daemon_cx, &_arm_motors[arm], SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, qdot.data(), 7, NULL);
+		somatic_motor_cmd(_daemon_cx, &_arm_motors[arm], SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, qdot.data(), 7, NULL);
 }
 
 void KrangControl::fakeArmMovement(lwa_arm_t arm, Eigen::VectorXd& qdot, double dt) {
@@ -405,7 +405,7 @@ void KrangControl::initFT() {
 }
 
 void KrangControl::initArm(lwa_arm_t arm, const char* armName) {
-
+std::cout << "initializing arm " << std::endl;
 	// Get the channel names
 	char cmd_name [16], state_name [16];
 	sprintf(cmd_name, "%s-cmd", armName);
@@ -426,7 +426,7 @@ void KrangControl::initArm(lwa_arm_t arm, const char* armName) {
 
 	// Update and reset them
 	somatic_motor_update(_daemon_cx, &_arm_motors[arm]);
-//	somatic_motor_cmd(_daemon_cx, &_arm_motors[arm], SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 7, NULL);
+	somatic_motor_cmd(_daemon_cx, &_arm_motors[arm], SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 7, NULL);
 	usleep(1e5);
 }
 
@@ -502,6 +502,12 @@ void KrangControl::updateRobotSkelFromIMU() {
 
 /// Computes the imu value from the imu readings
 void KrangControl::getIMU() {
+	static bool imu_got_reading = false;
+	if (!imu_got_reading) {
+		_imu_angle = 0.0;
+		_imu_speed = 0.0;
+	}
+
 	if (!initialized)
 		return;
 
@@ -521,7 +527,8 @@ void KrangControl::getIMU() {
 	struct timespec abstime = aa_tm_add(aa_tm_sec2timespec(1.0/30.0), currTime);
 	Somatic__Vector *imu_msg = SOMATIC_WAIT_LAST_UNPACK(r, somatic__vector,
 			&protobuf_c_system_allocator, IMU_CHANNEL_SIZE, &_imu_chan, &abstime);
-	assert((imu_msg != NULL) && "Imu message is faulty!");
+	if (imu_msg == NULL) return; // _imu_angle and _imu_speed will remain at their last values
+	imu_got_reading = true;
 
 	// Get the imu position and velocity value from the readings (note imu mounted at 45 deg).
 	static const double mountAngle = -.7853981634;
@@ -565,7 +572,9 @@ void KrangControl::getIMU() {
   # FORCE-TORQUE HELPERS
   ################################################################################################*/
 Eigen::VectorXd KrangControl::getFT(lwa_arm_t arm, bool wait) {
-	Eigen::VectorXd ft_reading(6); ft_reading.setZero();
+	static Eigen::VectorXd ft_reading(6);
+	static bool ft_got_reading = false;
+	if (!ft_got_reading) ft_reading.setZero();
 
 	if (!initialized)
 		return ft_reading;
@@ -588,7 +597,11 @@ Eigen::VectorXd KrangControl::getFT(lwa_arm_t arm, bool wait) {
 				1024,
 				&_ft_channels[arm]);
 	}
-	assert((ft_msg != NULL) && "Didn't get FT message!");
+	if (ft_msg == NULL) {
+		return ft_reading;
+	}
+
+	ft_got_reading = true;
 
 	// extract the data into something we can use
 	for(size_t i = 0; i < 3; i++) ft_reading(i) = ft_msg->force->data[i];

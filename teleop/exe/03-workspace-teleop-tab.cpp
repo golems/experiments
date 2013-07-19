@@ -20,6 +20,9 @@
 #include "SpacenavClient.h"
 #include "JoystickClient.h"
 
+
+#define DISPLAY_VECTOR(VEC) std::cout << std::setw(25) << std::left << #VEC; for(int i = 0; i < VEC.size(); i++) std::cout << std::setw(12) << VEC[i]; std::cout << std::endl;
+
 //old:
 //#include "liberty_client.h"
 //#include "joystick_client.h"
@@ -60,6 +63,7 @@ enum DynamicSimulationTabEvents {
 enum sliderNames{
 	XDOT_GAIN_SLIDER = 1000,
 	FT_GAIN_SLIDER,
+	UI_GAIN_SLIDER,
 };
 
 // control globals
@@ -75,8 +79,9 @@ static bool motor_input_mode = 0;
 static bool motor_output_mode = 0;
 static bool motors_initialized = 0;
 static bool right_track_left_mode = 0;
-double xdot_gain = 5.0;
-double ft_gain = 0.0;
+double xdot_gain = 1.0;
+double ft_gain = 0.02;
+double ui_gain = 1.0;
 
 // Pointers to frequently used dart data structures
 kinematics::BodyNode *eeNodeL;
@@ -122,12 +127,10 @@ void SimTab::OnButton(wxCommandEvent &evt) {
 			krang.updateKrangSkeleton();
 			wrkCtl.initializeTransforms();
 		}
-
 		break;
 	}
 
 	case id_checkbox_ToggleMotorOutputMode: {
-
 		motor_output_mode = evt.IsChecked();
 		krang.setMotorOutputMode(motor_output_mode);
 
@@ -193,6 +196,12 @@ void SimTab::OnSlider(wxCommandEvent &evt) {
 	    case FT_GAIN_SLIDER: {
 	    	ft_gain = pos;
 	    	cout << "set ft gain: " << ft_gain << endl;
+	    	break;
+	    }
+	    case UI_GAIN_SLIDER: {
+	    	ui_gain = pos;
+	    	cout << "set ui gain: " << ui_gain << endl;
+	    	break;
 	    }
 	}
 }
@@ -228,8 +237,8 @@ void Timer::Notify() {
 
 	switch (ui_mode) {
 	case UI_SPACENAV: {
-		VectorXd cfgL = spn1.getConfig(0.1,0.3);
-		VectorXd cfgR = spn2.getConfig(0.1,0.3);
+		VectorXd cfgL = spn1.getConfig(0.02*ui_gain,0.06*ui_gain);
+		VectorXd cfgR = spn2.getConfig(0.02*ui_gain,0.06*ui_gain);
 		//goalSkelL->setConfig(dartRootDofOrdering, cfgL); // uncomment to visualize spacenav directly
 
 		wrkCtl.updateXrefFromXdot(LEFT_ARM, cfgL);
@@ -253,15 +262,19 @@ void Timer::Notify() {
 	goalSkelR->setConfig(dartRootDofOrdering, transformToEuler(wrkCtl.getXref(RIGHT_ARM), math::XYZ));
 
 	// get xdot from references and force sensor
-	VectorXd xdotToRefL = wrkCtl.getXdotFromXref(LEFT_ARM, xdot_gain);
-	VectorXd xdotToRefR = wrkCtl.getXdotFromXref(RIGHT_ARM, xdot_gain);
+	VectorXd xdotToRefL = wrkCtl.getXdotFromXref(LEFT_ARM);
+	VectorXd xdotToRefR = wrkCtl.getXdotFromXref(RIGHT_ARM);
 
 	// grab FT readings and combine with xdotToRef
-	VectorXd xdotL = xdotToRefL;
-	VectorXd xdotR = xdotToRefR;
+	VectorXd xdotL = xdotToRefL * xdot_gain;
+	VectorXd xdotR = xdotToRefR * xdot_gain;
 	if (motor_input_mode) {
-		xdotL += krang.getFtWorldWrench(LEFT_ARM) * ft_gain * dt;
-		xdotR += krang.getFtWorldWrench(RIGHT_ARM) * ft_gain * dt;
+		Eigen::VectorXd xdotFtL = krang.getFtWorldWrench(LEFT_ARM) * ft_gain * dt;
+		Eigen::VectorXd xdotFtR = krang.getFtWorldWrench(RIGHT_ARM) * ft_gain * dt;
+		DISPLAY_VECTOR(xdotFtL);
+		DISPLAY_VECTOR(xdotFtR);
+		xdotL += xdotFtL;
+		xdotR += xdotFtR;
 	}
 
 	// get current arm configurations (for jacobian nullspace)
@@ -301,6 +314,7 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 
 	ss1BoxS->Add(new wxCheckBox(this, id_checkbox_ToggleMotorInputMode, wxT("Read Motor State")), 0, wxALL, 1);
 	ss1BoxS->Add(new wxCheckBox(this, id_checkbox_ToggleLibertySpacenavMode, wxT("Use Liberty not spacenav")), 0, wxALL, 1);
+	ss1BoxS->Add(new GRIPSlider("UI Gain",0,10,500,ui_gain,100,500,this,UI_GAIN_SLIDER), 0, wxALL, 1);
 
 	ss2BoxS->Add(new wxButton(this, id_button_ResetScene, wxT("Reset Scene")), 0, wxALL, 1);
 	ss2BoxS->Add(new wxButton(this, id_button_ResetLiberty, wxT("Set Liberty Initial Transforms")), 0, wxALL, 1);
@@ -310,8 +324,8 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	ss3BoxS->Add(new wxCheckBox(this, id_checkbox_ToggleMotorOutputMode, wxT("Send Motor Commands")), 0, wxALL, 1);
 	ss3BoxS->Add(new wxCheckBox(this, id_checkbox_ToggleRightTrackLeftMode, wxT("Track left arm with right")), 0, wxALL, 1);
 	ss3BoxS->Add(new wxCheckBox(this, id_checkbox_ToggleStationaryCurrentMode, wxT("Stationary Current Mode")), 0, wxALL, 1);
-	ss3BoxS->Add(new GRIPSlider("Xdot Gain",0,20,500,xdot_gain,100,500,this,XDOT_GAIN_SLIDER), 0, wxALL, 1);
-	ss3BoxS->Add(new GRIPSlider("FT Gain",0,20,500,ft_gain,100,500,this,FT_GAIN_SLIDER), 0, wxALL, 1);
+	ss3BoxS->Add(new GRIPSlider("Xdot Gain",0,10,500,xdot_gain,100,500,this,XDOT_GAIN_SLIDER), 0, wxALL, 1);
+	ss3BoxS->Add(new GRIPSlider("FT Gain",0,0.1,500,ft_gain,100,500,this,FT_GAIN_SLIDER), 0, wxALL, 1);
 
 	sizerFull->Add(ss1BoxS, 1, wxEXPAND | wxALL, 6);
 	sizerFull->Add(ss2BoxS, 1, wxEXPAND | wxALL, 6);

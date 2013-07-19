@@ -95,7 +95,7 @@ protected:
 //	void setEffectorTransformFromSkel(lwa_arm_t arm, kinematics::BodyNode* eeNode);
 
 	// Returns an xdot for the given arm's current reference position
-	Eigen::VectorXd getXdotFromXref(lwa_arm_t arm, double xdotGain);
+	Eigen::VectorXd getXdotFromXref(lwa_arm_t arm);
 
 	// flag for whether to have left arm track the right one (TODO de-hackify)
 	static const bool right_track_left_mode = 0;

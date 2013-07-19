@@ -77,13 +77,18 @@ static int ui_input_mode = UI_JOYSTICK;
 void handleButtons(VectorXi &buttons) {
 
 	if (buttons[id_button_ToggleMotorInputMode] == 1) {
-		motor_input_mode = true;
-		krang.setMotorOutputMode(!(motor_input_mode && !motors_initialized));
+		motor_input_mode = !motor_input_mode;
+		if (motor_input_mode) {
+			krang.initSomatic();
+			krang.updateKrangSkeleton();
+			wrkCtl.initializeTransforms();
+		}
+
 	}
 
 	if (buttons[id_button_ToggleMotorOutputMode] == 1) {
-		motor_output_mode = true;
-		krang.setMotorOutputMode(!(motor_output_mode && !motors_initialized));
+		motor_output_mode = !motor_output_mode;
+		krang.setMotorOutputMode(!(motor_input_mode && !motors_initialized));
 
 		if (!motor_output_mode)
 			krang.halt();
@@ -167,7 +172,6 @@ void step() {
 
 	VectorXd cfgL = spn1.getConfig(0.1,0.3);
 	VectorXd cfgR = spn2.getConfig(0.1,0.3);
-	//goalSkelL->setConfig(dartRootDofOrdering, cfgL); // uncomment to visualize spacenav directly
 
 	wrkCtl.updateXrefFromXdot(LEFT_ARM, cfgL);
 
@@ -177,8 +181,8 @@ void step() {
 		wrkCtl.updateXrefFromXdot(RIGHT_ARM, cfgR);
 
 	// get xdot from references and force sensor
-	VectorXd xdotToRefL = wrkCtl.getXdotFromXref(LEFT_ARM, 5.0);
-	VectorXd xdotToRefR = wrkCtl.getXdotFromXref(RIGHT_ARM, 5.0);
+	VectorXd xdotToRefL = wrkCtl.getXdotFromXref(LEFT_ARM);
+	VectorXd xdotToRefR = wrkCtl.getXdotFromXref(RIGHT_ARM);
 
 	// grab FT readings and combine with xdotToRef
 	VectorXd xdotL = xdotToRefL;
