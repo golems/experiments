@@ -16,10 +16,7 @@
 #include "WorkspaceControl.h"
 #include "SpacenavClient.h"
 #include "JoystickClient.h"
-
-//old:
-//#include "liberty_client.h"
-//#include "joystick_client.h"
+#include "LibertyClient.h"
 
 using namespace std;
 using namespace Eigen;
@@ -38,6 +35,7 @@ World* mWorld = NULL;
 SpacenavClient spn1;
 SpacenavClient spn2;
 JoystickClient joystick;
+LibertyClient liberty;
 
 // Workspace control object
 WorkspaceControl wrkCtl;
@@ -131,7 +129,8 @@ void init() {
 	joystick.initialize(&daemon_cx, "joystick-data");
 
 	// Initialize the liberty
-	//initLiberty();
+	int libchans[] = {0,1};
+	liberty.initLiberty(&daemon_cx, "liberty", 2, libchans);
 
 	// initialize krang the monster
 	krang.initialize(mWorld, &daemon_cx, "Krang");

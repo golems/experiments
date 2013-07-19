@@ -19,7 +19,7 @@
 #include "WorkspaceControl.h"
 #include "SpacenavClient.h"
 #include "JoystickClient.h"
-
+#include "LibertyClient.h"
 
 #define DISPLAY_VECTOR(VEC) std::cout << std::setw(25) << std::left << #VEC; for(int i = 0; i < VEC.size(); i++) std::cout << std::setw(12) << VEC[i]; std::cout << std::endl;
 
@@ -39,6 +39,7 @@ somatic_d_t daemon_cx;
 SpacenavClient spn1;
 SpacenavClient spn2;
 JoystickClient joystick;
+LibertyClient liberty;
 
 // Workspace control object
 WorkspaceControl wrkCtl;
@@ -105,8 +106,8 @@ void SimTab::OnButton(wxCommandEvent &evt) {
 	}
 
 	case id_button_ResetLiberty: {
-		//MatrixXd *Tlibs[] = {&T_lib1_init, &T_lib2_init};
-		//getLibertyPoses(Tlibs, 2, NULL);
+		liberty.setInitialPoses();
+		wrkCtl.initializeTransforms();
 		break;
 	}
 
@@ -152,10 +153,16 @@ void SimTab::OnButton(wxCommandEvent &evt) {
 	}
 
 	case id_checkbox_ToggleLibertySpacenavMode: {
-		if (evt.IsChecked())
+		if (evt.IsChecked()) {
 			ui_mode = UI_LIBERTY;
-		else
+			liberty.setInitialPoses();
+			wrkCtl.initializeTransforms();
+		}
+		else {
 			ui_mode = UI_SPACENAV;
+			wrkCtl.initializeTransforms();
+		}
+
 		break;
 	}
 
@@ -249,11 +256,14 @@ void Timer::Notify() {
 			wrkCtl.updateXrefFromXdot(RIGHT_ARM, cfgR);
 		break;
 	}
-	case UI_LIBERTY:
-		// do something that involves:
+	case UI_LIBERTY: {
+		// read liberty poses
 		//wrkCtl.setXcur(LEFT_ARM, liberty.left)
+		std::vector<Eigen::Matrix4d> liberty_poses = liberty.getRelPoses(true);
+		wrkCtl.setXrefFromOffset(LEFT_ARM, liberty_poses[0]);
+		wrkCtl.setXrefFromOffset(RIGHT_ARM, liberty_poses[1]);
 		break;
-
+	}
 	case UI_NONE:
 		break;
 	}
@@ -364,13 +374,13 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
 			SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
 
-
 	// Initialize the joystick(s)
 	spn1.initialize(&daemon_cx, "spacenav-data");
 	spn2.initialize(&daemon_cx, "spacenav2-data");
 
 	// Initialize the liberty
-	//initLiberty();
+	int libchans[] = {0,1};
+	liberty.initLiberty(&daemon_cx, "liberty", 2, libchans);
 
 	// Grab effector node pointer to compute the task space error and the Jacobian
 	eeNodeL = mWorld->getSkeleton("Krang")->getNode("lGripper");

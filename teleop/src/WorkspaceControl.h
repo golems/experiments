@@ -72,7 +72,7 @@ public:
 	Eigen::Matrix4d getXref(lwa_arm_t arm);
 	void setXcur(lwa_arm_t arm, Eigen::Matrix4d &T);
 	Eigen::Matrix4d getXcur(lwa_arm_t arm);
-
+	void setXrefFromOffset(lwa_arm_t arm, Eigen::Matrix4d &T); ///< set xref as offset from xcur
 
 	/**
 	 * Workhorse function: maps given xdot into joint space.
@@ -97,6 +97,14 @@ protected:
 	// Returns an xdot for the given arm's current reference position
 	Eigen::VectorXd getXdotFromXref(lwa_arm_t arm);
 
+	const std::vector<Eigen::Matrix4d>& getInitTrans() const {
+		return initTrans;
+	}
+
+	void setInitTrans(const std::vector<Eigen::Matrix4d>& initTrans) {
+		this->initTrans = initTrans;
+	}
+
 	// flag for whether to have left arm track the right one (TODO de-hackify)
 	static const bool right_track_left_mode = 0;
 
@@ -105,6 +113,7 @@ protected:
 	std::vector<Eigen::Matrix4d> curTrans; 	///< current effector transforms
 	std::vector<Eigen::Matrix4d> refTrans; 	///< reference transforms (ie goal)
 	std::vector<Eigen::Matrix4d> relTrans; 	///< named effector transform in other effector frame
+	std::vector<Eigen::Matrix4d> initTrans;	///< initial effector transform for position teleop (eg liberty)
 
 private:
 	// All important krang pointer

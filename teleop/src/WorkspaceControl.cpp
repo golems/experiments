@@ -45,9 +45,15 @@ void WorkspaceControl::initializeTransforms() {
 	relTrans.push_back(T_dummy);
 	relTrans.push_back(T_dummy);
 
+	initTrans.resize(0);
+	initTrans.push_back(T_dummy);
+	initTrans.push_back(T_dummy);
+
 	// set initial poses
-	curTrans[LEFT_ARM] = _krang->getEffectorPose(LEFT_ARM);
-	curTrans[RIGHT_ARM] = _krang->getEffectorPose(RIGHT_ARM);
+	initTrans[LEFT_ARM] = _krang->getEffectorPose(LEFT_ARM);
+	initTrans[RIGHT_ARM] = _krang->getEffectorPose(RIGHT_ARM);
+	curTrans[LEFT_ARM] = initTrans[LEFT_ARM];
+	curTrans[RIGHT_ARM] = initTrans[RIGHT_ARM];
 
 	// set references to current poses
 	refTrans[LEFT_ARM] = curTrans[LEFT_ARM];
@@ -162,4 +168,16 @@ void WorkspaceControl::setRelativeTransforms() {
 
 	// cache the relative effector transforms
 	relTrans[LEFT_ARM] = curTrans[RIGHT_ARM].inverse() * curTrans[LEFT_ARM]; ///< left effector transform in right effector frame
+}
+
+/*
+ * Sets xref using T as a global-frame offset from xcur
+ */
+void WorkspaceControl::setXrefFromOffset(lwa_arm_t arm, Eigen::Matrix4d& T) {
+	Eigen::Matrix4d curRot = curTrans[arm];
+	curRot.topRightCorner<3,1>().setZero();
+
+	//refTrans[arm] = curTrans[arm].inverse() * T * curTrans[arm];
+	//refTrans[arm] = curTrans[arm] * curRot.inverse() * T * curRot;
+	refTrans[arm] = initTrans[arm].inverse() * T * initTrans[arm];
 }
