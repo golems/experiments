@@ -205,7 +205,8 @@ void *kbhit(void *) {
 	while(true){ 
 		input=cin.get(); 
 		if(input=='s') start = true; 
-		else if(input=='t') complyTorque = true; 
+		else if(input=='t') complyTorque = true;
+		else if(input=='f') resetFT = true; 
 		else if(input=='.') readGains();
 		else if(input=='1') {
 			printf("Mode 1\n"); 

@@ -138,6 +138,12 @@ void run () {
 	vector <double> torqueHistory;
 	for(size_t i = 0; i < historySize; i++) torqueHistory.push_back(0.0);
 	
+	// Initialize FT offset stuff
+	Vector6d leftFTData = Vector6d::Zero(); 
+	Vecotr6d rightFTData = Vector6d::Zero(); 
+	size_t leftFTIter = 0, rightFTIter = 0;
+	bool resetFT = false;
+	
 	// Continue processing data until stop received
 	double js_forw = 0.0, js_spin = 0.0, averagedTorque = 0.0, lastUleft = 0.0, lastUright = 0.0;
 	size_t mode4iter = 0, mode4iterLimit = 100;
@@ -184,6 +190,32 @@ void run () {
 		// Get the wrench on the wheel due to external force
 		getExternalWrench(externalWrench);
 		if(debug) cout << "tangible torque: " << externalWrench(4) << endl;
+
+		// Compute the offsets of the FT sensor again if commanded
+		if(resetFT) {
+			if(debug)	cout << "Restting FT" << endl;
+
+			// Accumulate data for LEft FT
+			if(getFT(daemon_cx, left_ft_chan, temp) && leftFTIter < 500)  {
+				leftFTData += temp;
+				leftFTIter++;
+			}
+	
+			// Accumulate data for right FT
+			if(getFT(daemon_cx, right_ft_chan, temp) && rightFTIter < 500) {
+			  rightFTData += temp;
+				rightFTIter++;
+			}
+		
+			// If done accumulating data compute the average
+			if(leftFTIter == 500 && rightFTIter == 500) {
+				leftFTIter = 0, rightFTIter = 0;
+				leftFTData /= 500.0, rightFTData /= 500.0;
+				computeOffset(imu, (waist.pos[0]-waist.pos[1])/2.0, llwa, leftFTData, *robot, leftOffset, true);
+				computeOffset(imu, (waist.pos[0]-waist.pos[1])/2.0, rlwa, rightFTData, *robot, rightOffset, false);
+				resetFT = false;
+			}
+		} 
 	
 		// =======================================================================
 		// Compute ref state: (1) joystick, (2) running average of external, (3) ref angle
