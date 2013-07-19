@@ -94,7 +94,7 @@ bool LibertyClient::updateRawPoses() {
 		Somatic__Vector* sensor = sensors[i];
 
 		Eigen::VectorXd config(6);
-		config << -sensor->data[0], sensor->data[1], -sensor->data[2],
+		config << -sensor->data[0], sensor->data[1], sensor->data[2],
 				-sensor->data[5], -sensor->data[4], sensor->data[3];
 
 		rawPoses[liberty_chan_ids[i]] = eulerToTransform(config, math::XYZ);

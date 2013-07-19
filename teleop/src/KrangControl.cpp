@@ -487,8 +487,9 @@ bool KrangControl::updateRobotSkelFromSomaticMotor(somatic_motor_t& mot, std::ve
 	somatic_motor_update(_daemon_cx, &mot);
 	for(size_t i = 0; i < mot.n; i++) {
 		vals(i) = mot.pos[i];
-		//std::cout << "motor current " << i  << " " << mot.cur[i] << std::endl;
-		if (fabs(mot.cur[i]) > 12) {
+
+		if (fabs(mot.cur[i]) > 11.0) {
+			std::cout << "over current for motor " << i  << " (" << mot.cur[i] << "). halting." << std::endl;
 			halt();
 			return false;
 		}

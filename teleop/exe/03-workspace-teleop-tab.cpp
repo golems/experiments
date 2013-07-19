@@ -162,6 +162,8 @@ void SimTab::OnButton(wxCommandEvent &evt) {
 			wrkCtl.setXcur(RIGHT_ARM, curTR);
 			wrkCtl.updateRelativeTransforms();
 		}
+		else
+			wrkCtl.initializeTransforms();
 		break;
 	}
 
@@ -283,14 +285,11 @@ void Timer::Notify() {
 	case UI_LIBERTY: {
 		// read liberty poses
 		std::vector<Eigen::Matrix4d> liberty_poses = liberty.getRelPoses(true);
-//		cout << "lib init 0: \n" << liberty.getInitPoses()[0] << endl;
-//		cout << "lib init 1: \n" << liberty.getInitPoses()[1] << endl;
-//		cout << "lib raw 0: \n" << liberty.getRawPoses(false)[0] << endl;
-//		cout << "lib raw 1: \n" << liberty.getRawPoses(false)[1] << endl;
-//		cout << "lib rel 0: \n" << liberty_poses[0] << endl;
-//		cout << "lib rel 1: \n" << liberty_poses[1] << endl;
 		wrkCtl.setXrefFromOffset(LEFT_ARM, liberty_poses[0]);
-		wrkCtl.setXrefFromOffset(RIGHT_ARM, liberty_poses[1]);
+		if (right_track_left_mode)
+			wrkCtl.updateXrefFromOther(RIGHT_ARM, LEFT_ARM);
+		else
+			wrkCtl.setXrefFromOffset(RIGHT_ARM, liberty_poses[1]);
 		break;
 	}
 	case UI_HOMING: {
@@ -389,7 +388,7 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	ss3BoxS->Add(checkbox_tracking, 0, wxALL, 1);
 	ss3BoxS->Add(new wxCheckBox(this, id_checkbox_ToggleStationaryCurrentMode, wxT("Homing Mode")), 0, wxALL, 1); // Stationary Current Mode
 	ss3BoxS->Add(new GRIPSlider("Xdot Gain",0,10,500,xdot_gain,100,500,this,XDOT_GAIN_SLIDER), 0, wxALL, 1);
-	ss3BoxS->Add(new GRIPSlider("FT Gain",0,0.1,500,ft_gain,100,500,this,FT_GAIN_SLIDER), 0, wxALL, 1);
+	ss3BoxS->Add(new GRIPSlider("FT Gain",0,0.2,500,ft_gain,100,500,this,FT_GAIN_SLIDER), 0, wxALL, 1);
 
 	sizerFull->Add(ss1BoxS, 1, wxEXPAND | wxALL, 6);
 	sizerFull->Add(ss2BoxS, 1, wxEXPAND | wxALL, 6);
