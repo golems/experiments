@@ -64,8 +64,14 @@ void LibertyClient::initLiberty(somatic_d_t *daemon_cx, const char* chan_name,
 void LibertyClient::setInitialPoses() {
 	updateRawPoses();
 
-	for (int i=0; i < initPoses.size(); i++)
-		initPoses[i] = rawPoses[i];
+	for (int i=0; i < initPoses.size(); i++) {
+		initPoses[i] = rawPoses[i]; // set the whole thing
+
+		// just set the position offset
+//		initPoses[i].setIdentity();
+//		initPoses[i].topRightCorner<3,1>() = rawPoses[i].topRightCorner<3,1>();
+	}
+
 }
 
 bool LibertyClient::updateRawPoses() {
@@ -103,7 +109,7 @@ bool LibertyClient::updateRawPoses() {
 	return 0;
 }
 
-bool LibertyClient::updateRelPoses() {
+void LibertyClient::updateRelPoses() {
 	for (int i=0; i < relPoses.size(); i++)
 		relPoses[i] = initPoses[i].inverse() * rawPoses[i];
 }

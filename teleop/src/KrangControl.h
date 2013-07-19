@@ -92,6 +92,7 @@ public:
 	void setRobotArmVelocities(lwa_arm_t arm, Eigen::VectorXd &qdot, double dt);
 	void setRobotiqGripperAction(lwa_arm_t arm, const Eigen::VectorXi &buttons);
 	void halt();
+	void resetMotors();
 	void setMotorOutputMode(bool mode);
 
 protected:

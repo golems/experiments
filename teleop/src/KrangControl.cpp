@@ -93,6 +93,14 @@ void KrangControl::initSomatic() {
 
 void KrangControl::setMotorOutputMode(bool mode) {
 	this->send_motor_cmds = mode;
+
+	if (send_motor_cmds) {
+		initSomatic();
+		resetMotors();
+	}
+	else
+		halt();
+
 }
 
 /*################################################################################################
@@ -281,7 +289,14 @@ void KrangControl::halt() {
 
 	somatic_motor_halt(_daemon_cx, &_arm_motors[LEFT_ARM]);
 	somatic_motor_halt(_daemon_cx, &_arm_motors[RIGHT_ARM]);
-	setMotorOutputMode(false);
+	if (send_motor_cmds != false)
+		send_motor_cmds = false;
+}
+
+void KrangControl::resetMotors()
+{
+	somatic_motor_reset(_daemon_cx, &_arm_motors[LEFT_ARM]);
+	somatic_motor_reset(_daemon_cx, &_arm_motors[RIGHT_ARM]);
 }
 
 /*################################################################################################
@@ -472,8 +487,15 @@ void KrangControl::updateRobotSkelFromSomaticMotor(somatic_motor_t& mot, std::ve
 	assert(mot.n == IDs.size());
 	Eigen::VectorXd vals(mot.n);
 	somatic_motor_update(_daemon_cx, &mot);
-	for(size_t i = 0; i < mot.n; i++)
+	for(size_t i = 0; i < mot.n; i++) {
 		vals(i) = mot.pos[i];
+		//std::cout << "motor current " << i  << " " << mot.cur[i] << std::endl;
+		if (fabs(mot.cur[i]) > 12) {
+			halt();
+			exit(-1);
+		}
+	}
+
 	_krang->setConfig(IDs, vals);
 }
 
@@ -617,7 +639,7 @@ Eigen::VectorXd KrangControl::getFT(lwa_arm_t arm, bool wait) {
 #ifdef EXPERIMENTAL
 /*################################################################################################
   # EXPERIMENTAL
-  ################################################################################################*/
+ ################################################################################################*/
 
 Eigen::VectorXd KrangControl::updatePIDs(lwa_arm_t arm) {
 	if (!initialized)
