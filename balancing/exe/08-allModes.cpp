@@ -331,13 +331,27 @@ void init() {
 	aa_fcpy(amc.pos_offset, pos_offset, 2);
 	usleep(1e5);
 
-	// Initialize kalman filter for the imu and set the measurement and meas. noise matrices
-	// Also, set the initial reading to the current imu reading to stop moving from 0 to current
-	kf = new filter_kalman_t;
-	filter_kalman_init(kf, 2, 0, 2);
-	kf->C[0] = kf->C[3] = 1.0;
-	kf->Q[0] = kf->Q[3] = 1e-3;
-	kf->x[0] = imu, kf->x[1] = imuSpeed;
+	// Initialize kalman filter for the imui, left wheel and right wheel and set the measurement 
+	// and meas. noise matrices. Also, set the initial reading to the current imu reading to 
+	// stop moving from 0 to current
+	// Imu
+	kfImu = new filter_kalman_t;
+	filter_kalman_init(kfImu, 2, 0, 2);
+	kfImu->C[0] = kfImu->C[3] = 1.0;
+	kfImu->Q[0] = kfImu->Q[3] = 1e-3;
+	kfImu->x[0] = imu, kfImu->x[1] = imuSpeed;
+	// Left Wheel
+	kfLWheel = new filter_kalman_t;
+	filter_kalman_init(kfLWheel, 2, 0, 2);
+	kfLWheel->C[0] = kfLWheel->C[3] = 1.0;
+	kfLWheel->Q[0] = 0.0005, kfLWheel->Q[3] = 0.02;
+	kfLWheel->x[0] = 0.0, kfLWheel->x[1] = 0.0;
+	// Right Wheel
+	kfRWheel = new filter_kalman_t;
+	filter_kalman_init(kfRWheel, 2, 0, 2);
+	kfRWheel->C[0] = kfRWheel->C[3] = 1.0;
+	kfRWheel->Q[0] = 0.0005; kfRWheel->Q[3] = 0.02;
+	kfRWheel->x[0] = 0.0, kfRWheel->x[1] = 0.0;
 
 	// Restart the netcanft daemon. Need to sleep to let OS kill the program first.
 	system("sns -k lft");
@@ -385,6 +399,11 @@ void destroy() {
 
 	// Close imu channel
 	somatic_d_channel_close(&daemon_cx, &imuChan);
+	
+	// Destroy kalman filters
+	filter_kalman_destroy(kfImu);	
+	filter_kalman_destroy(kfLWheel);	
+	filter_kalman_destroy(kfRWheel);	
 
 	// Open the state and ft channels
 	somatic_d_channel_close(&daemon_cx, &left_ft_chan);
