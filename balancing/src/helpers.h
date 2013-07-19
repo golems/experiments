@@ -11,6 +11,7 @@
 
 #include <dirent.h>
 #include <iostream>
+
 #include <string>
 #include <stdlib.h>
 #include <stdio.h>
@@ -39,6 +40,7 @@ using namespace Eigen;
 using namespace dynamics;
 
 bool myDebug;
+extern bool debugGlobal;
 
 /* ******************************************************************************************** */
 typedef Matrix<double, 6, 1> Vector6d;			///< A typedef for convenience to contain f/t values
@@ -64,7 +66,8 @@ SkeletonDynamics* robot;			///< the robot representation in dart
 
 bool start = false;						///< Giving time to the user to get the robot in balancing angle
 bool complyTorque = false;
-
+bool resetFT = false; 		
+	
 double jsFwdAmp;				///< The gains for joystick forward/reverse input
 double jsSpinAmp;				///< The gains for joystick left/right spin input
 
