@@ -154,7 +154,7 @@ Eigen::VectorXd WorkspaceControl::xdotToQdot(lwa_arm_t arm, const Eigen::VectorX
 	// Compute Joint Distance from middle of range
 	Eigen::VectorXd qDist(7); qDist.setZero(7);
 	Eigen::VectorXd q = _krang->getArmConfig(arm);
-	qDist = q.cwiseAbs();
+	qDist = q.cwiseAbs2();
 
 	Eigen::MatrixXd JinvJ = Jinv*J;
 	Eigen::MatrixXd I = Eigen::MatrixXd::Identity(7,7);
@@ -174,10 +174,10 @@ void WorkspaceControl::setRelativeTransforms() {
  * Sets xref using T as a global-frame offset from xcur
  */
 void WorkspaceControl::setXrefFromOffset(lwa_arm_t arm, Eigen::Matrix4d& T) {
-	Eigen::Matrix4d curRot = curTrans[arm];
-	curRot.topRightCorner<3,1>().setZero();
+	Eigen::Matrix4d initRot = initTrans[arm];
+	initRot.topRightCorner<3,1>().setZero();
 
 	//refTrans[arm] = curTrans[arm].inverse() * T * curTrans[arm];
-	//refTrans[arm] = curTrans[arm] * curRot.inverse() * T * curRot;
-	refTrans[arm] = initTrans[arm].inverse() * T * initTrans[arm];
+	refTrans[arm] = initTrans[arm] * initRot.inverse() * T * initRot;
+	//refTrans[arm] = initTrans[arm].inverse() * T * initTrans[arm];
 }
