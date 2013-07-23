@@ -58,6 +58,10 @@ KrangControl::~KrangControl() {
   # PUBLIC INITIALIZATION METHODS
   ################################################################################################*/
 int KrangControl::initialize(simulation::World* world, somatic_d_t *daemon_cx, const char *robot_name) {
+    this->send_motor_cmds = false;
+    this->initialized = false;
+    this->_current_mode = false;
+    
 	this->_world = world;
 	this->_krang = _world->getSkeleton(robot_name);
 	this->_daemon_cx = daemon_cx;

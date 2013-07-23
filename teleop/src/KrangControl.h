@@ -96,8 +96,8 @@ public:
 
 protected:
 	// control mode
-	bool send_motor_cmds = false;
-	bool initialized = false;
+	bool send_motor_cmds;
+	bool initialized;
 
 	// initialization helpers
 	void setDartIDs(); ///< sets all relevant skeleton Dof IDs for the robot
@@ -154,13 +154,13 @@ private:
 	static const int _ft_init_iters = 100;
 	//filter_kalman_t *ft_kf;		///< the kalman filter to smooth the force sensor readings
 	Eigen::Vector3d _robotiq_com;	///<
-	static const double _robotiq_mass = 2.3 + 0.169 + 0.000; ///< mass of the end effector (gripper + collar + sensor)
+	static constexpr double _robotiq_mass = 2.3 + 0.169 + 0.000; ///< mass of the end effector (gripper + collar + sensor)
 
 
 	/*
 	 * STILL EXPERIMENTAL!
 	 */
-	bool _current_mode = false;
+	bool _current_mode;
 #ifdef EXPERIMENTAL
 public:
 	// current control stuff
