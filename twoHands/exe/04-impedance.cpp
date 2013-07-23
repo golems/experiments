@@ -99,8 +99,8 @@ void runArm(bool leftArm, const Vector7d& pathGoal) {
 
 	// Check that the current values are not being too much, give a warning if so
 	for(size_t i = 0; i < 7; i++) {
-		if(fabs(arm->lwa.cur[i]) > 14.0) {
-			printf("\t\tDANGER: Mod. %d [%s] curr. over 14A: %lf, exitting!\n", i, 
+		if(fabs(arm->lwa.cur[i]) > 12.0) {
+			printf("\t\tDANGER: Mod. %d [%s] curr. over 12A: %lf, exitting!\n", i, 
 				leftArm ? "l" : "r", arm->lwa.cur[i]);
 			destroy();
 			exit(0);

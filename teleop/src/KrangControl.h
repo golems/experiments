@@ -54,15 +54,13 @@
 #include <Eigen/Dense>
 #include <simulation/World.h>
 
-#define EXPERIMENTAL
+//#define EXPERIMENTAL
 
 //TODO: should dump this in a namespace
 typedef enum arm {
 	LEFT_ARM = 0,
 	RIGHT_ARM
 } lwa_arm_t;
-
-
 
 
 /*
@@ -76,11 +74,11 @@ public:
 
 	// Robot initialization methods
 	int initialize(simulation::World* world, somatic_d_t *daemon_cx,
-			const char *robot_name = "Krang", bool fake_ctl_mode = false);
-	void setControlMode(bool mode);
+			const char *robot_name = "Krang");
+	void initSomatic(); ///< initializes all of krangs body parts over somatic
 
 	// Robot update methods
-	void updateKrangSkeleton();
+	bool updateKrangSkeleton();
 	void setArmConfig(lwa_arm_t arm, Eigen::VectorXd &config);
 	void updateFTOffset(lwa_arm_t arm);
 
@@ -94,10 +92,14 @@ public:
 	void setRobotArmVelocities(lwa_arm_t arm, Eigen::VectorXd &qdot, double dt);
 	void setRobotiqGripperAction(lwa_arm_t arm, const Eigen::VectorXi &buttons);
 	void halt();
+	void resetMotors();
+	void setMotorOutputMode(bool mode);
+
+	dynamics::SkeletonDynamics* getKrang() const { return _krang; }
 
 protected:
 	// control mode
-	bool fake_ctl_mode;
+	bool send_motor_cmds;
 	bool initialized;
 
 	// initialization helpers
@@ -106,13 +108,12 @@ protected:
 	void initTorso();
 	void initIMU();
 	void initFT();
-	void haltArm(lwa_arm_t arm);
 	void initArm(lwa_arm_t arm, const char* armName);
 	void initSchunkGripper(lwa_arm_t gripper, const char* name);
 	void initRobotiqGripper(lwa_arm_t arm, const char *chan);
 
 	// Update method helpers
-	void updateRobotSkelFromSomaticMotor(somatic_motor_t &mot, std::vector<int> &IDs);
+	bool updateRobotSkelFromSomaticMotor(somatic_motor_t &mot, std::vector<int> &IDs);
 	void updateRobotSkelFromSomaticWaist();
 	void updateRobotSkelFromIMU();
 	void getIMU();
@@ -156,10 +157,13 @@ private:
 	static const int _ft_init_iters = 100;
 	//filter_kalman_t *ft_kf;		///< the kalman filter to smooth the force sensor readings
 	Eigen::Vector3d _robotiq_com;	///<
-	static const double _robotiq_mass = 2.3 + 0.169 + 0.000; ///< mass of the end effector (gripper + collar + sensor)
+	static constexpr double _robotiq_mass = 2.3 + 0.169 + 0.000; ///< mass of the end effector (gripper + collar + sensor)
 
 
-
+	/*
+	 * STILL EXPERIMENTAL!
+	 */
+	bool _current_mode;
 #ifdef EXPERIMENTAL
 public:
 	// current control stuff
@@ -169,7 +173,6 @@ public:
 	void setPIDQdotRef(lwa_arm_t arm, Eigen::VectorXd &qdot);
 	Eigen::VectorXd getPIDQref(lwa_arm_t arm);
 
-	bool _current_mode = 0;
 	/* a data type for holding on to the state of a single motor's PID controller */
 	typedef struct {
 	    bool use_pos;
@@ -189,6 +192,7 @@ public:
 	} pid_state_t;
 	// PID controller values
 	std::vector<pid_state_t[7]> _pids;
-};
 #endif
+
+};
 #endif /* KRANGCONTROL_H_ */

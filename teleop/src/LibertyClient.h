@@ -61,7 +61,7 @@ public:
 
 	// Update method
 	bool updateRawPoses();
-	bool updateRelPoses();
+	void updateRelPoses();
 
 	// Getters
 	const std::vector<Eigen::Matrix4d>& getInitPoses() const {

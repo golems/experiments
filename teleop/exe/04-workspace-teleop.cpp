@@ -16,10 +16,7 @@
 #include "WorkspaceControl.h"
 #include "SpacenavClient.h"
 #include "JoystickClient.h"
-
-//old:
-//#include "liberty_client.h"
-//#include "joystick_client.h"
+#include "LibertyClient.h"
 
 using namespace std;
 using namespace Eigen;
@@ -38,6 +35,7 @@ World* mWorld = NULL;
 SpacenavClient spn1;
 SpacenavClient spn2;
 JoystickClient joystick;
+LibertyClient liberty;
 
 // Workspace control object
 WorkspaceControl wrkCtl;
@@ -77,13 +75,18 @@ static int ui_input_mode = UI_JOYSTICK;
 void handleButtons(VectorXi &buttons) {
 
 	if (buttons[id_button_ToggleMotorInputMode] == 1) {
-		motor_input_mode = true;
-		krang.setControlMode(!(motor_input_mode && !motors_initialized));
+		motor_input_mode = !motor_input_mode;
+		if (motor_input_mode) {
+			krang.initSomatic();
+			krang.updateKrangSkeleton();
+			wrkCtl.initializeTransforms();
+		}
+
 	}
 
 	if (buttons[id_button_ToggleMotorOutputMode] == 1) {
-		motor_output_mode = true;
-		krang.setControlMode(!(motor_output_mode && !motors_initialized));
+		motor_output_mode = !motor_output_mode;
+		krang.setMotorOutputMode(!(motor_input_mode && !motors_initialized));
 
 		if (!motor_output_mode)
 			krang.halt();
@@ -126,10 +129,11 @@ void init() {
 	joystick.initialize(&daemon_cx, "joystick-data");
 
 	// Initialize the liberty
-	//initLiberty();
+	int libchans[] = {0,1};
+	liberty.initLiberty(&daemon_cx, "liberty", 2, libchans);
 
 	// initialize krang the monster
-	krang.initialize(mWorld, &daemon_cx, "Krang", !(motor_input_mode || motor_output_mode));
+	krang.initialize(mWorld, &daemon_cx, "Krang");
 
 	// initialize workspace controller
 	wrkCtl.initialize(&krang);
@@ -167,7 +171,6 @@ void step() {
 
 	VectorXd cfgL = spn1.getConfig(0.1,0.3);
 	VectorXd cfgR = spn2.getConfig(0.1,0.3);
-	//goalSkelL->setConfig(dartRootDofOrdering, cfgL); // uncomment to visualize spacenav directly
 
 	wrkCtl.updateXrefFromXdot(LEFT_ARM, cfgL);
 
@@ -177,8 +180,8 @@ void step() {
 		wrkCtl.updateXrefFromXdot(RIGHT_ARM, cfgR);
 
 	// get xdot from references and force sensor
-	VectorXd xdotToRefL = wrkCtl.getXdotFromXref(LEFT_ARM, 5.0);
-	VectorXd xdotToRefR = wrkCtl.getXdotFromXref(RIGHT_ARM, 5.0);
+	VectorXd xdotToRefL = wrkCtl.getXdotFromXref(LEFT_ARM);
+	VectorXd xdotToRefR = wrkCtl.getXdotFromXref(RIGHT_ARM);
 
 	// grab FT readings and combine with xdotToRef
 	VectorXd xdotL = xdotToRefL;

@@ -50,7 +50,9 @@ typedef Matrix<double, 6, 6> Matrix6d;			///< A typedef for convenience to conta
 /* ******************************************************************************************** */
 // Globals for imu, motors and joystick
 
-filter_kalman_t *kf;					///< the kalman filter to smooth the imu readings
+filter_kalman_t *kfImu;					///< the kalman filter to smooth the imu readings
+filter_kalman_t *kfLWheel;		///< the kalman filter to smooth the pos/val readings of left wheel
+filter_kalman_t *kfRWheel;	///< the kalman filter to smooth the pos/val readings of right wheel
 ach_channel_t imuChan;				///< the state channel to listen to imu data
 somatic_d_t daemon_cx;				///< The properties of this "daemon"
 somatic_motor_t amc; 					///< The interface to the wheel motor group
@@ -116,7 +118,7 @@ bool getJoystickInput(double& js_forw, double& js_spin);
 void updateReference (double js_forw, double js_spin, double dt, Vector6d& refState);
 
 /// Get the joint values from the encoders and the imu and compute the center of mass as well 
-void getState(Vector6d& state, double dt, Vector3d* com = NULL, double* imu = NULL);
+void getState(Vector6d& state, double dt, Vector3d* com = NULL, double* imu = NULL); 
 
 /// Updates the dart robot representation
 void updateDart (double imu);

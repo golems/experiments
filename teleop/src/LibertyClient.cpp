@@ -40,6 +40,8 @@
  */
 
 #include "LibertyClient.h"
+#include <math/UtilsRotation.h>
+#include "util.h" //TODO: rename, move, or do something good
 
 LibertyClient::LibertyClient() {}
 
@@ -64,8 +66,14 @@ void LibertyClient::initLiberty(somatic_d_t *daemon_cx, const char* chan_name,
 void LibertyClient::setInitialPoses() {
 	updateRawPoses();
 
-	for (int i=0; i < initPoses.size(); i++)
-		initPoses[i] = rawPoses[i];
+	for (int i=0; i < initPoses.size(); i++) {
+		initPoses[i] = rawPoses[i]; // set the whole thing
+
+		// just set the position offset
+//		initPoses[i].setIdentity();
+//		initPoses[i].topRightCorner<3,1>() = rawPoses[i].topRightCorner<3,1>();
+	}
+
 }
 
 bool LibertyClient::updateRawPoses() {
@@ -84,17 +92,12 @@ bool LibertyClient::updateRawPoses() {
 	// pack liberty data into arrowConfs
 	for (int i=0; i < liberty_chan_ids.size(); i++) {
 		Somatic__Vector* sensor = sensors[i];
-		Eigen::VectorXd pos(3);
-		for (int j=0; j < 3; j++) pos[j] = sensor->data[j];
-		rawPoses[liberty_chan_ids[i]].topRightCorner<3,1>() = pos;
 
-		// convert quat to rotation matrix
-		Eigen::Quaternion<double> rotQ(&sensor->data[3]);
-		Eigen::Matrix3d rotM(rotQ);
-		rawPoses[i].topLeftCorner<3,3>() = rotM;
+		Eigen::VectorXd config(6);
+		config << -sensor->data[0], sensor->data[1], sensor->data[2],
+				-sensor->data[5], -sensor->data[4], sensor->data[3];
 
-		// set bottom row
-		rawPoses[liberty_chan_ids[i]].row(3) << 0,0,0,1;
+		rawPoses[liberty_chan_ids[i]] = eulerToTransform(config, math::XYZ);
 	}
 
 	// Free the liberty message
@@ -103,8 +106,7 @@ bool LibertyClient::updateRawPoses() {
 	return 0;
 }
 
-bool LibertyClient::updateRelPoses() {
+void LibertyClient::updateRelPoses() {
 	for (int i=0; i < relPoses.size(); i++)
-		//relPoses[i] = rawPoses[i] * initPoses[i].inverse();
 		relPoses[i] = initPoses[i].inverse() * rawPoses[i];
 }

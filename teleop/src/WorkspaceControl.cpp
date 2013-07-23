@@ -33,18 +33,27 @@ void WorkspaceControl::initializeTransforms() {
 
 	T_dummy.setIdentity();
 
+	curTrans.resize(0);
 	curTrans.push_back(T_dummy);
 	curTrans.push_back(T_dummy);
 
+	refTrans.resize(0);
 	refTrans.push_back(T_dummy);
 	refTrans.push_back(T_dummy);
 
+	relTrans.resize(0);
 	relTrans.push_back(T_dummy);
 	relTrans.push_back(T_dummy);
+
+	initTrans.resize(0);
+	initTrans.push_back(T_dummy);
+	initTrans.push_back(T_dummy);
 
 	// set initial poses
-	curTrans[LEFT_ARM] = _krang->getEffectorPose(LEFT_ARM);
-	curTrans[RIGHT_ARM] = _krang->getEffectorPose(RIGHT_ARM);
+	initTrans[LEFT_ARM] = _krang->getEffectorPose(LEFT_ARM);
+	initTrans[RIGHT_ARM] = _krang->getEffectorPose(RIGHT_ARM);
+	curTrans[LEFT_ARM] = initTrans[LEFT_ARM];
+	curTrans[RIGHT_ARM] = initTrans[RIGHT_ARM];
 
 	// set references to current poses
 	refTrans[LEFT_ARM] = curTrans[LEFT_ARM];
@@ -96,7 +105,7 @@ void WorkspaceControl::updateXrefFromXdot(lwa_arm_t arm, Eigen::VectorXd& xdot) 
  * Returns a workspace velocity xdot to move the arm towards its reference
  * pose from its current pose.
  */
-Eigen::VectorXd WorkspaceControl::getXdotFromXref(lwa_arm_t arm, double xdotGain) {
+Eigen::VectorXd WorkspaceControl::getXdotFromXref(lwa_arm_t arm) {
 
 	// update current transform of the arm we're moving
 	curTrans[arm] = _krang->getEffectorPose(arm);
@@ -145,7 +154,7 @@ Eigen::VectorXd WorkspaceControl::xdotToQdot(lwa_arm_t arm, const Eigen::VectorX
 	// Compute Joint Distance from middle of range
 	Eigen::VectorXd qDist(7); qDist.setZero(7);
 	Eigen::VectorXd q = _krang->getArmConfig(arm);
-	qDist = q.cwiseAbs();
+	qDist = q.cwiseAbs2();
 
 	Eigen::MatrixXd JinvJ = Jinv*J;
 	Eigen::MatrixXd I = Eigen::MatrixXd::Identity(7,7);
@@ -159,4 +168,16 @@ void WorkspaceControl::setRelativeTransforms() {
 
 	// cache the relative effector transforms
 	relTrans[LEFT_ARM] = curTrans[RIGHT_ARM].inverse() * curTrans[LEFT_ARM]; ///< left effector transform in right effector frame
+}
+
+/*
+ * Sets xref using T as a global-frame offset from xcur
+ */
+void WorkspaceControl::setXrefFromOffset(lwa_arm_t arm, Eigen::Matrix4d& T) {
+	Eigen::Matrix4d initRot = initTrans[arm];
+	initRot.topRightCorner<3,1>().setZero();
+
+	//refTrans[arm] = curTrans[arm].inverse() * T * curTrans[arm];
+	refTrans[arm] = initTrans[arm] * initRot.inverse() * T * initRot;
+	//refTrans[arm] = initTrans[arm].inverse() * T * initTrans[arm];
 }

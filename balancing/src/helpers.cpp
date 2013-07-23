@@ -74,12 +74,38 @@ void updateDart (double imu) {
 }
 
 /* ******************************************************************************************** */
+///   Filter the amc readings
+void filterWheel(int id, filter_kalman_t* kf, double dt) {
+
+	// Setup the data
+	kf->z[0] = amc.pos[id], kf->z[1] = amc.vel[id];
+
+	// Setup the time-dependent process matrix
+	kf->A[0] = kf->A[3] = 1.0;
+	kf->A[2] = dt;
+
+	// Setup the process noise matrix
+	static const double k2 = 10.0;
+	kf->R[0] = (dt*dt*dt*dt) * k2 * (1.0 / 4.0);
+	kf->R[1] = (dt*dt*dt) * k2 * (1.0 / 2.0);
+	kf->R[2] = (dt*dt*dt) * k2 * (1.0 / 2.0);
+	kf->R[3] = (dt*dt) * k2;
+	
+	// First make a prediction of what the reading should have been, then correct it
+	filter_kalman_predict(kf);
+	filter_kalman_correct(kf);
+
+	// Set the values
+	amc.pos[id] = kf->x[0], amc.vel[id] = kf->x[1];
+}
+
+/* ******************************************************************************************** */
 /// Get the joint values from the encoders and the imu and compute the center of mass as well 
 void getState(Vector6d& state, double dt, Vector3d* com_, double* imu_) {
 
 	// Read imu
 	double imu, imuSpeed;
-	getImu(&imuChan, imu, imuSpeed, dt, kf); 
+	getImu(&imuChan, imu, imuSpeed, dt, kfImu); 
 	if(imu_ != NULL) *imu_ = imu;
 
 	// Read Motors 
@@ -87,6 +113,10 @@ void getState(Vector6d& state, double dt, Vector3d* com_, double* imu_) {
 	somatic_motor_update(&daemon_cx, &waist);
 	somatic_motor_update(&daemon_cx, &llwa);
 	somatic_motor_update(&daemon_cx, &rlwa);
+
+	// Filter the wheel readings
+	filterWheel(0, kfLWheel, dt);
+	filterWheel(1, kfRWheel, dt);
 
 	// Update the dart robot representation and get the center of mass (decrease height of wheel)
 	updateDart(imu);
