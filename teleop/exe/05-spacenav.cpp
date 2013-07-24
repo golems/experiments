@@ -3,6 +3,9 @@
  * @author Can Erdogan, Saul Reynolds-Haertle, Jon Scholtz
  * @date July 24, 2013
  * @brief This executable shows workspace control with a spacenav in the dart/grip environment.
+ * NOTE: Although the spacenav input is interpreted as a workspace velocity, we first create a 
+ * workspace reference from it and then compute xdot back. The motivation is under application such
+ * as liberty and compliance plays with workspace reference configurations.
  */
 
 #define protected public
@@ -10,7 +13,9 @@
 
 #include "simTab.h"
 #include "GRIPApp.h"
+#include <math/UtilsRotation.h>
 
+#include "util.h"
 #include "initModules.h"
 #include "motion.h"
 
@@ -19,20 +24,131 @@ using namespace Eigen;
 using namespace dynamics;
 
 somatic_d_t daemon_cx;
-VectorXd homeConfig(7);			///< Home configuration for the left arm
-vector <int> left_arm_ids;  ///< The indices to the Krang dofs in dart
+ach_channel_t spacenav_chan;
+
 SkeletonDynamics* robot;
+vector <int> left_arm_ids;  ///< The indices to the Krang dofs in dart
+
+VectorXd homeConfig(7);			///< Home configuration for the left arm
+Matrix4d Tref;							///< The reference pos/ori for the left end-effector
 
 /* ********************************************************************************************* */
-/// Gets the workspace velocity input from the spacenav and moves the left arm end-effector
-/// accordingly
+/// Returns the 6 axes values from the spacenav
+bool getConfig(VectorXd& config) {
+
+	// Get joystick data
+	int r = 0;
+	config = VectorXd::Zero(6);
+	Somatic__Joystick *js_msg = SOMATIC_GET_LAST_UNPACK(r, somatic__joystick,
+			&protobuf_c_system_allocator, 4096, &spacenav_chan);
+	if(!(ACH_OK == r || ACH_MISSED_FRAME == r) || (js_msg == NULL)) return false;
+
+	// Set the data to the input reference
+	Somatic__Vector* x = js_msg->axes;
+	config << -x->data[1], -x->data[0], -x->data[2], -x->data[4], -x->data[3], -x->data[5];
+
+	// Free the liberty message
+	somatic__joystick__free_unpacked(js_msg, &protobuf_c_system_allocator);
+	return true;
+}
+
+/* ********************************************************************************************* */
+/// Scales the parameter spacenav input and computes the new reference configuration
+void updateReference (VectorXd& spacenav_input) {
+
+	// Scale the translation and orientation components of displacement; and make a matrix for it
+	spacenav_input.topLeftCorner<3,1>() *= 0.02;
+	spacenav_input.bottomLeftCorner<3,1>() *= 0.06;
+	Matrix4d xdotM = eulerToTransform(spacenav_input, math::XYZ);
+	
+	// Compute the displacement in the end-effector frame with a similarity transform
+	Matrix4d R = Tref;
+	R.topRightCorner<3,1>().setZero();
+	Matrix4d Tdisp = R.inverse() * xdotM * R;
+
+	// Update the reference position for the end-effector with the given workspace velocity
+	Tref = Tref * Tdisp;
+}
+
+/* ********************************************************************************************* */
+/// Returns the workspace velocity, xdot, from the reference, Tref, using the current arm
+/// configuration
+void getXdotFromXref (VectorXd& xdot) {
+
+	// Get the current end-effector transform and also, just its orientation 
+	Matrix4d Tcur = robot->getNode("lGripper")->getWorldTransform();
+	Matrix4d Rcur = Tcur;
+	Rcur.topRightCorner<3,1>().setZero();
+
+	// Apply the similarity transform to the displacement between current transform and reference
+	Matrix4d Tdisp = Tcur.inverse() * Tref;
+	Matrix4d xdotM = Rcur * Tdisp * Rcur.inverse();
+	xdot = transformToEuler(xdotM, math::XYZ);
+}
+
+/* ********************************************************************************************* */
+/// Compute qdot with the dampened inverse Jacobian with nullspace projection
+/// Important constants are for the null space gain, the dampening gain and the second goal pos.
+void getQdot (const VectorXd& xdot, VectorXd& qdot) {
+
+	// Set the parameter constants
+	static const double dampGain = 0.005;
+	static const double qdotRefDt = 0.0;
+	static const VectorXd qRef = (VectorXd(7) << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0).finished();
+
+	// Get the Jacobian for the left end-effector
+	kinematics::BodyNode* ee = robot->getNode("lGripper");
+	MatrixXd Jlin = ee->getJacobianLinear().topRightCorner<3,7>();
+	MatrixXd Jang = ee->getJacobianAngular().topRightCorner<3,7>();
+	MatrixXd J (6,7);
+	J << Jlin, Jang;
+
+	// Compute the inverse of the Jacobian with dampening
+	MatrixXd Jt = J.transpose(), JJt = J * Jt;
+	for (int i=0; i < JJt.rows(); i++) JJt(i,i) += dampGain;
+
+	// Compute the reference joint velocities for nullspace projection
+	VectorXd q = robot->getConfig(left_arm_ids);
+	VectorXd qDotRef = (q - qRef) * qdotRefDt;
+	
+	// Compute the qdot using the reference joint velocity and the reference position 
+	MatrixXd Jinv = Jt * JJt.inverse();
+	MatrixXd JinvJ = Jinv*J;
+	MatrixXd I = MatrixXd::Identity(7,7);
+	qdot = Jinv * xdot + (I - JinvJ) * qDotRef;
+}
+
+/* ********************************************************************************************* */
+/// Gets the workspace velocity input from the spacenav, updates a workspace reference position
+/// and moves the left arm end-effector to that position
 void Timer::Notify() {
 
-	// Get the 
+	static const double dt = 0.005 * 1e4;
+
+	// Get the workspace velocity input from the spacenav
+	VectorXd spacenav_input (6);
+	bool result = false;
+	while(result) result = getConfig(spacenav_input);
+
+	// Update the reference configuration with the spacenav input
+	updateReference(spacenav_input);
+
+	// Get xdot from the reference configuration
+	VectorXd xdot;
+	getXdotFromXref(xdot);
+
+	// Compute qdot with the dampened inverse Jacobian with nullspace projection
+	VectorXd qdot;
+	getQdot(xdot, qdot);
+
+	// Apply the joint velocities
+	Eigen::VectorXd q = robot->getConfig(left_arm_ids);
+	q += qdot * dt;
+	robot->setConfig(left_arm_ids, q);
 
 	// Visualize the scene
 	viewer->DrawGLScene();
-	Start(0.005 * 1e4);	
+	Start(dt);
 }
 
 /* ********************************************************************************************* */
@@ -63,9 +179,8 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	dopt.ident = "05-spacenav";
 	somatic_d_init(&daemon_cx, &dopt);
 
-	// Send a message; set the event code and the priority
-	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
-			SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
+	// Initialize the spacenav channel
+	somatic_d_channel_open(&daemon_cx, &spacenav_chan, "spacenav-data", NULL);
 
 	// Manually set the initial arm configuration for the left arm
 	for(int i = 11; i < 24; i+=2) left_arm_ids.push_back(i);
@@ -78,6 +193,13 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	imuWaist_ids.push_back(8);
 	Vector2d imuWaist (3.45, 2.81);
 	robot->setConfig(imuWaist_ids, imuWaist);
+
+	// Initialize the "initial" reference configuration for the end-effector with current
+	Tref = robot->getNode("lGripper")->getWorldTransform();
+
+	// Send a message; set the event code and the priority
+	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
+			SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
 }
 
 /* ********************************************************************************************* */
