@@ -3,7 +3,7 @@ project(forwardKinematics)
 
 # Set the C99 standard for the C files
 set(CMAKE_INSTALL_PREFIX /usr)
-set(CMAKE_CXX_FLAGS -g)
+set(CMAKE_CXX_FLAGS "-g -std=gnu++0x")
 
 # Guard against in-source builds
 if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
