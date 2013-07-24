@@ -71,7 +71,6 @@ void updateReference (VectorXd& spacenav_input) {
 	// Scale the translation and orientation components of displacement; and make a matrix for it
 	spacenav_input.topLeftCorner<3,1>() *= 0.02;
 	spacenav_input.bottomLeftCorner<3,1>() *= 0.06;
-	pv(spacenav_input);
 	Matrix4d xdotM = eulerToTransform(spacenav_input, math::XYZ);
 	
 	// Compute the displacement in the end-effector frame with a similarity transform
@@ -90,7 +89,6 @@ void getXdotFromXref (VectorXd& xdot) {
 
 	// Get the current end-effector transform and also, just its orientation 
 	Matrix4d Tcur = robot->getNode("lGripper")->getWorldTransform();
-	pmr(Tcur);
 	Matrix4d Rcur = Tcur;
 	Rcur.topRightCorner<3,1>().setZero();
 
@@ -137,33 +135,27 @@ void getQdot (const VectorXd& xdot, VectorXd& qdot) {
 /// and moves the left arm end-effector to that position
 void Timer::Notify() {
 
-	//static int c_ = 0;
-//	if(c_++ > 250) exit(0);
-	cout << "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv\n" << endl;
-	pmr(Tref);
-
 	// Get the workspace velocity input from the spacenav
 	VectorXd spacenav_input (6);
 	bool result = false;
 	while(!result) result = getSpaceNav(spacenav_input);
 
-	// Update the reference configuration with the spacenav input
+	// Update the reference configuration with the spacenav input and visualize it
 	updateReference(spacenav_input);
+	mWorld->getSkeleton("g1")->setConfig(dartRootDofOrdering, transformToEuler(Tref, math::XYZ));
+	pv(spacenav_input);
 
 	// Get xdot from the reference configuration
 	VectorXd xdot;
 	getXdotFromXref(xdot);
-	pv(xdot);
 
 	// Compute qdot with the dampened inverse Jacobian with nullspace projection
 	VectorXd qdot;
 	getQdot(xdot, qdot);
-	pv(qdot);
 
 	// Apply the joint velocities
 	Eigen::VectorXd q = robot->getConfig(left_arm_ids);
 	q += qdot * 0.03;
-	pv(q);
 	robot->setConfig(left_arm_ids, q);
 
 	// Visualize the scene
@@ -180,7 +172,10 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 
   sizerFull = new wxBoxSizer(wxHORIZONTAL);
 	viewer->camRadius = 3.0;
-	viewer->worldV += Vector3d(0.0, 0.0, -0.7);
+	viewer->worldV += Vector3d(-0.3, 0.0, -0.8);
+	Matrix3d rotM; 
+	rotM << -0.8459, 0.0038246, 0.5332,0.000573691,-0.9999,0.008082, 0.533265, 0.00714295, 0.845918;
+	viewer->camRotT = rotM;
 	viewer->UpdateCamera();
 	SetSizer(sizerFull);
 	frame->DoLoad("../../common/scenes/05-World-Teleop.urdf");
