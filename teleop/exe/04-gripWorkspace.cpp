@@ -454,7 +454,7 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 //	rarm_conf << 0.0, M_PI / 3.0, 0.0, M_PI / 3.0, 0.0, -M_PI/6.0, 0.0;
 //	krang.setArmConfig(LEFT_ARM, larm_conf);
 //	krang.setArmConfig(RIGHT_ARM, rarm_conf);
-	homeConfigL <<  1.102, -0.589,  0.000, -1.339,  0.000, -0.959, -1.000;
+	homeConfigL <<  0.2, -0.589,  0.000, -1.339,  0.000, -0.959, -1.000;
 	homeConfigR << -1.102,  0.589,  0.000,  1.339,  0.141,  0.959, -1.000;
 	krang.setArmConfig(LEFT_ARM, homeConfigL);
 	krang.setArmConfig(RIGHT_ARM, homeConfigR);

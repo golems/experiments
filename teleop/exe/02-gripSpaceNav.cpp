@@ -170,7 +170,7 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	// ============================================================================
 	// Initialize grip stuff
 
-  sizerFull = new wxBoxSizer(wxHORIZONTAL);
+  wxBoxSizer* sizerFull = new wxBoxSizer(wxHORIZONTAL);
 	viewer->camRadius = 3.0;
 	viewer->worldV += Vector3d(-0.3, 0.0, -0.8);
 	Matrix3d rotM; 
@@ -230,6 +230,8 @@ SimTab::~SimTab() {
 
 /* ********************************************************************************************* */
 void SimTab::GRIPEventSimulationBeforeTimestep() {}
+void SimTab::OnButton(wxCommandEvent &evt) {}
+void SimTab::OnSlider(wxCommandEvent &evt) {}
 
 /* ********************************************************************************************* */
 // Handler for events
