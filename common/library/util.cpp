@@ -12,6 +12,8 @@
 
 using namespace std;
 
+namespace Krang {
+
 /* ******************************************************************************************** */
 // Setup the indices for the motor groups
 
@@ -21,6 +23,8 @@ int imuWaist_ids_a [2] = {5, 8};
 vector <int> left_arm_ids (left_arm_ids_a, left_arm_ids_a + 7);						
 vector <int> right_arm_ids (right_arm_ids_a, right_arm_ids_a + 7);	
 vector <int> imuWaist_ids (imuWaist_ids_a, imuWaist_ids_a + 2);		
+
+};
 
 /* ******************************************************************************************** */
 Eigen::MatrixXd fix (const Eigen::MatrixXd& mat) {

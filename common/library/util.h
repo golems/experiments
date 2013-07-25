@@ -9,6 +9,8 @@
 
 using namespace Eigen;
 
+namespace Krang {
+
 /* ******************************************************************************************** */
 /// The indicator for the left or right side	
 enum Side {
@@ -27,6 +29,8 @@ extern std::vector <int> imuWaist_ids;			///< Ids for waist/imu
 typedef Matrix<double, 6, 1> Vector6d;			///< A typedef for convenience to contain f/t values
 typedef Matrix<double, 7, 1> Vector7d;			///< A typedef for convenience to contain joint values
 typedef Matrix<double, 6, 6> Matrix6d;			///< A typedef for convenience to contain wrenches
+
+};
 
 /* ******************************************************************************************** */
 // Useful macros
