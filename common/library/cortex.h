@@ -7,15 +7,9 @@
 
 #pragma once
 
-#include <somatic.h>
-#include <somatic/daemon.h>
-#include <somatic.pb-c.h>
-#include <somatic/motor.h>
-#include <filter.h>
-#include <ach.h>
-
-#include "kinematics.h"
 #include "sensors.h"
+
+using namespace Eigen;
 
 namespace Krang {
 
@@ -23,12 +17,6 @@ namespace Krang {
 /// The interface to the active motor groups on the robot.
 class Hardware {
 public:
-
-	/// The indicator for the left or right side	
-	enum Side {
-		LEFT = 0,
-		RIGHT
-	};
 
 	/// The indicators for the motor groups to be used
 	enum Mode {
@@ -56,15 +44,15 @@ public:
 	// The fields to keep track of the daemon context, mode and the robot kinematics
 	
 	Mode mode;														///< Indicates which motor groups are used
-	somatic_d_t& daemon_cx;								///< The daemon context for the running program
+	somatic_d_t* daemon_cx;								///< The daemon context for the running program
 	SkeletonDynamics* robot;							///< The kinematics of the robot
 
 public:
 	// The interfaces to the sensors on Krang
 
-	ach_channel_t* imu;										///< Imu sensor for balance angle
+	ach_channel_t* imu_chan;										///< Imu sensor for balance angle
 	double imu, imuSpeed;									///< Latest imu readings (or the mean over a window)
-	kalman_filter_t* kfImu; 							///< The kalman filter for the imu readings
+	filter_kalman_t* kfImu; 							///< The kalman filter for the imu readings
 
 	FT* lft;															///< Force/torque data from left arm
 	FT* rft;															///< Force/torque data from right arm
@@ -86,8 +74,8 @@ public:
 
 /// Initializes the imu channel, the filter and averages first 500 readings for correct 
 /// wheels and f/t offsets
-void initImu (somatic_d_t* daemon_cx, ach_channel_t* imu, double& imu, double& imuSpeed, 
-		kalman_filter_t*& kfImu);
+void initImu (somatic_d_t* daemon_cx, ach_channel_t* imu_chan, double& imu, double& imuSpeed, 
+		filter_kalman_t*& kfImu);
 
 /// Initializes a motor group that is represented with a somatic structure
 void initMotorGroup (somatic_d_t* daemon_cx, somatic_motor_t*& motors, const char* cmd_name,

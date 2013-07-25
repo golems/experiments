@@ -6,16 +6,22 @@
  */
 
 #include "sensors.h"
+#include <vector>
+
+using namespace std;
+using namespace Eigen;
+
+namespace Krang {
 
 
 /* ******************************************************************************************** */
-FT::FT (GripperType type, dynamics::SkeletonDynamics* robot, Side side) {
+    FT::FT (GripperType type, somatic_d_t* daemon_cx, dynamics::SkeletonDynamics* robot, Side side) {
 
 	// Sanity check the input
 	assert((robot != NULL) && "Can not initialize the f/t sensors without robot kinematics");
 
 	// Open the data channel
-	somatic_d_channel_open(&daemon_cx, &chan, (side == LEFT) ? "llwa_ft" : "rlwa_ft", NULL);
+	somatic_d_channel_open(daemon_cx, chan, (side == LEFT) ? "llwa_ft" : "rlwa_ft", NULL);
 
 	// Set the gripper mass and center of mass based on the type: the com for ext, schunk and robotiq
 	// are 0.026, 0.0683, 0.065 (?)
@@ -34,7 +40,7 @@ FT::FT (GripperType type, dynamics::SkeletonDynamics* robot, Side side) {
 	Vector6d ft_data = Vector6d::Zero(), temp;
 	for(size_t i = 0; i < 1e3; i++) {
 		bool gotReading = false;
-		while(!gotReading) gotReading = getFT(daemon_cx, ft_chan, temp);
+		while(!gotReading) gotReading = getRaw(temp);
 		ft_data += temp;
 	}
 	ft_data /= 1e3;
@@ -45,3 +51,7 @@ FT::FT (GripperType type, dynamics::SkeletonDynamics* robot, Side side) {
 }
 
 /* ******************************************************************************************** */
+void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt, 
+             filter_kalman_t* kf) {}
+
+};
