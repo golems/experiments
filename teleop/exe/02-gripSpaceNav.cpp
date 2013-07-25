@@ -105,7 +105,7 @@ void getQdot (const VectorXd& xdot, VectorXd& qdot) {
 
 	// Set the parameter constants
 	static const double dampGain = 0.005;
-	static const double qdotRefDt = 0.0;
+	static const double qdotRefDt = 0.1;
 	static const VectorXd qRef = (VectorXd(7) << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0).finished();
 
 	// Get the Jacobian for the left end-effector
@@ -121,7 +121,7 @@ void getQdot (const VectorXd& xdot, VectorXd& qdot) {
 
 	// Compute the reference joint velocities for nullspace projection
 	VectorXd q = robot->getConfig(left_arm_ids);
-	VectorXd qDotRef = (q - qRef) * qdotRefDt;
+	VectorXd qDotRef = (qRef - q) * qdotRefDt;
 	
 	// Compute the qdot using the reference joint velocity and the reference position 
 	MatrixXd Jinv = Jt * JJt.inverse();
