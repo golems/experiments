@@ -35,6 +35,10 @@ vector <int> left_arm_ids;  ///< The indices to the Krang dofs in dart
 VectorXd homeConfig(7);			///< Home configuration for the left arm
 Matrix4d Tref;							///< The reference pos/ori for the left end-effector
 
+const Eigen::VectorXd JOINTLIMITREGIONS = (VectorXd(7) << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1).finished();
+const double JOINTLIMIT_MAXSTRENGTH = 1.0; // move joints up to this fast to avoid limits
+const double JOINTLIMIT_WIDTH = .01; // how "wide" the curve is that we use to avoid limits
+
 /* ******************************************************************************************** */
 Eigen::MatrixXd fix (const Eigen::MatrixXd& mat) {
 	Eigen::MatrixXd mat2 (mat);
@@ -62,6 +66,53 @@ bool getSpaceNav(VectorXd& config) {
 	// Free the liberty message
 	somatic__joystick__free_unpacked(js_msg, &protobuf_c_system_allocator);
 	return true;
+}
+
+/* ********************************************************************************************* */
+/// softly resist movements into joint limits. Basically just set a
+/// velocity away from the limit and increase it as the joint gets
+/// closer to the limit; eventually the system will reach a point
+/// where the commanded velocity matches the velocity pushing back
+/// and the joint will safely stop.
+void computeQdotAvoidLimits(const Eigen::VectorXd& q, Eigen::VectorXd& qdot_avoid) {
+	double error;
+	double region;
+	for(int i = 0; i < 7; i++) {
+		// find our dof so we can get limits
+		kinematics::Dof* dof = robot->getDof(left_arm_ids[i]);
+
+		// store this so we aren't typing so much junk
+		region = JOINTLIMITREGIONS[i];
+
+		// no avoidance if we arne't near a limit
+		qdot_avoid[i] = 0.0;
+
+		// if we're close to hitting the lower limit, move positive
+		if (q[i] < dof->getMin() + region) {
+			// figure out how close we are to the limit.
+			error = q[i] - dof->getMin();
+
+			// take the inverse to get the magnitude of our response
+			// subtract 1/region so that our response starts at zero
+			qdot_avoid[i] = (JOINTLIMIT_WIDTH / error) - (JOINTLIMIT_WIDTH / region);
+
+			// clamp it to the maximum allowed avoidance strength
+			qdot_avoid[i] = std::min(qdot_avoid[i], JOINTLIMIT_MAXSTRENGTH);
+		}
+
+		// if we're close to hitting the lower limit, move positive
+		if (q[i] > dof->getMax() - region) {
+			// figure out how close we are to the limit.
+			error = q[i] - dof->getMax();
+
+			// take the inverse to get the magnitude of our response
+			// subtract 1/region so that our response starts at zero
+			qdot_avoid[i] = (JOINTLIMIT_WIDTH / error) + (JOINTLIMIT_WIDTH / region);
+
+			// clamp it to the maximum allowed avoidance strength
+			qdot_avoid[i] = std::max(qdot_avoid[i], -JOINTLIMIT_MAXSTRENGTH);
+		}
+	}
 }
 
 /* ********************************************************************************************* */
@@ -153,8 +204,16 @@ void Timer::Notify() {
 	VectorXd qdot;
 	getQdot(xdot, qdot);
 
-	// Apply the joint velocities
+	// pull out our current configuration
 	Eigen::VectorXd q = robot->getConfig(left_arm_ids);
+
+	// avoid joint limits
+	VectorXd qdotAvoid(7);
+	computeQdotAvoidLimits(q, qdotAvoid);
+	pv(qdotAvoid);
+	qdot += qdotAvoid;
+
+	// Apply the joint velocities
 	q += qdot * 0.03;
 	robot->setConfig(left_arm_ids, q);
 
