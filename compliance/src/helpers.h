@@ -24,7 +24,7 @@
 
 #include <imud.h>
 
-#include "kinematics.h"
+// #include "kinematics.h"
 #include "initModules.h"
 #include "motion.h"
 #include <iostream>
@@ -57,14 +57,14 @@ typedef Matrix<double, 7, 1> Vector7d;			///< A typedef for convenience to conta
 typedef Matrix<double, 6, 6> Matrix6d;			///< A typedef for convenience to contain wrenches
 
 /* ******************************************************************************************** */
-//static const double eeMass = 1.6 + 0.169 + 0.000;			///< The mass of the schunk end-effector
-static const double eeMass = 2.3 + 0.169 + 0.000;			///< The mass of the robotiq end-effector
+static const double eeMass = 1.6 + 0.169 + 0.000;			///< The mass of the schunk end-effector
+//static const double eeMass = 2.3 + 0.169 + 0.000;			///< The mass of the robotiq end-effector
 simulation::World *world = NULL;									///< The dart environment loaded for kinematics
 
 /* ******************************************************************************************** */
 /// Set the vector from the sensor origin to the gripper center of mass (m)
-//static const Vector3d s2com (0.0, 0.0, 0.09); // 0.0683 schunk itself, 0.026 length of ext + 2nd
-static const Vector3d s2com (0.0, -0.008, 0.091); // 0.065 robotiq itself, 0.026 length of ext + 2nd
+static const Vector3d s2com (0.0, 0.0, 0.09); // 0.0683 schunk itself, 0.026 length of ext + 2nd
+//static const Vector3d s2com (0.0, -0.008, 0.091); // 0.065 robotiq itself, 0.026 length of ext + 2nd
 
 /// Returns the representation of the end-effector frame in the base frame
 void forwardKinematics (const somatic_motor_t& llwa, MatrixXd& Tbee);

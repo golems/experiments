@@ -1,37 +1,24 @@
 /**
- * @file cortex.cpp
+ * @file kore.cpp
  * @author Can Erdogan
  * @date July 24, 2013
  * @brief The main source file for the Krang support file which has the definition for the 
  * Hardware struct constructor.
  */
 
-#include "cortex.h"
+#include "kore.h"
 
-#include <vector>
-
-using namespace std;
 using namespace Eigen;
 
 namespace Krang {
-    
+	
 /* ******************************************************************************************** */
-// Setup the indices for the motor groups
+Hardware::Hardware (Mode mode_, somatic_d_t* daemon_cx_, dynamics::SkeletonDynamics* robot_) {
 
-int left_arm_ids_a [7] = {11, 13, 15, 17, 19, 21, 23}; 
-int right_arm_ids_a [7] = {12, 14, 16, 18, 20, 22, 24}; 
-int imuWaist_ids_a [2] = {5, 8};
-vector <int> left_arm_ids (left_arm_ids_a, left_arm_ids_a + 7);						
-vector <int> right_arm_ids (right_arm_ids_a, right_arm_ids_a + 7);	
-vector <int> imuWaist_ids (imuWaist_ids_a, imuWaist_ids_a + 2);		
-
-/* ******************************************************************************************** */
-Hardware::Hardware (Mode mode_, somatic_d_t* daemon_cx_, SkeletonDynamics* robot_) {
-
-    // Set the local variables
-    daemon_cx = daemon_cx_;
-    robot = robot_;
-    mode = mode_;
+	// Set the local variables
+	daemon_cx = daemon_cx_;
+	robot = robot_;
+	mode = mode_;
 
 	// Initialize all the 'optional' pointers to nulls and sanity check the inputs
 	lft = rft = NULL;
@@ -41,24 +28,24 @@ Hardware::Hardware (Mode mode_, somatic_d_t* daemon_cx_, SkeletonDynamics* robot
 	assert((robot != NULL) && "Can not give null dart kinematics to hardware constructor");
 	
 	// Initialize the imu sensor and average the first 500 values
-	initImu(daemon_cx, imu_chan, imu, imuSpeed, kfImu);
+	initImu();
 
 	// Define the pos/vel limits for the motor groups
 	VectorXd lim7 = VectorXd::Ones(7) * 1024.1, lim2 = VectorXd::Ones(2) * 1024.1; 
-        VectorXd lim1 = VectorXd::Ones(1) * 1024.1;
+	VectorXd lim1 = VectorXd::Ones(1) * 1024.1;
 
 	// Initialize the Schunk (+ Robotiq) motor groups
 	if(mode & MODE_LARM) 
-		initMotorGroup(daemon_cx, larm, "llwa-cmd", "llwa-state", -lim7, lim7, -lim7, lim7);	
+		initMotorGroup(larm, "llwa-cmd", "llwa-state", -lim7, lim7, -lim7, lim7);	
 	if(mode & MODE_RARM) 
-		initMotorGroup(daemon_cx, rarm, "rlwa-cmd", "rlwa-state", -lim7, lim7, -lim7, lim7);	
+		initMotorGroup(rarm, "rlwa-cmd", "rlwa-state", -lim7, lim7, -lim7, lim7);	
 	if(mode & MODE_TORSO) 
-            initMotorGroup(daemon_cx, torso, "torso-cmd", "torso-state", -lim1, lim1, -lim1, lim1);	
+		initMotorGroup(torso, "torso-cmd", "torso-state", -lim1, lim1, -lim1, lim1);	
 	if(mode & MODE_GRIPPERS) 
-		initMotorGroup(daemon_cx, torso, "grippers-cmd", "grippers-state", -lim2, lim2, -lim2, lim2);	
+		initMotorGroup(torso, "grippers-cmd", "grippers-state", -lim2, lim2, -lim2, lim2);	
 
 	// Initialize the wheel motor groups which depend on imu readings to get absolute wheel positions
-	if(mode & MODE_AMC) initWheels(daemon_cx, amc, imu);
+	if(mode & MODE_AMC) initWheels();
 
 	// Initialize the ach channels to the waist daemon and the waist state channel. The daemon moves
 	// the motors in unison with current control and pciod updates their state on the state channel.
@@ -72,13 +59,13 @@ Hardware::Hardware (Mode mode_, somatic_d_t* daemon_cx_, SkeletonDynamics* robot
 	updateKinematics();
 	
 	// After initializing the rest of the robot (need kinematics), we can initialize f/t sensors. 
-        // TODO: Determine the type of the gripper from the mode
+	// TODO: Determine the type of the gripper from the mode
 	if(mode & MODE_LARM) lft = new FT(FT::GRIPPER_TYPE_ROBOTIQ, daemon_cx, robot, LEFT);
 	if(mode & MODE_RARM) rft = new FT(FT::GRIPPER_TYPE_ROBOTIQ, daemon_cx, robot, RIGHT);
 }
 
 /* ******************************************************************************************** */
-    void Hardware::updateSensors (double dt) {
+void Hardware::updateSensors (double dt) {
 
 	// Update the lower body motors to get the current values
 	if(mode & MODE_AMC) somatic_motor_update(daemon_cx, amc);
@@ -91,16 +78,16 @@ Hardware::Hardware (Mode mode_, somatic_d_t* daemon_cx_, SkeletonDynamics* robot
 	// Update the arms and ft sensors if required
 	if(mode & MODE_LARM) {
 		somatic_motor_update(daemon_cx, larm);
-		lft->update();
+		lft->updateExternal();
 	}
 	if(mode & MODE_RARM) {
 		somatic_motor_update(daemon_cx, rarm);
-		rft->update();
+		rft->updateExternal();
 	}
 }
 
 /* ******************************************************************************************** */
-    void Hardware::updateKinematics () {
+void Hardware::updateKinematics () {
 
 	// Update imu and waist values
 	assert((mode & MODE_WAIST) && "This code assumes that the robot at least has the waist modules");
@@ -120,8 +107,7 @@ Hardware::Hardware (Mode mode_, somatic_d_t* daemon_cx_, SkeletonDynamics* robot
 }
 
 /* ******************************************************************************************** */
-void initImu (somatic_d_t* daemon_cx, ach_channel_t* imu_chan, double& imu, double& imuSpeed, 
-		filter_kalman_t*& kfImu) {
+void Hardware::initImu () {
 
 	// Initialize the ach channel
 	somatic_d_channel_open(daemon_cx, imu_chan, "imu-data", NULL);
@@ -144,7 +130,7 @@ void initImu (somatic_d_t* daemon_cx, ach_channel_t* imu_chan, double& imu, doub
 }
 
 /* ******************************************************************************************** */
-void initWheels (somatic_d_t* daemon_cx, somatic_motor_t*& amc, double imu) {
+void Hardware::initWheels () {
 
 	// Initialize the motor group (do we need to set any limits?)
 	somatic_motor_init(daemon_cx, amc, 2, "amc-cmd", "amc-state");
@@ -162,8 +148,8 @@ void initWheels (somatic_d_t* daemon_cx, somatic_motor_t*& amc, double imu) {
 }
 
 /* ******************************************************************************************** */
-void initMotorGroup (somatic_d_t* daemon_cx, somatic_motor_t*& motors, const char* cmd_name,
-		const char* state_name, VectorXd minPos, VectorXd maxPos, VectorXd minVel, VectorXd maxVel) {
+void Hardware::initMotorGroup (somatic_motor_t*& motors, const char* cmd_name, const char* 
+		state_name, VectorXd minPos, VectorXd maxPos, VectorXd minVel, VectorXd maxVel) {
 
 	// Initialize the somatic motor struct with the channel names and the number of modules
 	size_t numModules = minPos.size();

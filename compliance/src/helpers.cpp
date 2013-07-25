@@ -250,20 +250,13 @@ void getImu (double *imu, ach_channel_t& imuChan) {
 			&protobuf_c_system_allocator, IMU_CHANNEL_SIZE, &imuChan, &abstime );
 	assert((imu_msg != NULL) && "Imu message is faulty!");
 
-	// Prepare the ssdmu structure 
-	ssdmu_sample_t imu_sample;
-	imu_sample.x  = imu_msg->data[0];
-	imu_sample.y  = imu_msg->data[1];
-	imu_sample.z  = imu_msg->data[2];
-	imu_sample.dP = imu_msg->data[3];
-	imu_sample.dQ = imu_msg->data[4];
-	imu_sample.dR = imu_msg->data[5];
+	// Get the imu position and velocity value from the readings (note imu mounted at 45 deg).
+	static const double mountAngle = -.7853981634;
+	double newX = imu_msg->data[0] * cos(mountAngle) - imu_msg->data[1] * sin(mountAngle);
+	*imu = -atan2(newX, imu_msg->data[2]) + M_PI/2;
 
 	// Free the unpacked message
 	somatic__vector__free_unpacked( imu_msg, &protobuf_c_system_allocator );
-
-	// Make the calls to extract the pitch and rate of extraction
-	*imu = -ssdmu_pitch(&imu_sample) + M_PI/2;				 
 }
 
 /* ********************************************************************************************* */
