@@ -3,3 +3,5 @@ Somatic motor group should support the Robotiq hands.
 Why do we need to usleep for updates and resets? Can that be moved to somatic calls?
 Do we filter the wheels? Did it work?
 Name Hardware to KHardware
+Krang Support Library (KSL)
+Why do we kill the netcanft in the beginning of our program?
