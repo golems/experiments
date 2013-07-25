@@ -236,6 +236,9 @@ void run() {
 		double time_delta = time_now - time_last;
 		time_last = time_now;
 
+		// pretty output
+		std::cout << "################################################################################" << std::endl;
+
 		// update the robot
 		h->updateSensors(time_delta);
 		h->updateKinematics();
@@ -247,18 +250,18 @@ void run() {
 		spacenav_input_L.bottomLeftCorner<3,1>() *= SPACENAV_ORIENTATION_GAIN;
 		DISPLAY_VECTOR(spacenav_input_L);
 
-		Eigen::VectorXd spacenav_input_R;
-		arm_ws[Krang::RIGHT]->getSpaceNav(spacenav_input_R);
-		spacenav_input_R.topLeftCorner<3,1>() *= SPACENAV_TRANSLATION_GAIN;
-		spacenav_input_R.bottomLeftCorner<3,1>() *= SPACENAV_ORIENTATION_GAIN;
-		DISPLAY_VECTOR(spacenav_input_R);
+		// Eigen::VectorXd spacenav_input_R;
+		// arm_ws[Krang::RIGHT]->getSpaceNav(spacenav_input_R);
+		// spacenav_input_R.topLeftCorner<3,1>() *= SPACENAV_TRANSLATION_GAIN;
+		// spacenav_input_R.bottomLeftCorner<3,1>() *= SPACENAV_ORIENTATION_GAIN;
+		// DISPLAY_VECTOR(spacenav_input_R);
 		
 		// move the workspace references around from that spacenav input
 		arm_ws[Krang::LEFT]->updateReferenceFromXdot(spacenav_input_L, time_delta);
 		DISPLAY_MATRIX(arm_ws[Krang::LEFT]->t_ref);
 
-		arm_ws[Krang::RIGHT]->updateReferenceFromXdot(spacenav_input_R, time_delta);
-		DISPLAY_MATRIX(arm_ws[Krang::RIGHT]->t_ref);
+		// arm_ws[Krang::RIGHT]->updateReferenceFromXdot(spacenav_input_R, time_delta);
+		// DISPLAY_MATRIX(arm_ws[Krang::RIGHT]->t_ref);
 
 		// get an xdot out of the PID controller that's trying to
 		// drive us to the refernece position
@@ -266,18 +269,18 @@ void run() {
 		arm_ws[Krang::LEFT]->getXdotFromXref(xdotL);
 		DISPLAY_VECTOR(xdotL);
 
-		Eigen::VectorXd xdotR;
-		arm_ws[Krang::RIGHT]->getXdotFromXref(xdotR);
-		DISPLAY_VECTOR(xdotR);
+		// Eigen::VectorXd xdotR;
+		// arm_ws[Krang::RIGHT]->getXdotFromXref(xdotR);
+		// DISPLAY_VECTOR(xdotR);
 
 		// turn that xdot into a qdot using our jacobian stuff
 		Eigen::VectorXd qdotL;
 		arm_ws[Krang::LEFT]->getQdotFromXdot(xdotL, qdotL);
 		DISPLAY_VECTOR(qdotL);
 
-		Eigen::VectorXd qdotR;
-		arm_ws[Krang::LEFT]->getQdotFromXdot(xdotL, qdotR);
-		DISPLAY_VECTOR(qdotR);
+		// Eigen::VectorXd qdotR;
+		// arm_ws[Krang::LEFT]->getQdotFromXdot(xdotL, qdotR);
+		// DISPLAY_VECTOR(qdotR);
 
 		// send the qdot
 		// somatic_motor_setvel(&daemon_cx, h->larm, qdotL, 7);
@@ -314,13 +317,14 @@ void init() {
 
 	// init hardware
 	std::cout << "opening hardware" << std::endl;
-	h = new Krang::Hardware(Krang::Hardware::MODE_ALL, &daemon_cx, robot);
+	h = new Krang::Hardware((Krang::Hardware::Mode)(Krang::Hardware::MODE_ALL & ~Krang::Hardware::MODE_GRIPPERS), &daemon_cx, robot);
+	std::cout << "opened hardware" << std::endl;
 
 	// set up the workspace controllers
 	arm_ws[Krang::LEFT] = new WorkspaceControl(&daemon_cx, "spacenav-data-l",
 	                                    &Krang::left_arm_ids, robot->getNode("lGripper"));
-	arm_ws[Krang::RIGHT] = new WorkspaceControl(&daemon_cx, "spacenav-data-r",
-	                                     &Krang::right_arm_ids, robot->getNode("rGripper"));
+	// arm_ws[Krang::RIGHT] = new WorkspaceControl(&daemon_cx, "spacenav-data-r",
+	//                                      &Krang::right_arm_ids, robot->getNode("rGripper"));
 
 	// start the daemon running
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
