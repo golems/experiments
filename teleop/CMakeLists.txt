@@ -30,9 +30,10 @@ include_directories(EIGEN3_INCLUDE_DIR)
 # Include the project files and the common helpers for all the experiments
 include_directories(src)
 include_directories(../common)
+include_directories(../common/library)
 
 # Collect the source, script and fortran files
-file(GLOB main_source "src/*.cpp" "src/*.c")
+file(GLOB main_source "src/*.cpp" "src/*.c" "../common/library/*.cpp")
 file(GLOB scripts_source "exe/*.cpp")
 LIST(SORT scripts_source)
 
