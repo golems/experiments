@@ -288,26 +288,34 @@ void run() {
 		if(myDebug) DISPLAY_MATRIX(ws->t_ref);
 
 		// Get an xdot out of the P-controller that's trying to drive us to the refernece position
-		Eigen::VectorXd xdot_p;
-		ws->getXdotFromXref(xdot_p);
-		if(myDebug) DISPLAY_VECTOR(xdot_p);
+		Eigen::VectorXd xdot_posref;
+		ws->getXdotFromXref(xdot_posref);
+		if(myDebug) DISPLAY_VECTOR(xdot_posref);
 
 		// Feed forward the input workspace velocity with the output from the P-controller
-		Eigen::VectorXd xdot_apply = xdot_p + xdot_spacenav;
+		Eigen::VectorXd xdot_apply = xdot_posref + xdot_spacenav;
 		if(myDebug) DISPLAY_VECTOR(xdot_apply);
 
-		// Compute qdot with the dampened inverse Jacobian with nullspace projection
-		Eigen::VectorXd qdot;
-		ws->getQdotFromXdot(xdot_apply, qdot);
+		// Compute qdot_jacobian with the dampened inverse Jacobian with nullspace projection
+		Eigen::VectorXd qdot_jacobian;
+		ws->getQdotFromXdot(xdot_apply, qdot_jacobian);
 
 		// Scale the values down if the norm is too big or set it to zero if too small
-		double magn = qdot.norm();
-		if(magn > 0.5) qdot *= (0.5 / magn);
-		else if(magn < 0.05) qdot = VectorXd::Zero(7);
-		if(myDebug) DISPLAY_VECTOR(qdot);
+		double magn = qdot_jacobian.norm();
+		if(magn > 0.5) qdot_jacobian *= (0.5 / magn);
+		else if(magn < 0.05) qdot_jacobian = VectorXd::Zero(7);
+		if(myDebug) DISPLAY_VECTOR(qdot_jacobian);
+
+		// avoid joint limits - set velocities away from them as we get close
+		Eigen::VectorXd qdot_avoid(7);
+		Eigen::VectorXd q = robot->getConfig(*ws->arm_ids);
+		computeQdotAvoidLimits(q, qdot_avoid);
+
+		// add our qdots together to get the overall movement
+		Eigen::VectorXd qdot_apply = qdot_avoid + qdot_jacobian;
 
 		// Send the velocity command
-		somatic_motor_setvel(&daemon_cx, hw->rarm, qdot.data(), 7);
+		somatic_motor_setvel(&daemon_cx, hw->rarm, qdot_apply.data(), 7);
 		usleep(1e4);
 	}
 }
