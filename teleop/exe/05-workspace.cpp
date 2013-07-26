@@ -22,13 +22,15 @@
 
 using namespace Krang;
 
+bool myDebug;
+
 /* ********************************************************************************************* */
 /// Home configuration for the arms
 const size_t ARM_ID = RIGHT;
 const Eigen::VectorXd HOMECONFIGL = (VectorXd(7) << 1.102, -0.589, 0.000, -1.339, 0.000, -0.959, -1.000).finished();
 
 // initializers for the workspace control constants
-const double K_WORKERR_P_INIT = 0.040;
+const double K_WORKERR_P_INIT = 0.25;
 const double K_NULLSPACE_P_INIT = 0.0;
 const Eigen::VectorXd NULLSPACE_Q_REF_INIT = 
 	(VectorXd(7) << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0).finished();
@@ -83,20 +85,20 @@ WorkspaceControl* ws;
 // fixed-width, and fixed-precision for perfectly aligned columns and
 // no annoying exponents.
 #define DISPLAY_VECTOR(VEC) \
-	std::cout << std::setw(25) << std::left << #VEC; \
+	{std::cout << std::setw(25) << std::left << #VEC; \
 	for(int i = 0; i < VEC.size(); i++) std::cout << std::fixed << std::setw(12) << VEC[i]; \
-	std::cout << std::endl;
+	std::cout << std::endl;}
 
 // similar debug print for matrices
 #define DISPLAY_MATRIX(MAT) \
-	std::cout << std::setw(25) << std::left << #MAT << std::endl; \
-	for(int c = 0; c < MAT.cols(); c++) { \
+	{std::cout << std::setw(25) << std::left << #MAT << std::endl; \
+	for(int r = 0; r < MAT.rows(); r++) {	  \
 	std::cout << "    "; \
-for(int r = 0; r < MAT.rows(); r++) {	  \
-	std::cout << std::fixed << std::setw(12) << MAT(c, r); } \
+	for(int c = 0; c < MAT.cols(); c++) { \
+	std::cout << std::fixed << std::setw(12) << MAT(r, c); } \
 std::cout << std::endl; \
 }	\
-std::cout << std::endl;
+std::cout << std::endl; }
 
 /* ********************************************************************************************* */
 /// Figures out a workspace velocity xdot that will take us from our current configuration to our 
@@ -105,7 +107,7 @@ void WorkspaceControl::getXdotFromXref(VectorXd& xdot) {
 
 	// Get the current end-effector transform and also, just its orientation 
 	Matrix4d Tcur = this->endeff->getWorldTransform();
-	DISPLAY_MATRIX(Tcur);
+	if(myDebug) DISPLAY_MATRIX(Tcur);
 	Matrix4d Rcur = Tcur;
 	Rcur.topRightCorner<3,1>().setZero();
 
@@ -129,8 +131,9 @@ void WorkspaceControl::getQdotFromXdot(const VectorXd& xdot, VectorXd& qdot) {
 	J << Jlin, Jang;
 
 	// Compute the inverse of the Jacobian with dampening
-	MatrixXd Jt = J.transpose(), JJt = J * Jt;
-	for (int i=0; i < JJt.rows(); i++) JJt(i,i) += this->damping_gain;
+	MatrixXd Jt = J.transpose();
+	MatrixXd JJt = J * Jt;
+	for(int i = 0; i < JJt.rows(); i++) JJt(i,i) += this->damping_gain;
 
 	// Compute joint velocities that will achieve our secondary goal;
 	// we will project this into the nullspace to it doesn't affect
@@ -186,12 +189,15 @@ void WorkspaceControl::updateReferenceFromXdotInput(const VectorXd& xdot, const 
 void run() {
 
 	// Set the constants
-	const double SPACENAV_ORIENTATION_GAIN = 0.0;
+	const double SPACENAV_ORIENTATION_GAIN = 1.0;
 	const double SPACENAV_TRANSLATION_GAIN = 1.0;
 
 	// Get the last time to compute the passed time
+	int c_ = 0;
 	double time_last = aa_tm_timespec2sec(aa_tm_now());
 	while(!somatic_sig_received) {
+
+		myDebug = ((c_++ % 10) == 1);
 
 		// Update times
 		double time_now = aa_tm_timespec2sec(aa_tm_now());
@@ -199,7 +205,7 @@ void run() {
 		time_last = time_now;
 
 		// Pretty output
-		std::cout << "\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << std::endl;
+		if(myDebug) std::cout << "\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << std::endl;
 
 		// Update the robot
 		hw->updateSensors(time_delta);
@@ -207,28 +213,35 @@ void run() {
 		// Update the spacenav
 		Eigen::VectorXd spacenav_input;
 		ws->getSpaceNav(spacenav_input);
-		spacenav_input.topLeftCorner<3,1>() *= SPACENAV_TRANSLATION_GAIN;
-		spacenav_input.bottomLeftCorner<3,1>() *= SPACENAV_ORIENTATION_GAIN;
-		spacenav_input(0) = spacenav_input(1) = 0.0;
-		DISPLAY_VECTOR(spacenav_input);
+
+		// Scale the spacenav input to get a workspace velocity 
+		Eigen::VectorXd xdot_spacenav = spacenav_input;
+		xdot_spacenav.topLeftCorner<3,1>() *= SPACENAV_TRANSLATION_GAIN;
+		xdot_spacenav.bottomLeftCorner<3,1>() *= SPACENAV_ORIENTATION_GAIN;
+		if(myDebug) DISPLAY_VECTOR(xdot_spacenav);
 
 		// Move the workspace references around from that spacenav input
-		ws->updateReferenceFromXdotInput(spacenav_input, time_delta);
-		DISPLAY_MATRIX(ws->t_ref);
+		ws->updateReferenceFromXdotInput(xdot_spacenav, time_delta);
+		if(myDebug) DISPLAY_MATRIX(ws->t_ref);
 
-		// Get an xdot out of the PID controller that's trying to drive us to the refernece position
-		Eigen::VectorXd xdot;
-		ws->getXdotFromXref(xdot);
-		DISPLAY_VECTOR(xdot);
+		// Get an xdot out of the P-controller that's trying to drive us to the refernece position
+		Eigen::VectorXd xdot_p;
+		ws->getXdotFromXref(xdot_p);
+		if(myDebug) DISPLAY_VECTOR(xdot_p);
+
+		// Feed forward the input workspace velocity with the output from the P-controller
+		Eigen::VectorXd xdot_apply = xdot_p + xdot_spacenav;
+		if(myDebug) DISPLAY_VECTOR(xdot_apply);
 
 		// Compute qdot with the dampened inverse Jacobian with nullspace projection
 		Eigen::VectorXd qdot;
-		ws->getQdotFromXdot(xdot, qdot);
+		ws->getQdotFromXdot(xdot_apply, qdot);
 
-		// Threshold the qdot around 0 to stop sending very small values
-		for(size_t i = 0; i < 7; i++) 
-			if(fabs(qdot(i)) < 1e-2) qdot(i) = 0.0;
-		DISPLAY_VECTOR(qdot);
+		// Scale the values down if the norm is too big or set it to zero if too small
+		double magn = qdot.norm();
+		if(magn > 0.5) qdot *= (0.5 / magn);
+		else if(magn < 0.05) qdot = VectorXd::Zero(7);
+		if(myDebug) DISPLAY_VECTOR(qdot);
 
 		// Send the velocity command
 		somatic_motor_setvel(&daemon_cx, hw->rarm, qdot.data(), 7);
@@ -254,12 +267,12 @@ void init() {
 	somatic_d_init(&daemon_cx, &daemon_opt);
 
 	// Initialize the hardware
-	Hardware::Mode mode = (Hardware::Mode)(Hardware::MODE_ALL & ~Hardware::MODE_GRIPPERS);
+	Hardware::Mode mode = (Hardware::Mode)((Hardware::MODE_ALL & ~Hardware::MODE_LARM) & ~Hardware::MODE_GRIPPERS);
 	hw = new Hardware(mode, &daemon_cx, robot);
 
 	// Set up the workspace controllers
 	ws = new WorkspaceControl(&daemon_cx, (ARM_ID == LEFT) ? "spacenav-data" : 
-		"spacenav-data", &left_arm_ids, robot->getNode("rGripper"));
+		"spacenav-data", &right_arm_ids, robot->getNode("rGripper"));
 
 	// Start the daemon running
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
