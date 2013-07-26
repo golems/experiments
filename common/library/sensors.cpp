@@ -23,6 +23,7 @@ FT::FT (GripperType type, somatic_d_t* daemon_cx_, dynamics::SkeletonDynamics* r
 	side = side_;
 
 	// Open the data channel
+	chan = new ach_channel_t();
 	somatic_d_channel_open(daemon_cx, chan, (side == LEFT) ? "llwa_ft" : "rlwa_ft", NULL);
 
 	// Set the gripper mass and center of mass based on the type: the com for ext, schunk and robotiq

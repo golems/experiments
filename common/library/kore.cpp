@@ -50,8 +50,22 @@ Hardware::Hardware (Mode mode_, somatic_d_t* daemon_cx_, dynamics::SkeletonDynam
 	// Initialize the ach channels to the waist daemon and the waist state channel. The daemon moves
 	// the motors in unison with current control and pciod updates their state on the state channel.
 	if(mode & MODE_WAIST) {
+		waistCmdChan = new ach_channel_t();
+		waist = new somatic_motor_t();
 		somatic_d_channel_open(daemon_cx, waistCmdChan, "waistd-cmd", NULL);
 		somatic_motor_init(daemon_cx, waist, 2, NULL, "waist-state");
+		// Set the min/max values for the pos/vel fields' valid and limit values
+		for(int i = 0; i < 2; i++) {
+			waist->pos_valid_min[i] = -lim2[i];
+			waist->pos_limit_min[i] = -lim2[i];
+			waist->pos_valid_max[i] = lim2[i];
+			waist->pos_limit_max[i] = lim2[i];
+
+			waist->vel_valid_min[i] = -lim2[i];
+			waist->vel_limit_min[i] = -lim2[i];
+			waist->vel_valid_max[i] = lim2[i];
+			waist->vel_limit_max[i] = lim2[i];
+		}
 		somatic_motor_update(daemon_cx, waist);
 	}
 
@@ -110,6 +124,7 @@ void Hardware::updateKinematics () {
 void Hardware::initImu () {
 
 	// Initialize the ach channel
+	imu_chan = new ach_channel_t();
 	somatic_d_channel_open(daemon_cx, imu_chan, "imu-data", NULL);
 
 	// Average the first 500 readings
@@ -133,6 +148,7 @@ void Hardware::initImu () {
 void Hardware::initWheels () {
 
 	// Initialize the motor group (do we need to set any limits?)
+	amc = new somatic_motor_t();
 	somatic_motor_init(daemon_cx, amc, 2, "amc-cmd", "amc-state");
 
 	// Update and reset them
@@ -152,18 +168,26 @@ void Hardware::initMotorGroup (somatic_motor_t*& motors, const char* cmd_name, c
 		state_name, VectorXd minPos, VectorXd maxPos, VectorXd minVel, VectorXd maxVel) {
 
 	// Initialize the somatic motor struct with the channel names and the number of modules
+	motors = new somatic_motor_t();
 	size_t numModules = minPos.size();
+	assert(minPos.size() == maxPos.size() && minPos.size() == minVel.size() && minPos.size() == maxVel.size());
 	somatic_motor_init(daemon_cx, motors, numModules, cmd_name, state_name);
 
 	// Set the min/max values for the pos/vel fields' valid and limit values
-	double** limits [] = {
-		&motors->pos_valid_min, &motors->pos_limit_min, &motors->pos_valid_max, &motors->pos_limit_max, 
-		&motors->vel_valid_min, &motors->vel_limit_min, &motors->vel_valid_max, &motors->vel_limit_max};
-	VectorXd* inputs [] = {&minPos, &maxPos, &minVel, &maxVel};
-	for(size_t i = 0; i < 8; i++) aa_fcpy(*limits[i], inputs[i/2]->data(), numModules);
+	for(int i = 0; i < numModules; i++) {
+		motors->pos_valid_min[i] = minPos[i];
+		motors->pos_valid_max[i] = maxPos[i];
+		motors->pos_limit_min[i] = minPos[i];
+		motors->pos_limit_max[i] = maxPos[i];
+
+		motors->vel_valid_min[i] = minVel[i];
+		motors->vel_valid_max[i] = maxVel[i];
+		motors->vel_limit_min[i] = minVel[i];
+		motors->vel_limit_max[i] = maxVel[i];
+	}
 
 	// Update and reset them
-	somatic_motor_cmd(daemon_cx, motors, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, numModules, NULL);
+	somatic_motor_reset(daemon_cx, motors);
 	usleep(1e5);
 	somatic_motor_update(daemon_cx, motors);
 	usleep(1e5);
