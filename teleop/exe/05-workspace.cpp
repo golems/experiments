@@ -32,7 +32,7 @@ const Eigen::VectorXd HOMECONFIGL = (VectorXd(7) << 1.102, -0.589, 0.000, -1.339
 
 // initializers for the workspace control constants
 const double K_WORKERR_P_INIT = 0.25;
-const double K_NULLSPACE_P_INIT = 0.0;
+const double NULLSPACE_GAIN_INIT = 0.0;
 const Eigen::VectorXd NULLSPACE_Q_REF_INIT = 
                                                     (VectorXd(7) << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0).finished();
 const double DAMPING_GAIN_INIT = 0.005;
@@ -60,7 +60,7 @@ public:
 	bool getSpaceNav(Eigen::VectorXd& config);
 	void updateReferenceFromXdotInput(const VectorXd& xdot, const double dt);
 	void getXdotFromXref(VectorXd& xdot);
-	void getQdotFromXdot(const VectorXd& xdot, VectorXd& qdot);
+	void getQdotFromXdot(const VectorXd& xdot, const VectorXd& qdot_nullspace, VectorXd& qdot);
 
 	// member variables
 	Eigen::Matrix4d t_ref;
@@ -71,7 +71,7 @@ public:
 
 	// configuration stuff
 	double K_workerr_p;        // p constant for the PID controller that produces workspace movements
-	double K_nullspace_p;      // p constant for the PID controller that pulls the arm through nullspace to the secondary goal
+	double nullspace_gain;      // p constant for the PID controller that pulls the arm through nullspace to the secondary goal
 	VectorXd nullspace_q_ref;  // secondary goal configuration which we use the nullspace to move toward
 	double damping_gain;       // how powerful the damping is on our damped jacobian
 };
@@ -131,7 +131,7 @@ void WorkspaceControl::getXdotFromXref(VectorXd& xdot) {
 // qdot from a given workspace velocity xdot. Uses nullspace
 // projection to achieve a secondary goal. Important constants are for
 // the null space gain, the dampening gain and the second goal pos.
-void WorkspaceControl::getQdotFromXdot(const VectorXd& xdot, VectorXd& qdot) {
+void WorkspaceControl::getQdotFromXdot(const VectorXd& xdot, const VectorXd& qdot_nullspace, VectorXd& qdot) {
 
 	// Get the Jacobian for the end-effector
 	MatrixXd Jlin = this->endeff->getJacobianLinear().topRightCorner<3,7>();
@@ -143,19 +143,13 @@ void WorkspaceControl::getQdotFromXdot(const VectorXd& xdot, VectorXd& qdot) {
 	MatrixXd Jt = J.transpose();
 	MatrixXd JJt = J * Jt;
 	for(int i = 0; i < JJt.rows(); i++) JJt(i,i) += this->damping_gain;
-
-	// Compute joint velocities that will achieve our secondary goal;
-	// we will project this into the nullspace to it doesn't affect
-	// the primary goal.
-	VectorXd q = robot->getConfig(*this->arm_ids);
-	VectorXd qDotRef = (q - this->nullspace_q_ref) * this->K_nullspace_p;
 	
 	// Compute the joint velocities qdot using the input xdot and a
 	// qdot for the secondary goal projected into the nullspace
 	MatrixXd Jinv = Jt * JJt.inverse();
 	MatrixXd JinvJ = Jinv*J;
 	MatrixXd I = MatrixXd::Identity(7,7);
-	qdot = Jinv * xdot + (I - JinvJ) * qDotRef;
+	qdot = Jinv * xdot + (I - JinvJ) * qdot_nullspace * this->nullspace_gain;
 }
 
 /* ********************************************************************************************* */
@@ -296,9 +290,15 @@ void run() {
 		Eigen::VectorXd xdot_apply = xdot_posref + xdot_spacenav;
 		if(myDebug) DISPLAY_VECTOR(xdot_apply);
 
-		// Compute qdot_jacobian with the dampened inverse Jacobian with nullspace projection
+		// Compute qdot for our secondary goal (currently, drive qo to
+		// a reference position
+		Eigen::VectorXd q = robot->getConfig(*ws->arm_ids);
+		Eigen::VectorXd qdot_secondary = q - ws->nullspace_q_ref;
+
+		// Compute qdot_jacobian with the dampened inverse Jacobian,
+		// using nullspace projection to achieve our secondary goal
 		Eigen::VectorXd qdot_jacobian;
-		ws->getQdotFromXdot(xdot_apply, qdot_jacobian);
+		ws->getQdotFromXdot(xdot_apply, qdot_secondary, qdot_jacobian);
 
 		// Scale the values down if the norm is too big or set it to zero if too small
 		double magn = qdot_jacobian.norm();
@@ -308,7 +308,6 @@ void run() {
 
 		// avoid joint limits - set velocities away from them as we get close
 		Eigen::VectorXd qdot_avoid(7);
-		Eigen::VectorXd q = robot->getConfig(*ws->arm_ids);
 		computeQdotAvoidLimits(q, qdot_avoid);
 
 		// add our qdots together to get the overall movement
@@ -389,7 +388,7 @@ WorkspaceControl::WorkspaceControl(somatic_d_t* _daemon_cx,
 
 	// Set some constants
 	this->K_workerr_p = K_WORKERR_P_INIT;
-	this->K_nullspace_p = K_NULLSPACE_P_INIT;
+	this->nullspace_gain = NULLSPACE_GAIN_INIT;
 	this->nullspace_q_ref = NULLSPACE_Q_REF_INIT;
 	this->damping_gain = DAMPING_GAIN_INIT;
 }
