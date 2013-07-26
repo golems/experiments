@@ -62,6 +62,55 @@ Hardware::Hardware (Mode mode_, somatic_d_t* daemon_cx_, dynamics::SkeletonDynam
 }
 
 /* ******************************************************************************************** */
+Hardware::~Hardware () {
+
+	// Close imu channel and the filter
+	somatic_d_channel_close(daemon_cx, imu_chan);
+	delete imu_chan;
+	filter_kalman_destroy(kfImu);	
+
+	// Destroy the ft sensors
+	if(lft != NULL) delete lft;
+	if(rft != NULL) delete rft;
+	
+	// Send zero velocity to amc and clean it up
+	double zeros2[2] = {0.0, 0.0}, zeros7[7] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}; 
+	if(amc != NULL) {
+		somatic_motor_cmd(daemon_cx, amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, zeros2, 2, NULL);
+		somatic_motor_destroy(daemon_cx, amc);
+		delete amc;
+	}
+
+	// Send halt messages directly to the left and right arms
+	if(rarm != NULL) {
+		somatic_motor_halt(daemon_cx, rarm);
+		somatic_motor_destroy(daemon_cx, rarm);
+		delete rarm;
+	}
+	if(rarm != NULL) {
+		somatic_motor_halt(daemon_cx, larm);
+		somatic_motor_destroy(daemon_cx, larm);
+		delete larm;
+	}
+
+	if(waist != NULL) { 
+
+		// Create a waist daemon message with the stop mode
+		Somatic__WaistCmd *waistDaemonCmd = somatic_waist_cmd_alloc();
+		somatic_waist_cmd_set(waistDaemonCmd, SOMATIC__WAIST_MODE__STOP);
+
+		// Send the message
+		int r = SOMATIC_PACK_SEND(waistCmdChan, somatic__waist_cmd, waistDaemonCmd);
+		if(ACH_OK != r) fprintf(stderr, "Couldn't send stop message to waist: %s\n", 
+			ach_result_to_string(static_cast<ach_status_t>(r)));
+
+		// Clean up the memory
+		somatic_motor_destroy(daemon_cx, waist);
+		delete waist;
+	}
+}
+
+/* ******************************************************************************************** */
 void Hardware::initWaist () {
 
 	// Initialize the channel to the waist daemon

@@ -34,6 +34,9 @@ public:
 	/// Initializes the interfaces to the motor groups based on the given hardware mode
 	Hardware (Mode mode, somatic_d_t* daemon_cx, dynamics::SkeletonDynamics* robot); 
 
+	/// The destructor which sends halt messages to all Schunk modules and 0-velocities to wheels
+	~Hardware ();
+
 public:
 	// Updates the sensor readings and the kinematic structure
 
