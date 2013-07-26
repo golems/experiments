@@ -68,7 +68,7 @@ void controlArms () {
 
 	// Check if one of the preset configurations are requested by pressing 9 and
 	// any of the buttons from 1 to 4 at the same time
-	if(b[8] == 1) {
+	if((b[4] == 1) && (b[5] == 1) && (b[6] == 1) && (b[7] == 1)) {
 
 		// Check if the button is pressed for the arm configuration is pressed, if so send pos commands
 		bool noConfs = true;

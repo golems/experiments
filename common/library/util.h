@@ -5,11 +5,23 @@
  * @brief The main header file for common utilities
  */
 
+#pragma once
+
 #include <Eigen/Dense>
+#include <math/UtilsRotation.h>
 
 using namespace Eigen;
 
 namespace Krang {
+
+/* ******************************************************************************************** */
+// Useful math operations
+
+/// Converts a 4x4 homogeneous transform to a 6D euler with the given order for RPY.
+Eigen::VectorXd transformToEuler(const Eigen::MatrixXd &T, math::RotationOrder _order);
+
+/// Converts a 6D euler to a 4x4 homogeneous transform with the given order for RPY.
+Eigen::MatrixXd eulerToTransform(const Eigen::VectorXd &V, math::RotationOrder _order);
 
 /* ******************************************************************************************** */
 /// The indicator for the left or right side	
@@ -30,8 +42,6 @@ typedef Matrix<double, 6, 1> Vector6d;			///< A typedef for convenience to conta
 typedef Matrix<double, 7, 1> Vector7d;			///< A typedef for convenience to contain joint values
 typedef Matrix<double, 6, 6> Matrix6d;			///< A typedef for convenience to contain wrenches
 
-};
-
 /* ******************************************************************************************** */
 // Useful macros
 
@@ -47,4 +57,5 @@ typedef Matrix<double, 6, 6> Matrix6d;			///< A typedef for convenience to conta
 	llwa.vel[3] << ", " << llwa.vel[4] << ", " << llwa.vel[5] << ", " << llwa.vel[6] << endl);
 #define eig7(x) (Vector7d() << (x)[0], (x)[1], (x)[2], (x)[3], (x)[4], (x)[5], (x)[6]).finished()
 
-/* ******************************************************************************************** */
+};	// end of namespace
+

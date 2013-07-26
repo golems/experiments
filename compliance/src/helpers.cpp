@@ -31,11 +31,6 @@ void computeExternal (double imu, double waist, const somatic_motor_t& lwa, cons
 	robot.setConfig(imuWaist_ids, Vector2d(imu, waist));
 	const char* nodeName = left ? "lGripper" : "rGripper";
 	Matrix3d Rsw = robot.getNode(nodeName)->getWorldTransform().topLeftCorner<3,3>().transpose();
-	vector <int> dofs;
-	for(size_t i = 0; i < 24; i++) dofs.push_back(i);
-	//cout << "\nq in computeExternal: " << robot.getConfig(dofs).transpose() << endl;
-
-	 cout << "Transform : "<< endl << Rsw << endl;
 	
 	// Create the wrench with computed rotation to change the frame from the world to the sensor
 	Matrix6d pSsensor_world = MatrixXd::Identity(6,6); 
@@ -50,8 +45,6 @@ void computeExternal (double imu, double waist, const somatic_motor_t& lwa, cons
 	// Compute what the force and torque should be without any external values by multiplying the 
 	// position and rotation transforms with the expected effect of the gravity 
 	Vector6d wrenchWeight = pTcom_sensor * pSsensor_world * weightVector_in_world;
-
-        pv(wrenchWeight);
 
 	// Remove the effect from the sensor value and convert the wrench into the world frame
 	external = input - wrenchWeight;
@@ -138,10 +131,12 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuCha
 	if(left) initArm(daemon_cx, lwa, "llwa");
 	else{ initArm(daemon_cx, lwa, "rlwa"); }
 	somatic_motor_update(&daemon_cx, &lwa);
+	usleep(1e5);
 
 	// Initialize the channels to the imu and waist sensors
 	somatic_d_channel_open(&daemon_cx, &imuChan, "imu-data", NULL);
 	somatic_d_channel_open(&daemon_cx, &waistChan, "waist-state", NULL);
+	usleep(1e5);
 
 	// Get imu data
 	double imu = 0.0;

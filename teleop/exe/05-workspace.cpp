@@ -1,17 +1,11 @@
 /**
  * @file 05-workspace.cpp
- * @author Saul Reynolds-Haertle
+ * @author Saul Reynolds-Haertle, Can Erdogan
  * @date July 25, 2013
  * @brief This file demonstrates workspace control running on
  * Krang. It will probably be a workhorse for general tasks, including
  * demonstrations.
  */
-
-// #############################################################################
-// #############################################################################
-// ### Includes
-// #############################################################################
-// #############################################################################
 
 #include "kore.h"
 
@@ -26,38 +20,23 @@
 
 #include "util.h"
 
-// #############################################################################
-// #############################################################################
-// ### Constants
-// #############################################################################
-// #############################################################################
+using namespace Krang;
 
-const char* DAEMON_IDENT = "05-workspace";
+bool myDebug;
 
-// home configuration for the arms
-// TODO: figure out right arm home config
+/* ********************************************************************************************* */
+/// Home configuration for the arms
+const size_t ARM_ID = RIGHT;
 const Eigen::VectorXd HOMECONFIGL = (VectorXd(7) << 1.102, -0.589, 0.000, -1.339, 0.000, -0.959, -1.000).finished();
-const Eigen::VectorXd HOMECONFIGR = (VectorXd(7) << -1.102, 0.589, 0.000, 1.339, 0.141, 0.959, -1.000).finished();
 
 // initializers for the workspace control constants
-const double K_WORKERR_P_INIT = 0.005;
+const double K_WORKERR_P_INIT = 0.25;
 const double K_NULLSPACE_P_INIT = 0.0;
-const Eigen::VectorXd NULLSPACE_Q_REF_INIT = (VectorXd(7) << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0).finished();
+const Eigen::VectorXd NULLSPACE_Q_REF_INIT = 
+	(VectorXd(7) << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0).finished();
 const double DAMPING_GAIN_INIT = 0.005;
 
-// user interface constants
-const double SPACENAV_ORIENTATION_GAIN = 3.0;
-const double SPACENAV_TRANSLATION_GAIN = 1.0;
-
-// loop frequency - be nice to other people on the CPU.
-const double LOOP_FREQUENCY = 300.0;
-
-// #############################################################################
-// #############################################################################
-// ### Type declarations
-// #############################################################################
-// #############################################################################
-
+/* ********************************************************************************************* */
 class WorkspaceControl {
 public:
 	// constructor and destructor
@@ -70,7 +49,7 @@ public:
 
 	// member functions
 	bool getSpaceNav(Eigen::VectorXd& config);
-	void updateReferenceFromXdot(const VectorXd& xdot, const double dt);
+	void updateReferenceFromXdotInput(const VectorXd& xdot, const double dt);
 	void getXdotFromXref(VectorXd& xdot);
 	void getQdotFromXdot(const VectorXd& xdot, VectorXd& qdot);
 
@@ -88,62 +67,47 @@ public:
 	double damping_gain;       // how powerful the damping is on our damped jacobian
 };
 
-// #############################################################################
-// #############################################################################
-// ### Variable declarations
-// #############################################################################
-// #############################################################################
-
+/* ********************************************************************************************* */
 // state variables for the daemon - one daemon context and one
 // hardware object
 somatic_d_t daemon_cx;
-Krang::Hardware* h;
+Hardware* hw;
 
 // pointers to important DART objects
 simulation::World* world;
 dynamics::SkeletonDynamics* robot;
 
 // workspace stuff
-std::map<Krang::Side, WorkspaceControl*> arm_ws;
+WorkspaceControl* ws;
 
-// #############################################################################
-// #############################################################################
-// ### Function declarations
-// #############################################################################
-// #############################################################################
-
-// #############################################################################
-// #############################################################################
-// ### Helpers
-// #############################################################################
-// #############################################################################
-
+/* ********************************************************************************************* */
 // tricked-out debug print for collections. Prints fixed-point,
 // fixed-width, and fixed-precision for perfectly aligned columns and
 // no annoying exponents.
 #define DISPLAY_VECTOR(VEC) \
-	std::cout << std::setw(25) << std::left << #VEC; \
+	{std::cout << std::setw(25) << std::left << #VEC; \
 	for(int i = 0; i < VEC.size(); i++) std::cout << std::fixed << std::setw(12) << VEC[i]; \
-	std::cout << std::endl;
+	std::cout << std::endl;}
 
 // similar debug print for matrices
 #define DISPLAY_MATRIX(MAT) \
-	std::cout << std::setw(25) << std::left << #MAT << std::endl; \
-	for(int c = 0; c < MAT.cols(); c++) { \
+	{std::cout << std::setw(25) << std::left << #MAT << std::endl; \
+	for(int r = 0; r < MAT.rows(); r++) {	  \
 	std::cout << "    "; \
-for(int r = 0; r < MAT.rows(); r++) {	  \
+	for(int c = 0; c < MAT.cols(); c++) { \
 	std::cout << std::fixed << std::setw(12) << MAT(r, c); } \
 std::cout << std::endl; \
 }	\
-std::cout << std::endl;
+std::cout << std::endl; }
 
-	
-
-// figures out a workspace velocity xdot that will take us from our
-// current configuration to our reference configuration t_ref
+/* ********************************************************************************************* */
+/// Figures out a workspace velocity xdot that will take us from our current configuration to our 
+/// reference configuration t_ref
 void WorkspaceControl::getXdotFromXref(VectorXd& xdot) {
+
 	// Get the current end-effector transform and also, just its orientation 
 	Matrix4d Tcur = this->endeff->getWorldTransform();
+	if(myDebug) DISPLAY_MATRIX(Tcur);
 	Matrix4d Rcur = Tcur;
 	Rcur.topRightCorner<3,1>().setZero();
 
@@ -153,20 +117,23 @@ void WorkspaceControl::getXdotFromXref(VectorXd& xdot) {
 	xdot = transformToEuler(xdotM, math::XYZ) * this->K_workerr_p;
 }
 
+/* ********************************************************************************************* */
 // Use a dampened inverse Jacobian to compute jointspace velocities
 // qdot from a given workspace velocity xdot. Uses nullspace
 // projection to achieve a secondary goal. Important constants are for
 // the null space gain, the dampening gain and the second goal pos.
 void WorkspaceControl::getQdotFromXdot(const VectorXd& xdot, VectorXd& qdot) {
-	// Get the Jacobian for the left end-effector
+
+	// Get the Jacobian for the end-effector
 	MatrixXd Jlin = this->endeff->getJacobianLinear().topRightCorner<3,7>();
 	MatrixXd Jang = this->endeff->getJacobianAngular().topRightCorner<3,7>();
 	MatrixXd J (6,7);
 	J << Jlin, Jang;
 
 	// Compute the inverse of the Jacobian with dampening
-	MatrixXd Jt = J.transpose(), JJt = J * Jt;
-	for (int i=0; i < JJt.rows(); i++) JJt(i,i) += this->damping_gain;
+	MatrixXd Jt = J.transpose();
+	MatrixXd JJt = J * Jt;
+	for(int i = 0; i < JJt.rows(); i++) JJt(i,i) += this->damping_gain;
 
 	// Compute joint velocities that will achieve our secondary goal;
 	// we will project this into the nullspace to it doesn't affect
@@ -182,19 +149,14 @@ void WorkspaceControl::getQdotFromXdot(const VectorXd& xdot, VectorXd& qdot) {
 	qdot = Jinv * xdot + (I - JinvJ) * qDotRef;
 }
 
-// #############################################################################
-// #############################################################################
-// ### Update
-// #############################################################################
-// #############################################################################
-
+/* ********************************************************************************************* */
 // Returns the 6 axes values from the spacenav
 bool WorkspaceControl::getSpaceNav(Eigen::VectorXd& config) {
 	// Get joystick data
 	int r = 0;
 	config = Eigen::VectorXd::Zero(6);
 	Somatic__Joystick *js_msg = SOMATIC_GET_LAST_UNPACK(r, somatic__joystick,
-	                                                    &protobuf_c_system_allocator, 4096, &this->spacenav_chan);
+			&protobuf_c_system_allocator, 4096, &this->spacenav_chan);
 	if(!(ACH_OK == r || ACH_MISSED_FRAME == r) || (js_msg == NULL)) return false;
 
 	// Set the data to the input reference
@@ -206,9 +168,11 @@ bool WorkspaceControl::getSpaceNav(Eigen::VectorXd& config) {
 	return true;
 }
 
+/* ********************************************************************************************* */
 // moves the reference position by the given amount in the given direction
-void WorkspaceControl::updateReferenceFromXdot(const VectorXd& xdot, const double dt) {
-	// turn our input into a matrix
+void WorkspaceControl::updateReferenceFromXdotInput(const VectorXd& xdot, const double dt) {
+
+	// Represent the workspace velocity input as a 4x4 homogeneous matrix
 	Matrix4d xdotM = eulerToTransform(xdot * dt, math::XYZ);
 	
 	// Compute the displacement in the end-effector frame with a similarity transform
@@ -220,132 +184,120 @@ void WorkspaceControl::updateReferenceFromXdot(const VectorXd& xdot, const doubl
 	this->t_ref = this->t_ref * Tdisp;
 }
 
-// #############################################################################
-// #############################################################################
-// ### Main loop
-// #############################################################################
-// #############################################################################
-
+/* ********************************************************************************************* */
+/// The main loop
 void run() {
-	// timing stuff
-	double time_last = aa_tm_timespec2sec(aa_tm_now());
 
+	// Set the constants
+	const double SPACENAV_ORIENTATION_GAIN = 1.0;
+	const double SPACENAV_TRANSLATION_GAIN = 1.0;
+
+	// Get the last time to compute the passed time
+	int c_ = 0;
+	double time_last = aa_tm_timespec2sec(aa_tm_now());
 	while(!somatic_sig_received) {
-		// update times
+
+		myDebug = ((c_++ % 10) == 1);
+
+		// Update times
 		double time_now = aa_tm_timespec2sec(aa_tm_now());
 		double time_delta = time_now - time_last;
 		time_last = time_now;
 
-		// pretty output
-		std::cout << "################################################################################" << std::endl;
+		// Pretty output
+		if(myDebug) std::cout << "\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << std::endl;
 
-		// update the robot
-		h->updateSensors(time_delta);
-		h->updateKinematics();
+		// Update the robot
+		hw->updateSensors(time_delta);
 
-		// update the spacenav
-		Eigen::VectorXd spacenav_input_L;
-		arm_ws[Krang::LEFT]->getSpaceNav(spacenav_input_L);
-		spacenav_input_L.topLeftCorner<3,1>() *= SPACENAV_TRANSLATION_GAIN;
-		spacenav_input_L.bottomLeftCorner<3,1>() *= SPACENAV_ORIENTATION_GAIN;
-		DISPLAY_VECTOR(spacenav_input_L);
+		// Update the spacenav
+		Eigen::VectorXd spacenav_input;
+		ws->getSpaceNav(spacenav_input);
 
-		// Eigen::VectorXd spacenav_input_R;
-		// arm_ws[Krang::RIGHT]->getSpaceNav(spacenav_input_R);
-		// spacenav_input_R.topLeftCorner<3,1>() *= SPACENAV_TRANSLATION_GAIN;
-		// spacenav_input_R.bottomLeftCorner<3,1>() *= SPACENAV_ORIENTATION_GAIN;
-		// DISPLAY_VECTOR(spacenav_input_R);
-		
-		// move the workspace references around from that spacenav input
-		arm_ws[Krang::LEFT]->updateReferenceFromXdot(spacenav_input_L, time_delta);
-		DISPLAY_MATRIX(arm_ws[Krang::LEFT]->t_ref);
+		// Scale the spacenav input to get a workspace velocity 
+		Eigen::VectorXd xdot_spacenav = spacenav_input;
+		xdot_spacenav.topLeftCorner<3,1>() *= SPACENAV_TRANSLATION_GAIN;
+		xdot_spacenav.bottomLeftCorner<3,1>() *= SPACENAV_ORIENTATION_GAIN;
+		if(myDebug) DISPLAY_VECTOR(xdot_spacenav);
 
-		// arm_ws[Krang::RIGHT]->updateReferenceFromXdot(spacenav_input_R, time_delta);
-		// DISPLAY_MATRIX(arm_ws[Krang::RIGHT]->t_ref);
+		// Move the workspace references around from that spacenav input
+		ws->updateReferenceFromXdotInput(xdot_spacenav, time_delta);
+		if(myDebug) DISPLAY_MATRIX(ws->t_ref);
 
-		// get an xdot out of the PID controller that's trying to
-		// drive us to the refernece position
-		Eigen::VectorXd xdotL;
-		arm_ws[Krang::LEFT]->getXdotFromXref(xdotL);
-		DISPLAY_VECTOR(xdotL);
+		// Get an xdot out of the P-controller that's trying to drive us to the refernece position
+		Eigen::VectorXd xdot_p;
+		ws->getXdotFromXref(xdot_p);
+		if(myDebug) DISPLAY_VECTOR(xdot_p);
 
-		// Eigen::VectorXd xdotR;
-		// arm_ws[Krang::RIGHT]->getXdotFromXref(xdotR);
-		// DISPLAY_VECTOR(xdotR);
+		// Feed forward the input workspace velocity with the output from the P-controller
+		Eigen::VectorXd xdot_apply = xdot_p + xdot_spacenav;
+		if(myDebug) DISPLAY_VECTOR(xdot_apply);
 
-		// turn that xdot into a qdot using our jacobian stuff
-		Eigen::VectorXd qdotL;
-		arm_ws[Krang::LEFT]->getQdotFromXdot(xdotL, qdotL);
-		DISPLAY_VECTOR(qdotL);
+		// Compute qdot with the dampened inverse Jacobian with nullspace projection
+		Eigen::VectorXd qdot;
+		ws->getQdotFromXdot(xdot_apply, qdot);
 
-		// Eigen::VectorXd qdotR;
-		// arm_ws[Krang::LEFT]->getQdotFromXdot(xdotL, qdotR);
-		// DISPLAY_VECTOR(qdotR);
+		// Scale the values down if the norm is too big or set it to zero if too small
+		double magn = qdot.norm();
+		if(magn > 0.5) qdot *= (0.5 / magn);
+		else if(magn < 0.05) qdot = VectorXd::Zero(7);
+		if(myDebug) DISPLAY_VECTOR(qdot);
 
-		// send the qdot
-		// somatic_motor_setvel(&daemon_cx, h->larm, qdotL, 7);
-		// somatic_motor_setvel(&daemon_cx, h->rarm, qdotR, 7);
-
-		// and sleep to fill out the loop period so we don't eat the
-		// entire CPU
-		double time_loopend = aa_tm_timespec2sec(aa_tm_now());
-		double time_sleep = (1.0 / LOOP_FREQUENCY) - (time_loopend - time_now);
-		aa_tm_relsleep(aa_tm_sec2timespec(time_sleep));
+		// Send the velocity command
+		somatic_motor_setvel(&daemon_cx, hw->rarm, qdot.data(), 7);
+		usleep(1e4);
 	}
 }
 
-// #############################################################################
-// #############################################################################
-// ### Startup and shutdown
-// #############################################################################
-// #############################################################################
-
+/* ******************************************************************************************** */
+/// Initialization
 void init() {
-	// init dart. do this before we initialize the daemon because
-	// initing the daemon changes our current directory to somewhere
-	// in /var/run.
+
+	// Initalize dart. Do this before we initialize the daemon because initalizing the daemon 
+	// changes our current directory to somewhere in /var/run.
 	DartLoader dl;
 	world = dl.parseWorld("../../common/scenes/01-World-Robot.urdf");
 	assert((world != NULL) && "Could not find the world");
 	robot = world->getSkeleton("Krang");
 
-	// init daemon
+	// Initialize the daemon
 	somatic_d_opts_t daemon_opt;
 	memset(&daemon_opt, 0, sizeof(daemon_opt)); // zero initialize
-	daemon_opt.ident = DAEMON_IDENT;
+	daemon_opt.ident = "05-workspace";
 	somatic_d_init(&daemon_cx, &daemon_opt);
 
-	// init hardware
-	std::cout << "opening hardware" << std::endl;
-	h = new Krang::Hardware((Krang::Hardware::Mode)(Krang::Hardware::MODE_ALL & ~Krang::Hardware::MODE_GRIPPERS), &daemon_cx, robot);
-	std::cout << "opened hardware" << std::endl;
+	// Initialize the hardware
+	Hardware::Mode mode = (Hardware::Mode)((Hardware::MODE_ALL & ~Hardware::MODE_LARM) & ~Hardware::MODE_GRIPPERS);
+	hw = new Hardware(mode, &daemon_cx, robot);
 
-	// set up the workspace controllers
-	arm_ws[Krang::LEFT] = new WorkspaceControl(&daemon_cx, "spacenav-data-l",
-	                                    &Krang::left_arm_ids, robot->getNode("lGripper"));
-	// arm_ws[Krang::RIGHT] = new WorkspaceControl(&daemon_cx, "spacenav-data-r",
-	//                                      &Krang::right_arm_ids, robot->getNode("rGripper"));
+	// Set up the workspace controllers
+	ws = new WorkspaceControl(&daemon_cx, (ARM_ID == LEFT) ? "spacenav-data" : 
+		"spacenav-data", &right_arm_ids, robot->getNode("rGripper"));
 
-	// start the daemon running
-	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
+	// Start the daemon running
+	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
+		SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
 }
 
+/* ******************************************************************************************** */
+/// Clean up
 void destroy() {
-	// stop the daemon
-	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, SOMATIC__EVENT__CODES__PROC_STOPPING, NULL, NULL);
 
-	// clean up the workspace stuff, just to be safe
-	delete arm_ws[Krang::LEFT];
-	delete arm_ws[Krang::RIGHT];
-	arm_ws.clear();
+	// Stop the daemon
+	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
+		SOMATIC__EVENT__CODES__PROC_STOPPING, NULL, NULL);
 
-	// close down the hardware
-	delete h;
+	// Clean up the workspace stuff, just to be safe
+	delete ws;
+
+	// Close down the hardware
+	delete hw;
 
 	// Destroy the daemon resources
 	somatic_d_destroy(&daemon_cx);
 }
 
+/* ******************************************************************************************** */
 WorkspaceControl::WorkspaceControl(somatic_d_t* _daemon_cx,
                                    const char* _spacenav_chan_name,
                                    std::vector<int>* _arm_ids,
@@ -371,17 +323,14 @@ WorkspaceControl::WorkspaceControl(somatic_d_t* _daemon_cx,
 	this->damping_gain = DAMPING_GAIN_INIT;
 }
 
+/* ******************************************************************************************** */
+/// Closes the spacenav channel
 WorkspaceControl::~WorkspaceControl() {
-	// close down our ach channel
 	somatic_d_channel_close(this->daemon_cx, &this->spacenav_chan);
 }
 
-// #############################################################################
-// #############################################################################
-// ### Main
-// #############################################################################
-// #############################################################################
-
+/* ******************************************************************************************** */
+/// The main thread
 int main(int argc, char* argv[]) {
 	init();
 	run();
