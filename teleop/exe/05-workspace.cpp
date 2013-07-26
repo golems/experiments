@@ -315,7 +315,18 @@ void run() {
 
 		// Send the velocity command
 		somatic_motor_setvel(&daemon_cx, hw->rarm, qdot_apply.data(), 7);
-		usleep(1e4);
+
+		// and sleep to fill out the loop period so we don't eat the
+		// entire CPU
+		double time_loopend = aa_tm_timespec2sec(aa_tm_now());
+		double time_sleep = (1.0 / LOOP_FREQUENCY) - (time_loopend - time_now);
+		int time_sleep_usec = std::max(0, (int)(time_sleep * 1e6));
+		usleep(time_sleep_usec);
+		
+		if (time_sleep < 0.0) {
+			std::cout << "Taking too long! Took " << std::fixed << std::setw(8) << time_delta
+			          << "/" << std::fixed << std::setw(8) << 1.0/LOOP_FREQUENCY << " seconds" << std::endl;
+		}
 	}
 }
 
