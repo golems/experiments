@@ -17,6 +17,7 @@
 #include <simulation/World.h>
 #include <dynamics/SkeletonDynamics.h>
 #include <kinematics/BodyNode.h>
+#include <kinematics/Dof.h>
 
 #include "util.h"
 
@@ -33,8 +34,16 @@ const Eigen::VectorXd HOMECONFIGL = (VectorXd(7) << 1.102, -0.589, 0.000, -1.339
 const double K_WORKERR_P_INIT = 0.25;
 const double K_NULLSPACE_P_INIT = 0.0;
 const Eigen::VectorXd NULLSPACE_Q_REF_INIT = 
-	(VectorXd(7) << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0).finished();
+                                                    (VectorXd(7) << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0).finished();
 const double DAMPING_GAIN_INIT = 0.005;
+
+// various rate limits - be nice to other programs
+const double LOOP_FREQUENCY = 300.0;
+
+// constants for helping with joint limits
+const Eigen::VectorXd JOINTLIMIT_REGIONSIZE = (VectorXd(7) << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1).finished();
+const double JOINTLIMIT_MAXVEL = 1.0; // move joints up to this fast to avoid limits
+const double JOINTLIMIT_GAIN = 0.01; // how "wide" the curve is that we use to avoid limits
 
 /* ********************************************************************************************* */
 class WorkspaceControl {
@@ -182,6 +191,60 @@ void WorkspaceControl::updateReferenceFromXdotInput(const VectorXd& xdot, const 
 
 	// Update the reference position for the end-effector with the given workspace velocity
 	this->t_ref = this->t_ref * Tdisp;
+}
+
+/* ********************************************************************************************* */
+/// softly resist movements into joint limits. Basically just set a
+/// velocity away from the limit and increase it as the joint gets
+/// closer to the limit; eventually the system will reach a point
+/// where the commanded velocity matches the velocity pushing back
+/// and the joint will safely stop.
+void computeQdotAvoidLimits(const Eigen::VectorXd& q, Eigen::VectorXd& qdot_avoid) {
+	double error;
+	double region;
+	
+	for(int i = 0; i < 7; i++) {
+		// find our dof so we can get limits
+		kinematics::Dof* dof = robot->getDof(left_arm_ids[i]);
+
+		// store this so we aren't typing so much junk
+		region = JOINTLIMIT_REGIONSIZE[i];
+
+		// no avoidance if we arne't near a limit
+		qdot_avoid[i] = 0.0;
+
+		// if we're close to hitting the lower limit, move positive
+		if (q[i] < dof->getMin()) {
+			qdot_avoid[i] = JOINTLIMIT_MAXVEL;
+		}
+		if (q[i] < dof->getMin() + region) {
+			// figure out how close we are to the limit.
+			error = q[i] - dof->getMin();
+
+			// take the inverse to get the magnitude of our response
+			// subtract 1/region so that our response starts at zero
+			qdot_avoid[i] = (JOINTLIMIT_GAIN / error) - (JOINTLIMIT_GAIN / region);
+
+			// clamp it to the maximum allowed avoidance strength
+			qdot_avoid[i] = std::min(qdot_avoid[i], JOINTLIMIT_MAXVEL);
+		}
+
+		// if we're close to hitting the lower limit, move positive
+		if (q[i] > dof->getMax()) {
+			qdot_avoid[i] = -JOINTLIMIT_MAXVEL;
+		}
+		if (q[i] > dof->getMax() - region) {
+			// figure out how close we are to the limit.
+			error = q[i] - dof->getMax();
+
+			// take the inverse to get the magnitude of our response
+			// subtract 1/region so that our response starts at zero
+			qdot_avoid[i] = (JOINTLIMIT_GAIN / error) + (JOINTLIMIT_GAIN / region);
+
+			// clamp it to the maximum allowed avoidance strength
+			qdot_avoid[i] = std::max(qdot_avoid[i], -JOINTLIMIT_MAXVEL);
+		}
+	}
 }
 
 /* ********************************************************************************************* */
