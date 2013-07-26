@@ -187,6 +187,8 @@ void WorkspaceControl::updateReferenceFromXdotInput(const VectorXd& xdot, const 
 	this->t_ref = this->t_ref * Tdisp;
 }
 
+double bla;
+
 /* ********************************************************************************************* */
 /// softly resist movements into joint limits. Basically just set a
 /// velocity away from the limit and increase it as the joint gets
@@ -248,6 +250,7 @@ void run() {
 	// Set the constants
 	const double SPACENAV_ORIENTATION_GAIN = 1.0;
 	const double SPACENAV_TRANSLATION_GAIN = 1.0;
+	const double COMPLIANCE_GAIN = 1.0 / bla;
 
 	// Get the last time to compute the passed time
 	int c_ = 0;
@@ -266,6 +269,7 @@ void run() {
 
 		// Update the robot
 		hw->updateSensors(time_delta);
+		if(myDebug) hw->printState();
 
 		// Update the spacenav
 		Eigen::VectorXd spacenav_input;
@@ -281,13 +285,18 @@ void run() {
 		ws->updateReferenceFromXdotInput(xdot_spacenav, time_delta);
 		if(myDebug) DISPLAY_MATRIX(ws->t_ref);
 
+		// Compute an xdot for complying with external forces if the f/t values are within thresholds
+		Eigen::VectorXd xdot_comply;
+		xdot_comply = hw->rft->lastExternal * COMPLIANCE_GAIN;
+		if(myDebug) DISPLAY_VECTOR(xdot_comply);
+
 		// Get an xdot out of the P-controller that's trying to drive us to the refernece position
 		Eigen::VectorXd xdot_posref;
 		ws->getXdotFromXref(xdot_posref);
 		if(myDebug) DISPLAY_VECTOR(xdot_posref);
 
-		// Feed forward the input workspace velocity with the output from the P-controller
-		Eigen::VectorXd xdot_apply = xdot_posref + xdot_spacenav;
+		// Combine the velocities from the workspace position goal, the spacenav, and the compliance
+		Eigen::VectorXd xdot_apply = xdot_posref + xdot_spacenav + xdot_comply;
 		if(myDebug) DISPLAY_VECTOR(xdot_apply);
 
 		// Compute qdot for our secondary goal (currently, drive qo to
@@ -323,7 +332,7 @@ void run() {
 		int time_sleep_usec = std::max(0, (int)(time_sleep * 1e6));
 		usleep(time_sleep_usec);
 		
-		if (time_sleep < 0.0) {
+		if (myDebug && time_sleep < 0.0) {
 			std::cout << "Taking too long! Took " << std::fixed << std::setw(8) << time_delta
 			          << "/" << std::fixed << std::setw(8) << 1.0/LOOP_FREQUENCY << " seconds" << std::endl;
 		}
@@ -413,6 +422,7 @@ WorkspaceControl::~WorkspaceControl() {
 /* ******************************************************************************************** */
 /// The main thread
 int main(int argc, char* argv[]) {
+	bla = atof(argv[1]);
 	init();
 	run();
 	destroy();
