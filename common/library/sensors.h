@@ -39,7 +39,7 @@ public:
 	/// Computes the error between ideal and expected readings assuming no external forces
 	/// This is used in the beginning to compute an offset when we "know" we have no external forces
 	/// and also to estimate the external forces. Note that the output is in sensor frame!
-	void error(const Vector6d& reading, Vector6d& error);	
+	void error(const Vector6d& reading, Vector6d& error, bool inWorldFrame);	
 
 public:
 	// Variables to compensate for the weight of the gripper

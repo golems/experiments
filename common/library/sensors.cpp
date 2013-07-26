@@ -35,9 +35,9 @@ FT::FT (GripperType type, somatic_d_t* daemon_cx_, dynamics::SkeletonDynamics* r
 	}
 	else if (type == GRIPPER_TYPE_SCHUNK) {
 		gripperMass += 1.6;
-		gripperCoM = Vector3d(0.0, -0.008, 0.091);
+		gripperCoM = Vector3d(0.0, -0.000, 0.091);
 	}
-	else gripperCoM = Vector3d(0.0, -0.008, 0.013);
+	else gripperCoM = Vector3d(0.0, -0.000, 0.013);
 
 	// Average the first 1000 readings to compute the offset
 	Vector6d data = Vector6d::Zero(), temp;
@@ -50,11 +50,11 @@ FT::FT (GripperType type, somatic_d_t* daemon_cx_, dynamics::SkeletonDynamics* r
 
 	// Compute the offset between what the reading should be and what it is assuming no external
 	// forces
-	error(data, offset);	
+	error(data, offset, false);	
 }
 
 /* ******************************************************************************************** */
-void FT::error(const Vector6d& reading, Vector6d& error) {
+void FT::error(const Vector6d& reading, Vector6d& error, bool inWorldFrame) {
 
 	// Get the point transform wrench due to moving the affected position from com to sensor origin
 	// The transform is an identity with the bottom left a skew symmetric of the point translation
@@ -81,6 +81,7 @@ void FT::error(const Vector6d& reading, Vector6d& error) {
 
 	// Compute the difference between the actual and expected f/t values
 	error = expectedFT - reading;
+	if(inWorldFrame) error = pSsensor_world.transpose() * error;	
 }
 
 /* ******************************************************************************************** */
@@ -94,8 +95,8 @@ void FT::updateExternal () {
 	Vector6d ideal = raw + offset;
 
 	// Otherwise, compute the external reading as the difference between expected reading due to
-	// gripper weight and the current ideal reading
-	error(ideal, lastExternal);
+	// gripper weight and the current ideal reading, in the world frame
+	error(ideal, lastExternal, true);
 }
 
 /* ******************************************************************************************** */

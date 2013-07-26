@@ -7,6 +7,7 @@
  */
 
 #include "kore.h"
+#include <unistd.h>
 
 using namespace Eigen;
 
@@ -49,33 +50,46 @@ Hardware::Hardware (Mode mode_, somatic_d_t* daemon_cx_, dynamics::SkeletonDynam
 
 	// Initialize the ach channels to the waist daemon and the waist state channel. The daemon moves
 	// the motors in unison with current control and pciod updates their state on the state channel.
-	if(mode & MODE_WAIST) {
-		waistCmdChan = new ach_channel_t();
-		waist = new somatic_motor_t();
-		somatic_d_channel_open(daemon_cx, waistCmdChan, "waistd-cmd", NULL);
-		somatic_motor_init(daemon_cx, waist, 2, NULL, "waist-state");
-		// Set the min/max values for the pos/vel fields' valid and limit values
-		for(int i = 0; i < 2; i++) {
-			waist->pos_valid_min[i] = -lim2[i];
-			waist->pos_limit_min[i] = -lim2[i];
-			waist->pos_valid_max[i] = lim2[i];
-			waist->pos_limit_max[i] = lim2[i];
-
-			waist->vel_valid_min[i] = -lim2[i];
-			waist->vel_limit_min[i] = -lim2[i];
-			waist->vel_valid_max[i] = lim2[i];
-			waist->vel_limit_max[i] = lim2[i];
-		}
-		somatic_motor_update(daemon_cx, waist);
-	}
+	if(mode & MODE_WAIST) initWaist();
 
 	// Updates the robot kinematics
 	updateKinematics();
 	
 	// After initializing the rest of the robot (need kinematics), we can initialize f/t sensors. 
 	// TODO: Determine the type of the gripper from the mode
-	if(mode & MODE_LARM) lft = new FT(FT::GRIPPER_TYPE_ROBOTIQ, daemon_cx, robot, LEFT);
-	if(mode & MODE_RARM) rft = new FT(FT::GRIPPER_TYPE_ROBOTIQ, daemon_cx, robot, RIGHT);
+	if(mode & MODE_LARM) lft = new FT(FT::GRIPPER_TYPE_SCHUNK, daemon_cx, robot, LEFT);
+	if(mode & MODE_RARM) rft = new FT(FT::GRIPPER_TYPE_SCHUNK, daemon_cx, robot, RIGHT);
+}
+
+/* ******************************************************************************************** */
+void Hardware::initWaist () {
+
+	// Initialize the channel to the waist daemon
+	waistCmdChan = new ach_channel_t();
+	somatic_d_channel_open(daemon_cx, waistCmdChan, "waistd-cmd", NULL);
+
+	// Initialize the somatic motor interface to listen to the state
+	waist = new somatic_motor_t();
+	somatic_motor_init(daemon_cx, waist, 2, NULL, "waist-state");
+	usleep(1e5);
+
+	// Set the min/max values for the pos/vel fields' valid and limit values
+	VectorXd lim2 = VectorXd::Ones(2) * 1024.1; 
+	for(int i = 0; i < 2; i++) {
+		waist->pos_valid_min[i] = -lim2[i];
+		waist->pos_limit_min[i] = -lim2[i];
+		waist->pos_valid_max[i] = lim2[i];
+		waist->pos_limit_max[i] = lim2[i];
+
+		waist->vel_valid_min[i] = -lim2[i];
+		waist->vel_limit_min[i] = -lim2[i];
+		waist->vel_valid_max[i] = lim2[i];
+		waist->vel_limit_max[i] = lim2[i];
+	}
+
+	// Get an update
+	somatic_motor_update(daemon_cx, waist);
+	usleep(1e5);
 }
 
 /* ******************************************************************************************** */
@@ -89,15 +103,16 @@ void Hardware::updateSensors (double dt) {
 	// Update the imu
 	getImu(imu_chan, imu, imuSpeed, dt, kfImu); 
 
-	// Update the arms and ft sensors if required
-	if(mode & MODE_LARM) {
-		somatic_motor_update(daemon_cx, larm);
-		lft->updateExternal();
-	}
-	if(mode & MODE_RARM) {
-		somatic_motor_update(daemon_cx, rarm);
-		rft->updateExternal();
-	}
+	// Update the arms
+	if(mode & MODE_LARM) somatic_motor_update(daemon_cx, larm);
+	if(mode & MODE_RARM) somatic_motor_update(daemon_cx, rarm);
+
+	// Update the kinematics
+	updateKinematics();
+
+	// Update the f/t readings
+	if(mode & MODE_LARM) lft->updateExternal();
+	if(mode & MODE_RARM) rft->updateExternal();
 }
 
 /* ******************************************************************************************** */
@@ -193,4 +208,15 @@ void Hardware::initMotorGroup (somatic_motor_t*& motors, const char* cmd_name, c
 	usleep(1e5);
 }
 
-};
+/* ******************************************************************************************** */
+void Hardware::printState () {
+	VectorXd s = robot->getPose();
+	printf("imu: %.3lf, waist: %.3lf, torso: %.3lf\n", s(imuWaist_ids[0]), s(imuWaist_ids[1]), s(9));
+	printf("left arm: (");
+	for(size_t i = 0; i < 7; i++) printf(" %.3lf,", s(left_arm_ids[i]));
+	printf("\b)\nright arm: (");
+	for(size_t i = 0; i < 7; i++) printf(" %.3lf,", s(right_arm_ids[i]));
+	printf("\b)\n");
+}
+
+};	// end of namespace

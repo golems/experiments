@@ -40,7 +40,14 @@ public:
 	/// Updates the sensor readings
 	void updateSensors(double dt);
 
+	/// Prints the state
+	void printState();
+
+private:	
+
 	/// Updates the Dart's kinematics data structures with the latest readings
+	/// This is made private because updateSensors already calls this. A user should not need to call
+	/// it.
 	void updateKinematics();
 
 public:
@@ -57,6 +64,10 @@ public:
 	/// Initializes the imu channel, the filter and averages first 500 readings for correct 
 	/// wheels and f/t offsets
 	void initImu ();
+
+	/// Initializes the waist module group: (1) first creates the somatic interface without a command
+	/// channel to get updates, (2) second, creates a channel to the waist daemon
+	void initWaist ();
 
 public:
 	// The fields to keep track of the daemon context, mode and the robot kinematics

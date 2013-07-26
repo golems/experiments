@@ -48,7 +48,7 @@ void run() {
 
 		// Get imu/waist data
 		getImu(&imu, imuChan);
-		getWaist(&waist, waistChan);
+		while(!getWaist(&waist, waistChan));
 		
 		// Get the f/t sensor data and compute the ideal value
 		size_t k = 10;
