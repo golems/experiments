@@ -36,7 +36,7 @@ VectorXd homeConfig(7);			///< Home configuration for the left arm
 Matrix4d Tref;							///< The reference pos/ori for the left end-effector
 
 const Eigen::VectorXd JOINTLIMITREGIONS = (VectorXd(7) << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1).finished();
-const double JOINTLIMIT_MAXSTRENGTH = 1.0; // move joints up to this fast to avoid limits
+const double JOINTLIMIT_MAXSTRENGTH = 3.0; // move joints up to this fast to avoid limits
 const double JOINTLIMIT_WIDTH = .01; // how "wide" the curve is that we use to avoid limits
 
 /* ******************************************************************************************** */
@@ -88,6 +88,9 @@ void computeQdotAvoidLimits(const Eigen::VectorXd& q, Eigen::VectorXd& qdot_avoi
 		qdot_avoid[i] = 0.0;
 
 		// if we're close to hitting the lower limit, move positive
+		if (q[i] < dof->getMin()) {
+			qdot_avoid[i] = JOINTLIMIT_MAXSTRENGTH;
+		}
 		if (q[i] < dof->getMin() + region) {
 			// figure out how close we are to the limit.
 			error = q[i] - dof->getMin();
@@ -101,6 +104,9 @@ void computeQdotAvoidLimits(const Eigen::VectorXd& q, Eigen::VectorXd& qdot_avoi
 		}
 
 		// if we're close to hitting the lower limit, move positive
+		if (q[i] > dof->getMax()) {
+			qdot_avoid[i] = -JOINTLIMIT_MAXSTRENGTH;
+		}
 		if (q[i] > dof->getMax() - region) {
 			// figure out how close we are to the limit.
 			error = q[i] - dof->getMax();
