@@ -279,10 +279,10 @@ void run() {
 		if(myDebug) DISPLAY_VECTOR(eig7(hw->larm->cur));
 		for(size_t i = 0; i < 7; i++) {
 			if(fabs(hw->larm->cur[i]) > CURRENT_WARN_LIMIT)
-				printf("\t\t\tWARNING: Current at module %d has passed %lf amps: %lf amps\n", i, 	
+				printf("\t\t\tWARNING: Current at module %zu has passed %lf amps: %lf amps\n", i, 	
 					CURRENT_WARN_LIMIT, hw->larm->cur[i]);
 			if(fabs(hw->larm->cur[i]) > CURRENT_KILL_LIMIT) {
-				printf("\t\t\tStopping because current at module %d has passed %lf amps: %lf amps\n", i,
+				printf("\t\t\tStopping because current at module %zu has passed %lf amps: %lf amps\n", i,
 					 CURRENT_KILL_LIMIT, hw->larm->cur[i]);
 				destroy();
 				exit(0);
