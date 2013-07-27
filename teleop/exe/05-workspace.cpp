@@ -24,17 +24,17 @@
 using namespace Krang;
 
 bool myDebug;
+std::vector <double> data;
 
 /* ********************************************************************************************* */
 /// Home configuration for the arms
-const size_t ARM_ID = RIGHT;
 const Eigen::VectorXd HOMECONFIGL = (VectorXd(7) << 1.102, -0.589, 0.000, -1.339, 0.000, -0.959, -1.000).finished();
 
 // initializers for the workspace control constants
 const double K_WORKERR_P_INIT = 0.25;
 const double NULLSPACE_GAIN_INIT = 0.0;
 const Eigen::VectorXd NULLSPACE_Q_REF_INIT = 
-                                                    (VectorXd(7) << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0).finished();
+		(VectorXd(7) << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0).finished();
 const double DAMPING_GAIN_INIT = 0.005;
 
 // various rate limits - be nice to other programs
@@ -50,10 +50,10 @@ class WorkspaceControl {
 public:
 	// constructor and destructor
 	WorkspaceControl(somatic_d_t* _daemon_cx,
-	                 const char* _spacenav_chan_name,
-	                 std::vector<int>* _arm_ids,
-	                 kinematics::BodyNode* _endeff,
-	                 double _K_position_p = 1.0);
+									 const char* _spacenav_chan_name,
+									 std::vector<int>* _arm_ids,
+									 kinematics::BodyNode* _endeff,
+									 double _K_position_p = 1.0);
 	~WorkspaceControl();
 
 	// member functions
@@ -205,6 +205,7 @@ void computeQdotAvoidLimits(const Eigen::VectorXd& q, Eigen::VectorXd& qdot_avoi
 
 		// store this so we aren't typing so much junk
 		region = JOINTLIMIT_REGIONSIZE[i];
+		// if(myDebug) printf("%d: min/max: (%lf/%lf), region: %lf\n", i, dof->getMin(), dof->getMax(), region);
 
 		// no avoidance if we arne't near a limit
 		qdot_avoid[i] = 0.0;
@@ -248,16 +249,16 @@ void computeQdotAvoidLimits(const Eigen::VectorXd& q, Eigen::VectorXd& qdot_avoi
 void run() {
 
 	// Set the constants
-	const double SPACENAV_ORIENTATION_GAIN = 1.0;
-	const double SPACENAV_TRANSLATION_GAIN = 1.0;
-	const double COMPLIANCE_GAIN = 1.0 / bla;
+	const double SPACENAV_ORIENTATION_GAIN = 0.0;
+	const double SPACENAV_TRANSLATION_GAIN = 0.50; 
+	const double COMPLIANCE_GAIN = 0.0; //1.0 / bla;
 
 	// Get the last time to compute the passed time
 	int c_ = 0;
 	double time_last = aa_tm_timespec2sec(aa_tm_now());
 	while(!somatic_sig_received) {
 
-		myDebug = ((c_++ % 10) == 1);
+		myDebug = ((c_++ % 20) == 1);
 
 		// Update times
 		double time_now = aa_tm_timespec2sec(aa_tm_now());
@@ -279,6 +280,8 @@ void run() {
 		Eigen::VectorXd xdot_spacenav = spacenav_input;
 		xdot_spacenav.topLeftCorner<3,1>() *= SPACENAV_TRANSLATION_GAIN;
 		xdot_spacenav.bottomLeftCorner<3,1>() *= SPACENAV_ORIENTATION_GAIN;
+		xdot_spacenav(0) = xdot_spacenav(1) = 0.0;
+		data.push_back(spacenav_input(2));
 		if(myDebug) DISPLAY_VECTOR(xdot_spacenav);
 
 		// Move the workspace references around from that spacenav input
@@ -287,7 +290,7 @@ void run() {
 
 		// Compute an xdot for complying with external forces if the f/t values are within thresholds
 		Eigen::VectorXd xdot_comply;
-		xdot_comply = hw->rft->lastExternal * COMPLIANCE_GAIN;
+		xdot_comply = hw->lft->lastExternal * COMPLIANCE_GAIN;
 		if(myDebug) DISPLAY_VECTOR(xdot_comply);
 
 		// Get an xdot out of the P-controller that's trying to drive us to the refernece position
@@ -317,25 +320,30 @@ void run() {
 
 		// avoid joint limits - set velocities away from them as we get close
 		Eigen::VectorXd qdot_avoid(7);
+		if(myDebug) DISPLAY_VECTOR(q);
 		computeQdotAvoidLimits(q, qdot_avoid);
+		if(myDebug) DISPLAY_VECTOR(qdot_avoid);
 
 		// add our qdots together to get the overall movement
 		Eigen::VectorXd qdot_apply = qdot_avoid + qdot_jacobian;
+		if(myDebug) DISPLAY_VECTOR(qdot_apply);
 
 		// Send the velocity command
-		somatic_motor_setvel(&daemon_cx, hw->rarm, qdot_apply.data(), 7);
+		somatic_motor_setvel(&daemon_cx, hw->larm, qdot_apply.data(), 7);
 
 		// and sleep to fill out the loop period so we don't eat the
 		// entire CPU
 		double time_loopend = aa_tm_timespec2sec(aa_tm_now());
 		double time_sleep = (1.0 / LOOP_FREQUENCY) - (time_loopend - time_now);
 		int time_sleep_usec = std::max(0, (int)(time_sleep * 1e6));
-		usleep(time_sleep_usec);
+		if(myDebug) std::cout << "sleeping for: " << time_sleep_usec << std::endl;
 		
+/*
 		if (myDebug && time_sleep < 0.0) {
 			std::cout << "Taking too long! Took " << std::fixed << std::setw(8) << time_delta
 			          << "/" << std::fixed << std::setw(8) << 1.0/LOOP_FREQUENCY << " seconds" << std::endl;
 		}
+*/
 	}
 }
 
@@ -357,12 +365,11 @@ void init() {
 	somatic_d_init(&daemon_cx, &daemon_opt);
 
 	// Initialize the hardware
-	Hardware::Mode mode = (Hardware::Mode)((Hardware::MODE_ALL & ~Hardware::MODE_LARM) & ~Hardware::MODE_GRIPPERS);
+	Hardware::Mode mode = (Hardware::Mode)((Hardware::MODE_ALL & ~Hardware::MODE_RARM) & ~Hardware::MODE_GRIPPERS);
 	hw = new Hardware(mode, &daemon_cx, robot);
 
 	// Set up the workspace controllers
-	ws = new WorkspaceControl(&daemon_cx, (ARM_ID == LEFT) ? "spacenav-data" : 
-		"spacenav-data", &right_arm_ids, robot->getNode("rGripper"));
+	ws = new WorkspaceControl(&daemon_cx, "spacenav-data", &left_arm_ids, robot->getNode("lGripper"));
 
 	// Start the daemon running
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
@@ -381,10 +388,15 @@ void destroy() {
 	delete ws;
 
 	// Close down the hardware
+	printf("closing the hardware\n");
 	delete hw;
+	printf("closed the hardware\n"); fflush(stdout);
 
 	// Destroy the daemon resources
 	somatic_d_destroy(&daemon_cx);
+
+	// Print the z input data
+	for(size_t i = 0; i < data.size(); i++) printf("%lf\n", data[i]);
 }
 
 /* ******************************************************************************************** */

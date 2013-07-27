@@ -87,7 +87,7 @@ Hardware::~Hardware () {
 		somatic_motor_destroy(daemon_cx, rarm);
 		delete rarm;
 	}
-	if(rarm != NULL) {
+	if(larm != NULL) {
 		somatic_motor_halt(daemon_cx, larm);
 		somatic_motor_destroy(daemon_cx, larm);
 		delete larm;
