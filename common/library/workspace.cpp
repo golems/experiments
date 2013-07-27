@@ -5,6 +5,8 @@
  * @brief This header file for workspace control of 7-dof arms.
  */
 
+#include "workspace.h"
+
 namespace Krang {
 
 /* ******************************************************************************************** */
@@ -20,13 +22,13 @@ WorkspaceControl::WorkspaceControl (dynamics::SkeletonDynamics* robot, Side side
 }
 
 /* ******************************************************************************************** */
-void integrateWSVelocityInput(const VectorXd& xdot, const double dt) {
+	void WorkspaceControl::integrateWSVelocityInput(const VectorXd& xdot, const double dt) {
 
 	// Represent the workspace velocity input as a 4x4 homogeneous matrix
 	Matrix4d xdotM = eulerToTransform(xdot * dt, math::XYZ);
 	
 	// Compute the displacement in the end-effector frame with a similarity transform
-	Matrix4d R = t_ref;
+	Matrix4d R = Tref;
 	R.topRightCorner<3,1>().setZero();
 	Matrix4d Tdisp = R.inverse() * xdotM * R;
 
@@ -35,7 +37,7 @@ void integrateWSVelocityInput(const VectorXd& xdot, const double dt) {
 }
 
 /* ******************************************************************************************** */
-void refWSVelocity(VectorXd& xdot) {
+void WorkspaceControl::refWSVelocity(VectorXd& xdot) {
 
 	// Get the current end-effector transform and also, just its orientation 
 	Matrix4d Tcur = endEffector->getWorldTransform();
@@ -49,7 +51,7 @@ void refWSVelocity(VectorXd& xdot) {
 }
 
 /* ******************************************************************************************** */
-void refJSVelocity(const VectorXd& xdot, const VectorXd& qdot_nullspace, VectorXd& qdot) {
+void WorkspaceControl::refJSVelocity(const VectorXd& xdot, const VectorXd& qdot_nullspace, VectorXd& qdot) {
 
 	// Get the Jacobian for the end-effector
 	MatrixXd Jlin = endEffector->getJacobianLinear().topRightCorner<3,7>();
