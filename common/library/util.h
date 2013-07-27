@@ -7,8 +7,19 @@
 
 #pragma once
 
-#include <Eigen/Dense>
+#include <somatic.h>
+#include <somatic/daemon.h>
+#include <somatic.pb-c.h>
+#include <somatic/motor.h>
+#include <imud.h>
+#include <filter.h>
+#include <ach.h>
+
+#include <dynamics/SkeletonDynamics.h>
+#include <kinematics/BodyNode.h>
 #include <math/UtilsRotation.h>
+
+#include <Eigen/Dense>
 
 using namespace Eigen;
 
