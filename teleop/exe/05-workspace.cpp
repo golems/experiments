@@ -256,6 +256,7 @@ void run() {
 	// Get the last time to compute the passed time
 	int c_ = 0;
 	double time_last = aa_tm_timespec2sec(aa_tm_now());
+	Eigen::VectorXd last_spacenav_input = Eigen::VectorXd::Zero(6);
 	while(!somatic_sig_received) {
 
 		myDebug = ((c_++ % 20) == 1);
@@ -274,7 +275,8 @@ void run() {
 
 		// Update the spacenav
 		Eigen::VectorXd spacenav_input;
-		ws->getSpaceNav(spacenav_input);
+		if(!ws->getSpaceNav(spacenav_input)) spacenav_input = last_spacenav_input;
+		last_spacenav_input = spacenav_input;
 
 		// Scale the spacenav input to get a workspace velocity 
 		Eigen::VectorXd xdot_spacenav = spacenav_input;
