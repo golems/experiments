@@ -189,4 +189,23 @@ void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt,
 	_imu = kf->x[0], _imuSpeed = kf->x[1];
 }
 
+/* ******************************************************************************************** */
+bool getSpaceNav (ach_channel_t* spacenav_chan, VectorXd& config) {
+
+	// Get joystick data
+	int r = 0;
+	config = Eigen::VectorXd::Zero(6);
+	Somatic__Joystick *js_msg = SOMATIC_GET_LAST_UNPACK(r, somatic__joystick,
+			&protobuf_c_system_allocator, 4096, spacenav_chan);
+	if(!(ACH_OK == r || ACH_MISSED_FRAME == r) || (js_msg == NULL)) return false;
+
+	// Set the data to the input reference
+	Somatic__Vector* x = js_msg->axes;
+	config << -x->data[1], -x->data[0], -x->data[2], -x->data[4], -x->data[3], -x->data[5];
+
+	// Free the liberty message
+	somatic__joystick__free_unpacked(js_msg, &protobuf_c_system_allocator);
+	return true;
+}
+
 };	// end of namespace

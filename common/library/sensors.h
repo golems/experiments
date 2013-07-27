@@ -55,5 +55,8 @@ public:
 void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt, 
 	     filter_kalman_t* kf);
 
+/// Returns the spacenav value in a Vector6d such that the axis match the world coordinates 
+/// defined in Dart framework
+bool getSpaceNav (ach_channel_t* spacenav_chan, VectorXd& config);
 
 };	// end of namespace

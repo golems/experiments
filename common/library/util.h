@@ -19,6 +19,7 @@
 
 #include <dynamics/SkeletonDynamics.h>
 #include <kinematics/BodyNode.h>
+#include <kinematics/Dof.h>
 #include <math/UtilsRotation.h>
 
 #include <Eigen/Dense>

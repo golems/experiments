@@ -11,14 +11,19 @@ namespace Krang {
 
 /* ******************************************************************************************** */
 WorkspaceControl::WorkspaceControl (dynamics::SkeletonDynamics* robot, Side side, 
-		double _K_posRef_p, double _nullspace_gain, double _damping_gain) {
+		double _K_posRef_p, double _nullspace_gain, double _damping_gain, 
+		double _ui_translation_gain, double _ui_orientation_gain, double _compliance_gain) {
 
 	// Determine the end-effector and the arm indices based on the input side
 	endEffector = robot->getNode((side == LEFT) ? "lGripper" : "rGripper");
 	arm_ids = (side == LEFT) ? &left_arm_ids : &right_arm_ids;
 	
-	// Set the gains
+	// Set the gains for control
 	K_posRef_p = _K_posRef_p, nullspace_gain = _nullspace_gain, damping_gain = _damping_gain;
+
+	// Set the gains for sensors
+	ui_translation_gain = _ui_translation_gain, ui_orientation_gain = _ui_orientation_gain;
+	compliance_gain = _compliance_gain;
 }
 
 /* ******************************************************************************************** */
@@ -72,4 +77,38 @@ void WorkspaceControl::refJSVelocity(const VectorXd& xdot, const VectorXd& qdot_
 	qdot = Jinv * xdot + (I - JinvJ) * qdot_nullspace * nullspace_gain;
 }
 
-};
+/* ******************************************************************************************** */
+void WorkspaceControl::update (const VectorXd& ui, const VectorXd& ft, 
+		const VectorXd& qdot_secondary, double dt, VectorXd& qdot) {
+
+	// Scale the ui input to get a workspace velocity 
+	Eigen::VectorXd xdot_ui = ui;
+	xdot_ui.topLeftCorner<3,1>() *= ui_translation_gain;
+	xdot_ui.bottomLeftCorner<3,1>() *= ui_orientation_gain;
+	if(debug) DISPLAY_VECTOR(xdot_ui);
+
+	// Move the workspace references around from that ui input
+	integrateWSVelocityInput(xdot_ui, dt);
+	if(debug) DISPLAY_MATRIX(Tref);
+
+	// Compute an xdot for complying with external forces if the f/t values are within thresholds
+	Eigen::VectorXd xdot_comply;
+	if(debug) DISPLAY_VECTOR(ft);
+	xdot_comply = -ft * compliance_gain;
+	if(debug) DISPLAY_VECTOR(xdot_comply);
+
+	// Get an xdot out of the P-controller that's trying to drive us to the refernece position
+	Eigen::VectorXd xdot_posref;
+	refWSVelocity(xdot_posref);
+	if(debug) DISPLAY_VECTOR(xdot_posref);
+
+	// Combine the velocities from the workspace position goal, the ui, and the compliance
+	Eigen::VectorXd xdot_apply = xdot_posref + xdot_ui + xdot_comply;
+	if(debug) DISPLAY_VECTOR(xdot_apply);
+
+	// Compute qdot with the dampened inverse Jacobian, using nullspace projection to achieve our 
+	// secondary goal
+	refJSVelocity(xdot_apply, qdot_secondary, qdot);
+}
+
+};	// end of namespace

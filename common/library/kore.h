@@ -8,6 +8,7 @@
 #pragma once
 
 #include "sensors.h"
+#include "safety.h"
 
 using namespace Eigen;
 
