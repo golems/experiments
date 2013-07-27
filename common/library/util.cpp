@@ -24,6 +24,13 @@ vector <int> left_arm_ids (left_arm_ids_a, left_arm_ids_a + 7);
 vector <int> right_arm_ids (right_arm_ids_a, right_arm_ids_a + 7);	
 vector <int> imuWaist_ids (imuWaist_ids_a, imuWaist_ids_a + 2);		
 
+
+/* ******************************************************************************************** */
+// set up the indices for dart's root dofs
+
+int dart_root_dof_ids_a[] =  {0,1,2,5,4,3};
+std::vector<int> dart_root_dof_ids(dart_root_dof_ids_a, dart_root_dof_ids_a + 6);
+
 /* ******************************************************************************************** */
 Eigen::VectorXd transformToEuler(const Eigen::MatrixXd &T, math::RotationOrder _order) {
 
