@@ -22,24 +22,13 @@
 #include <math/UtilsRotation.h>
 
 #include "simTab.h"
+
+#include "kore.h"
 #include "util.h"
-#include "LibertyClient.h"
 
 using namespace std;
 using namespace Eigen;
 using namespace dynamics;
-
-#define pv(a) std::cout << #a << ": " << fix((a).transpose()) << std::endl
-#define pmr(a) std::cout << #a << ":\n " << fix((a)) << std::endl
-
-/* ******************************************************************************************** */
-Eigen::MatrixXd fix (const Eigen::MatrixXd& mat) {
-	Eigen::MatrixXd mat2 (mat);
-	for(size_t i = 0; i < mat2.rows(); i++)
-		for(size_t j = 0; j < mat2.cols(); j++)
-			if(fabs(mat2(i,j)) < 1e-5) mat2(i,j) = 0.0;
-	return mat2;
-}
 
 /* ********************************************************************************************* */
 somatic_d_t daemon_cx;
@@ -83,10 +72,10 @@ bool getLiberty(VectorXd& config) {
 /// reference configuration.
 void updateReference(VectorXd& liberty_input) {
 
-	Tlst = eulerToTransform(liberty_input, math::XYZ);
-	pmr(Tlst);
+	Tlst = Krang::eulerToTransform(liberty_input, math::XYZ);
+	DISPLAY_MATRIX(Tlst);
 //	Tref = Tlst * Tls0.inverse() * Twg0;
-	pmr(Tref);
+	DISPLAY_MATRIX(Tref);
 	Vector3d disp = Tlst.topRightCorner<3,1>() - Tls0.topRightCorner<3,1>();
 	Tref.topRightCorner<3,1>() = Twg0.topRightCorner<3,1>() + disp;
 	Tref.topLeftCorner<3,3>() = Twg0.topLeftCorner<3,3>();
@@ -126,7 +115,7 @@ void getXdotFromXref (VectorXd& xdot) {
 	// Apply the similarity transform to the displacement between current transform and reference
 	Matrix4d Tdisp = Tcur.inverse() * Tref;
 	Matrix4d xdotM = Rcur * Tdisp * Rcur.inverse();
-	xdot = transformToEuler(xdotM, math::XYZ);
+	xdot = Krang::transformToEuler(xdotM, math::XYZ);
 }
 
 /* ********************************************************************************************* */
@@ -177,7 +166,7 @@ void Timer::Notify() {
 	static int c_ = 0;
 	if(c_ == 0) {
 		Twg0 = robot->getNode("lGripper")->getWorldTransform();
-		Tls0 = eulerToTransform(liberty_input, math::XYZ);
+		Tls0 = Krang::eulerToTransform(liberty_input, math::XYZ);
 	}
 	c_++;
 

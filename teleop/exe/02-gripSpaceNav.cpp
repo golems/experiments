@@ -128,7 +128,7 @@ void updateReference (VectorXd& spacenav_input) {
 	// Scale the translation and orientation components of displacement; and make a matrix for it
 	spacenav_input.topLeftCorner<3,1>() *= 0.02;
 	spacenav_input.bottomLeftCorner<3,1>() *= 0.06;
-	Matrix4d xdotM = eulerToTransform(spacenav_input, math::XYZ);
+	Matrix4d xdotM = Krang::eulerToTransform(spacenav_input, math::XYZ);
 	
 	// Compute the displacement in the end-effector frame with a similarity transform
 	Matrix4d R = Tref;
@@ -152,7 +152,7 @@ void getXdotFromXref (VectorXd& xdot) {
 	// Apply the similarity transform to the displacement between current transform and reference
 	Matrix4d Tdisp = Tcur.inverse() * Tref;
 	Matrix4d xdotM = Rcur * Tdisp * Rcur.inverse();
-	xdot = transformToEuler(xdotM, math::XYZ);
+	xdot = Krang::transformToEuler(xdotM, math::XYZ);
 }
 
 /* ********************************************************************************************* */
@@ -199,7 +199,7 @@ void Timer::Notify() {
 
 	// Update the reference configuration with the spacenav input and visualize it
 	updateReference(spacenav_input);
-	mWorld->getSkeleton("g1")->setConfig(dartRootDofOrdering, transformToEuler(Tref, math::XYZ));
+	mWorld->getSkeleton("g1")->setConfig(Krang::dart_root_dof_ids, Krang::transformToEuler(Tref, math::XYZ));
 	pv(spacenav_input);
 
 	// Get xdot from the reference configuration
