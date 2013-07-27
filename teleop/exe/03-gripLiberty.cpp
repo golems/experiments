@@ -88,16 +88,16 @@ void updateReference(VectorXd& liberty_input) {
 /*
 	// Compute the current configuration of the sensor in the liberty frame
 	Tlst = eulerToTransform(liberty_input, math::XYZ);
-	pmr(Tlst);
+	DISPLAY_MATRIX(Tlst);
 
 	// Compute the displacement between the initial sensor and gripper configurations
 	Matrix4d Toffset = Twg0 * Tls0.inverse();
 	Toffset.topLeftCorner<3,3>() = Matrix3d::Identity();
 
 	// Compute the reference 
-	pmr(Toffset);
+	DISPLAY_MATRIX(Toffset);
 	Tref = Toffset * Tlst;
-	pmr(Tref);
+	DISPLAY_MATRIX(Tref);
 */
 }
 
@@ -108,7 +108,7 @@ void getXdotFromXref (VectorXd& xdot) {
 
 	// Get the current end-effector transform and also, just its orientation 
 	Matrix4d Tcur = robot->getNode("lGripper")->getWorldTransform();
-	pmr(Tcur);
+	DISPLAY_MATRIX(Tcur);
 	Matrix4d Rcur = Tcur;
 	Rcur.topRightCorner<3,1>().setZero();
 
@@ -176,17 +176,17 @@ void Timer::Notify() {
 	// Get xdot from the reference configuration
 	VectorXd xdot;
 	getXdotFromXref(xdot);
-	pv(xdot);
+	DISPLAY_VECTOR(xdot);
 
 	// Compute qdot with the dampened inverse Jacobian with nullspace projection
 	VectorXd qdot;
 	getQdot(xdot, qdot);
-	pv(qdot);
+	DISPLAY_VECTOR(qdot);
 
 	// Apply the joint velocities
 	Eigen::VectorXd q = robot->getConfig(left_arm_ids);
 	q += qdot * 0.03;
-	pv(q);
+	DISPLAY_VECTOR(q);
 	robot->setConfig(left_arm_ids, q);
 
 	// Visualize the scene
