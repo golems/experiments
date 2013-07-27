@@ -97,7 +97,6 @@ void computeGoal (const Vector7d& traj, const Vector6d& wrench, Vector7d& goal) 
 	pv(dq);
 	Vector7d offset = dq * wrenchEffect;
 	pv(offset);
-	exit(0);
 	
 	// Normalize the offset if it is too much
 	static const double maxOffset = 0.25;

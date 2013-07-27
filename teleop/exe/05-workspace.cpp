@@ -31,7 +31,7 @@ std::vector <double> data;
 const Eigen::VectorXd HOMECONFIGL = (VectorXd(7) << 1.102, -0.589, 0.000, -1.339, 0.000, -0.959, -1.000).finished();
 
 // initializers for the workspace control constants
-const double K_WORKERR_P_INIT = 0.25;
+const double K_WORKERR_P_INIT = 1.00;
 const double NULLSPACE_GAIN_INIT = 0.0;
 const Eigen::VectorXd NULLSPACE_Q_REF_INIT = 
 		(VectorXd(7) << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0).finished();
@@ -187,8 +187,6 @@ void WorkspaceControl::updateReferenceFromXdotInput(const VectorXd& xdot, const 
 	this->t_ref = this->t_ref * Tdisp;
 }
 
-double bla;
-
 /* ********************************************************************************************* */
 /// softly resist movements into joint limits. Basically just set a
 /// velocity away from the limit and increase it as the joint gets
@@ -244,22 +242,45 @@ void computeQdotAvoidLimits(const Eigen::VectorXd& q, Eigen::VectorXd& qdot_avoi
 	}
 }
 
+/* ******************************************************************************************** */
+/// Clean up
+void destroy() {
+
+	// Stop the daemon
+	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
+		SOMATIC__EVENT__CODES__PROC_STOPPING, NULL, NULL);
+
+	// Clean up the workspace stuff, just to be safe
+	delete ws;
+
+	// Close down the hardware
+	printf("closing the hardware\n");
+	delete hw;
+	printf("closed the hardware\n"); fflush(stdout);
+
+	// Destroy the daemon resources
+	somatic_d_destroy(&daemon_cx);
+
+	// Print the z input data
+	// for(size_t i = 0; i < data.size(); i++) printf("%lf\n", data[i]);
+}
+
 /* ********************************************************************************************* */
 /// The main loop
 void run() {
 
 	// Set the constants
-	const double SPACENAV_ORIENTATION_GAIN = 0.0;
-	const double SPACENAV_TRANSLATION_GAIN = 0.50; 
-	const double COMPLIANCE_GAIN = 0.0; //1.0 / bla;
+	const double SPACENAV_ORIENTATION_GAIN = 0.25;
+	const double SPACENAV_TRANSLATION_GAIN = 0.25; 
+	const double COMPLIANCE_GAIN = 1.0 / 750.0;
 
 	// Get the last time to compute the passed time
-	int c_ = 0;
+	int c_ = 0, badSpaceNavCtr = 0;
 	double time_last = aa_tm_timespec2sec(aa_tm_now());
 	Eigen::VectorXd last_spacenav_input = Eigen::VectorXd::Zero(6);
 	while(!somatic_sig_received) {
 
-		myDebug = ((c_++ % 20) == 1);
+		myDebug = ((c_++ % 30) == 1);
 
 		// Update times
 		double time_now = aa_tm_timespec2sec(aa_tm_now());
@@ -273,17 +294,31 @@ void run() {
 		hw->updateSensors(time_delta);
 		if(myDebug) hw->printState();
 
+		// Check for too high currents
+		const double CURRENT_WARN_LIMIT = 10.0, CURRENT_KILL_LIMIT = 12.0;
+		if(myDebug) DISPLAY_VECTOR(eig7(hw->larm->cur));
+		for(size_t i = 0; i < 7; i++) {
+			if(fabs(hw->larm->cur[i]) > CURRENT_WARN_LIMIT)
+				printf("\t\t\tWARNING: Current at module %d has passed %lf amps: %lf amps\n", i, 	
+					CURRENT_WARN_LIMIT, hw->larm->cur[i]);
+			if(fabs(hw->larm->cur[i]) > CURRENT_KILL_LIMIT) {
+				printf("\t\t\tStopping because current at module %d has passed %lf amps: %lf amps\n", i,
+					 CURRENT_KILL_LIMIT, hw->larm->cur[i]);
+				destroy();
+				exit(0);
+			}
+		}
+
 		// Update the spacenav
 		Eigen::VectorXd spacenav_input;
-		if(!ws->getSpaceNav(spacenav_input)) spacenav_input = last_spacenav_input;
+		if(!ws->getSpaceNav(spacenav_input)) spacenav_input = (badSpaceNavCtr++ > 20) ? VectorXd::Zero(6) : last_spacenav_input;
+		else badSpaceNavCtr = 0;
 		last_spacenav_input = spacenav_input;
 
 		// Scale the spacenav input to get a workspace velocity 
 		Eigen::VectorXd xdot_spacenav = spacenav_input;
 		xdot_spacenav.topLeftCorner<3,1>() *= SPACENAV_TRANSLATION_GAIN;
 		xdot_spacenav.bottomLeftCorner<3,1>() *= SPACENAV_ORIENTATION_GAIN;
-		xdot_spacenav(0) = xdot_spacenav(1) = 0.0;
-		data.push_back(spacenav_input(2));
 		if(myDebug) DISPLAY_VECTOR(xdot_spacenav);
 
 		// Move the workspace references around from that spacenav input
@@ -292,7 +327,8 @@ void run() {
 
 		// Compute an xdot for complying with external forces if the f/t values are within thresholds
 		Eigen::VectorXd xdot_comply;
-		xdot_comply = hw->lft->lastExternal * COMPLIANCE_GAIN;
+		if(myDebug) DISPLAY_VECTOR(hw->lft->lastExternal);
+		xdot_comply = -hw->lft->lastExternal * COMPLIANCE_GAIN;
 		if(myDebug) DISPLAY_VECTOR(xdot_comply);
 
 		// Get an xdot out of the P-controller that's trying to drive us to the refernece position
@@ -339,6 +375,7 @@ void run() {
 		double time_sleep = (1.0 / LOOP_FREQUENCY) - (time_loopend - time_now);
 		int time_sleep_usec = std::max(0, (int)(time_sleep * 1e6));
 		if(myDebug) std::cout << "sleeping for: " << time_sleep_usec << std::endl;
+		usleep(time_sleep_usec);
 		
 /*
 		if (myDebug && time_sleep < 0.0) {
@@ -379,29 +416,6 @@ void init() {
 }
 
 /* ******************************************************************************************** */
-/// Clean up
-void destroy() {
-
-	// Stop the daemon
-	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
-		SOMATIC__EVENT__CODES__PROC_STOPPING, NULL, NULL);
-
-	// Clean up the workspace stuff, just to be safe
-	delete ws;
-
-	// Close down the hardware
-	printf("closing the hardware\n");
-	delete hw;
-	printf("closed the hardware\n"); fflush(stdout);
-
-	// Destroy the daemon resources
-	somatic_d_destroy(&daemon_cx);
-
-	// Print the z input data
-	for(size_t i = 0; i < data.size(); i++) printf("%lf\n", data[i]);
-}
-
-/* ******************************************************************************************** */
 WorkspaceControl::WorkspaceControl(somatic_d_t* _daemon_cx,
                                    const char* _spacenav_chan_name,
                                    std::vector<int>* _arm_ids,
@@ -436,7 +450,6 @@ WorkspaceControl::~WorkspaceControl() {
 /* ******************************************************************************************** */
 /// The main thread
 int main(int argc, char* argv[]) {
-	bla = atof(argv[1]);
 	init();
 	run();
 	destroy();
