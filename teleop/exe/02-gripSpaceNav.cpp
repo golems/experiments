@@ -8,9 +8,6 @@
  * as liberty and compliance plays with workspace reference configurations.
  */
 
-#define pv(a) std::cout << #a << ": " << fix((a).transpose()) << std::endl
-#define pmr(a) std::cout << #a << ":\n " << fix((a)) << std::endl
-
 #define protected public
 #define private public
 

@@ -90,26 +90,6 @@ dynamics::SkeletonDynamics* robot;
 WorkspaceControl* ws;
 
 /* ********************************************************************************************* */
-// tricked-out debug print for collections. Prints fixed-point,
-// fixed-width, and fixed-precision for perfectly aligned columns and
-// no annoying exponents.
-#define DISPLAY_VECTOR(VEC) \
-	{std::cout << std::setw(25) << std::left << #VEC; \
-	for(int i = 0; i < VEC.size(); i++) std::cout << std::fixed << std::setw(12) << VEC[i]; \
-	std::cout << std::endl;}
-
-// similar debug print for matrices
-#define DISPLAY_MATRIX(MAT) \
-	{std::cout << std::setw(25) << std::left << #MAT << std::endl; \
-	for(int r = 0; r < MAT.rows(); r++) {	  \
-	std::cout << "    "; \
-	for(int c = 0; c < MAT.cols(); c++) { \
-	std::cout << std::fixed << std::setw(12) << MAT(r, c); } \
-std::cout << std::endl; \
-}	\
-std::cout << std::endl; }
-
-/* ********************************************************************************************* */
 /// Figures out a workspace velocity xdot that will take us from our current configuration to our 
 /// reference configuration t_ref
 void WorkspaceControl::getXdotFromXref(VectorXd& xdot) {

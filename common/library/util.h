@@ -15,6 +15,8 @@
 #include <filter.h>
 #include <ach.h>
 
+#include <iomanip>
+
 #include <dynamics/SkeletonDynamics.h>
 #include <kinematics/BodyNode.h>
 #include <math/UtilsRotation.h>
@@ -69,6 +71,26 @@ typedef Matrix<double, 6, 6> Matrix6d;			///< A typedef for convenience to conta
 #define darm (cout << "dq: "<<llwa.vel[0] << ", " <<llwa.vel[1] << ", " << llwa.vel[2] << ", " << \
 	llwa.vel[3] << ", " << llwa.vel[4] << ", " << llwa.vel[5] << ", " << llwa.vel[6] << endl);
 #define eig7(x) (Vector7d() << (x)[0], (x)[1], (x)[2], (x)[3], (x)[4], (x)[5], (x)[6]).finished()
+
+/* ********************************************************************************************* */
+// as above, but nicely formatted. Prints fixed-point, fixed-width,
+// and fixed-precision for perfectly aligned columns and no exponents.
+#define DISPLAY_VECTOR(VEC) \
+	{std::cout << std::setw(25) << std::left << #VEC; \
+	for(int i = 0; i < VEC.size(); i++) std::cout << std::fixed << std::setw(12) << VEC[i]; \
+	std::cout << std::endl;}
+
+#define DISPLAY_MATRIX(MAT) \
+	{std::cout << std::setw(25) << std::left << #MAT << std::endl; \
+	for(int r = 0; r < MAT.rows(); r++) {	  \
+	std::cout << "    "; \
+	for(int c = 0; c < MAT.cols(); c++) { \
+	std::cout << std::fixed << std::setw(12) << MAT(r, c); } \
+std::cout << std::endl; \
+}	\
+std::cout << std::endl; }
+
+
 
 };	// end of namespace
 
