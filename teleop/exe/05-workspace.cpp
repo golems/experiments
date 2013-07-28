@@ -1,6 +1,6 @@
 /**
  * @file 05-workspace.cpp
- * @author Saul Reynolds-Haertle, Can Erdogan
+ * @author Saul Reynolds-Haertle, Can Erdogan, Munzir Zafar
  * @date July 25, 2013
  * @brief This file demonstrates workspace control running on
  * Krang. It will probably be a workhorse for general tasks, including
@@ -22,7 +22,7 @@ using namespace Krang;
 
 // initializers for the workspace control constants
 const double K_WORKERR_P = 1.00;
-const double NULLSPACE_GAIN = 0.0;
+const double NULLSPACE_GAIN = 0.1;
 const Eigen::VectorXd NULLSPACE_Q_REF_INIT = 
 		(VectorXd(7) << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0).finished();
 const double DAMPING_GAIN = 0.005;
@@ -115,7 +115,9 @@ void run() {
 		// Compute qdot for our secondary goal (currently, drive qo to
 		// a reference position
 		Eigen::VectorXd q = robot->getConfig(*ws->arm_ids);
-		Eigen::VectorXd qdot_secondary = Vector7d::Zero(); //q - nullspace_q_ref;
+		Eigen::VectorXd qSecondary = q;
+		qSecondary(3) = -0.5;
+		Eigen::VectorXd qdot_secondary = qSecondary - q;
 
 		// Compute the final xdot incorporating the input velocity and  compliance 
 		Eigen::VectorXd qdot_jacobian;
