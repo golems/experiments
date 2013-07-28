@@ -40,7 +40,7 @@ bool myDebug;
 /* ********************************************************************************************* */
 /// Configurations for workspace control
 const double K_WORKERR_P = 1.00;
-const double NULLSPACE_GAIN = 1.0;
+const double NULLSPACE_GAIN = 0.1;
 const Eigen::VectorXd NULLSPACE_Q_REF_INIT = 
 		(VectorXd(7) << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0).finished();
 const double DAMPING_GAIN = 0.005;
@@ -132,7 +132,7 @@ void Timer::Notify() {
 	else badSpaceNavCtr = 0;
 	last_spacenav_input = spacenav_input;
 
-	bool readFromFile = true;
+	bool readFromFile = true; 
 	static size_t dataCounter = 0;
 	if(readFromFile) spacenav_input = data[std::min(data.size() - 1, dataCounter++)];
 	else data.push_back(spacenav_input);
@@ -144,7 +144,9 @@ void Timer::Notify() {
 	Vector3d Tref = Tg2.topRightCorner<3,1>() - TL2.topRightCorner<3,1>();
 	double offset = -3.45 + 2.81;
 	VectorXd qElbowRef = q;
-	getElbowAngles(Tref, offset, qElbowRef(0), qElbowRef(1));
+	//getElbowAngles(Tref, offset, qElbowRef(0), qElbowRef(1));
+	qElbowRef(0) = 0.95;
+	qElbowRef(3) = -0.5;
 	nullspace_dq_ref = (qElbowRef - q).normalized();
 
 	// Compute the desired jointspace velocity from the inputs (no ft sensor)

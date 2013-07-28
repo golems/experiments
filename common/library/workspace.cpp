@@ -85,7 +85,11 @@ void WorkspaceControl::refJSVelocity(const VectorXd& xdot, const VectorXd& qdot_
 	// projected into the nullspace
 	MatrixXd JinvJ = Jinv*J;
 	MatrixXd I = MatrixXd::Identity(7,7);
-	qdot = Jinv * xdot + (I - JinvJ) * qdot_nullspace * nullspace_gain;
+	VectorXd qdot_jacobian_pure = Jinv * xdot;
+	VectorXd qdot_jacobian_null = (I - JinvJ) * qdot_nullspace * nullspace_gain;
+	if(debug) DISPLAY_VECTOR(qdot_jacobian_pure);
+	if(debug) DISPLAY_VECTOR(qdot_jacobian_null);
+	qdot = qdot_jacobian_pure + qdot_jacobian_null;
 }
 
 /* ******************************************************************************************** */
@@ -119,6 +123,7 @@ void WorkspaceControl::update (const VectorXd& ui, const VectorXd& ft,
 
 	// Compute qdot with the dampened inverse Jacobian, using nullspace projection to achieve our 
 	// secondary goal
+	if(debug) DISPLAY_VECTOR(qdot_secondary);
 	refJSVelocity(xdot_apply, qdot_secondary, qdot);
 }
 
