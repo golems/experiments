@@ -89,22 +89,23 @@ VectorXd elbowQdot (const VectorXd xdotElbow, Side side) {
 /// and moves the left arm end-effector to that position
 void Timer::Notify() {
 
-	static int c_ = 0;
-	myDebug = ((c_++ % 5) == 0);
-	ws->debug = myDebug;
-	if(myDebug) std::cout << "\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << std::endl;
-
 	// ============================================================================
-	// Update the time and spacenav reading, and compute the input velocities
 	// Handle some timing and debug stuff
 
 	// Update times
+	static double time_last_display = aa_tm_timespec2sec(aa_tm_now());
 	static double time_last = aa_tm_timespec2sec(aa_tm_now());
 	double time_now = aa_tm_timespec2sec(aa_tm_now());
 	double time_delta = time_now - time_last;
 	time_last = time_now;
 
-/*
+	static double DISPLAY_FREQUENCY = 3.0;
+	myDebug = (time_now - time_last_display) > (1.0 / DISPLAY_FREQUENCY);
+	if (myDebug) time_last_display = time_now;
+	ws->debug = myDebug;
+
+	if(myDebug) std::cout << "\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << std::endl;
+
 	// ============================================================================
 	// Update the spacenav reading and compute the input velocities
 
@@ -140,28 +141,27 @@ void Timer::Notify() {
 	Eigen::VectorXd qdot_apply = qdot_avoid + qdot_jacobian;
 	if(myDebug) DISPLAY_VECTOR(qdot_apply);
 
-*/
-	
-	// Get the desired reference position for the elbow from the "g2" node
-	MatrixXd Tref = mWorld->getSkeleton("g2")->getNode("link_0")->getWorldTransform();
+	// // Get the desired reference position for the elbow from the "g2" node
+	// MatrixXd Tref = mWorld->getSkeleton("g2")->getNode("link_0")->getWorldTransform();
 
-	// Compute the desired workspace velocity for the elbow
-	kinematics::BodyNode* elbow = robot->getNode("L3");
-	MatrixXd Tcur = elbow->getWorldTransform();
-	VectorXd xdotElbow = Tref.topRightCorner<3,1>() - Tcur.topRightCorner<3,1>();
+	// // Compute the desired workspace velocity for the elbow
+	// kinematics::BodyNode* elbow = robot->getNode("L3");
+	// MatrixXd Tcur = elbow->getWorldTransform();
+	// VectorXd xdotElbow = Tref.topRightCorner<3,1>() - Tcur.topRightCorner<3,1>();
 
-	// Compute the desired jointspace velocity for the arm to achieve elbow position
-	VectorXd qdot_nullspace = elbowQdot(xdotElbow, LEFT);
-	VectorXd qdot_apply = qdot_nullspace;
+	// // Compute the desired jointspace velocity for the arm to achieve elbow position
+	// VectorXd qdot_nullspace = elbowQdot(xdotElbow, LEFT);
+	// VectorXd qdot_apply = qdot_nullspace;
 
 	// Apply the joint velocities
-	Eigen::VectorXd q = robot->getConfig(*ws->arm_ids);
-	q += qdot_apply * 0.03;
+	q += qdot_apply * time_delta;
 	
 	robot->setConfig(left_arm_ids, q);
 
 	// Visualize the scene
 	viewer->DrawGLScene();
+
+	// and start the timer for the next iteration
 	Start(0.005 * 1e4);
 }
 
