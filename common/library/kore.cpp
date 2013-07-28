@@ -215,9 +215,20 @@ void Hardware::initWheels () {
 	amc = new somatic_motor_t();
 	somatic_motor_init(daemon_cx, amc, 2, "amc-cmd", "amc-state");
 
+	// Set the min/max values for the pos/vel fields' valid and limit values
+	for(int i = 0; i < 2; i++) {
+		amc->pos_valid_min[i] = -1024.1;
+		amc->pos_valid_max[i] = 1024.1;
+		amc->pos_limit_min[i] = -1024.1;
+		amc->pos_limit_max[i] = 1024.1; 
+
+		amc->vel_valid_min[i] = -1024.1;
+		amc->vel_valid_max[i] = 1024.1;
+		amc->vel_limit_min[i] = -1024.1;
+		amc->vel_limit_max[i] = 1024.1;
+	}
+
 	// Update and reset them
-	somatic_motor_cmd(daemon_cx, amc, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 2, NULL);
-	usleep(1e5);
 	somatic_motor_update(daemon_cx, amc);
 	usleep(1e5);
 
