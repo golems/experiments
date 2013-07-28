@@ -216,8 +216,6 @@ void Hardware::initWheels () {
 	somatic_motor_init(daemon_cx, amc, 2, "amc-cmd", "amc-state");
 
 	// Update and reset them
-	somatic_motor_cmd(daemon_cx, amc, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 2, NULL);
-	usleep(1e5);
 	somatic_motor_update(daemon_cx, amc);
 	usleep(1e5);
 
