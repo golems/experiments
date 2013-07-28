@@ -8,16 +8,9 @@
  * as liberty and compliance plays with workspace reference configurations.
  */
 
-#define protected public
-#define private public
-
 #include "simTab.h"
 #include "GRIPApp.h"
 #include <math/UtilsRotation.h>
-
-#include <fstream>
-#include <iostream>
-#include <sstream>
 
 #include "workspace.h"
 #include "sensors.h"
@@ -29,14 +22,9 @@ using namespace dynamics;
 
 somatic_d_t daemon_cx;
 SkeletonDynamics* robot;
-std::map<Krang::Side, Vector7d> homeConfigs;			///< Home configurations for the arms
 std::map<Krang::Side, Vector7d> nullspace_qdot_refs;			///< nullspace configurations for the arms
 
 std::map<Krang::Side, Krang::SpaceNav*> spnavs; ///< points to spacenavs
-
-std::map<Krang::Side, dynamics::SkeletonDynamics*> endeff_markers; ///< things to use to indicate end effector references
-std::map<Krang::Side, dynamics::SkeletonDynamics*> elbow_markers; ///< things to use to indicate end effector references
-std::map<Krang::Side, kinematics::BodyNode*> elbows; ///< hold on to the elbows
 
 // workspace stuff
 std::map<Krang::Side, Krang::WorkspaceControl*> wss; ///< does workspace control for the arms
@@ -56,11 +44,8 @@ const double SPACENAV_ORIENTATION_GAIN = 0.75;
 const double SPACENAV_TRANSLATION_GAIN = 0.25; 
 const double COMPLIANCE_GAIN = 1.0 / 750.0;
 
-std::vector <Vector6d> data;
-
-
-static double LOOP_FREQUENCY = 10.0;
-static double DISPLAY_FREQUENCY = 3.0;
+const double LOOP_FREQUENCY = 10.0;
+const double DISPLAY_FREQUENCY = 3.0;
 
 /* ********************************************************************************************* */
 /// Gets the workspace velocity input from the spacenav, updates a workspace reference position
@@ -226,36 +211,21 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	                                         SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_GAIN);
 
 	// Manually set the initial arm configuration for the arms
-	homeConfigs[Krang::LEFT] <<  0.97, -0.589,  0.000, -1.339,  0.000, -0.959, -1.000;
-	homeConfigs[Krang::RIGHT] << -1.102,  0.589,  0.000,  1.339,  0.141,  0.959, -1.000;
-	robot->setConfig(*wss[Krang::LEFT]->arm_ids, homeConfigs[Krang::LEFT]);
-	robot->setConfig(*wss[Krang::RIGHT]->arm_ids, homeConfigs[Krang::RIGHT]);
+	Eigen::VectorXd homeConfigsL(7);
+	homeConfigsL <<  0.97, -0.589,  0.000, -1.339,  0.000, -0.959, -1.000;
+	Eigen::VectorXd homeConfigsR(7);
+	homeConfigsR << -1.102,  0.589,  0.000,  1.339,  0.141,  0.959, -1.000;
+	robot->setConfig(*wss[Krang::LEFT]->arm_ids, homeConfigsL);
+	robot->setConfig(*wss[Krang::RIGHT]->arm_ids, homeConfigsR);
 	wss[Krang::LEFT]->resetReferenceTransform();
 	wss[Krang::RIGHT]->resetReferenceTransform();
 
 	// set up the relative transform between the hands
 	Trel_left_to_right = wss[Krang::LEFT]->Tref.inverse() * wss[Krang::RIGHT]->Tref;
 
-	// Set up the indicator arrows
-	endeff_markers[Krang::LEFT] = mWorld->getSkeleton("g1");
-	endeff_markers[Krang::RIGHT] = mWorld->getSkeleton("g2");
-	elbow_markers[Krang::LEFT] = mWorld->getSkeleton("g3");
-	elbow_markers[Krang::RIGHT] = mWorld->getSkeleton("g4");
-	elbows[Krang::LEFT] = robot->getNode("L3");
-	elbows[Krang::RIGHT] = robot->getNode("R3");
-	
-	// set up nullspace things
-	for(int i = Krang::LEFT; i-1 < Krang::RIGHT; i++) {
-		Krang::Side sde = static_cast<Krang::Side>(i);
-
-		elbow_markers[sde]->setConfig(dart_root_dof_ids,
-		                              transformToEuler(elbows[sde]->getWorldTransform(), math::XYZ));
-	}
-
 	// Send a message; set the event code and the priority
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
 	                SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
-
 }
 
 /* ********************************************************************************************* */
@@ -275,9 +245,6 @@ SimTab::~SimTab() {
 
 	// Clean up the daemon resources
 	somatic_d_destroy(&daemon_cx);
-
-	for(size_t i = 0; i < data.size(); i++)
-		std::cout << data[i].transpose() << std::endl;
 }
 
 /* ********************************************************************************************* */
