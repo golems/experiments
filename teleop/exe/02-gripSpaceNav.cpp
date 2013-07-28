@@ -1,5 +1,5 @@
 /**
- * @file 05-spacenav.cpp
+ * @file 02-gripSpaceNav.cpp
  * @author Can Erdogan, Saul Reynolds-Haertle, Jon Scholtz
  * @date July 24, 2013
  * @brief This executable shows workspace control with a spacenav in the dart/grip environment.
@@ -15,209 +15,90 @@
 #include "GRIPApp.h"
 #include <math/UtilsRotation.h>
 
-#include "util.h"
-#include "initModules.h"
-#include "motion.h"
+#include "workspace.h"
+#include "sensors.h"
+#include "safety.h"
 
-using namespace std;
+using namespace Krang;
 using namespace Eigen;
 using namespace dynamics;
 
 somatic_d_t daemon_cx;
 ach_channel_t spacenav_chan;
-
 SkeletonDynamics* robot;
-vector <int> left_arm_ids;  ///< The indices to the Krang dofs in dart
-
 VectorXd homeConfig(7);			///< Home configuration for the left arm
-Matrix4d Tref;							///< The reference pos/ori for the left end-effector
 
-const Eigen::VectorXd JOINTLIMITREGIONS = (VectorXd(7) << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1).finished();
-const double JOINTLIMIT_MAXSTRENGTH = 3.0; // move joints up to this fast to avoid limits
-const double JOINTLIMIT_WIDTH = .01; // how "wide" the curve is that we use to avoid limits
-
-/* ******************************************************************************************** */
-Eigen::MatrixXd fix (const Eigen::MatrixXd& mat) {
-	Eigen::MatrixXd mat2 (mat);
-	for(size_t i = 0; i < mat2.rows(); i++)
-		for(size_t j = 0; j < mat2.cols(); j++)
-			if(fabs(mat2(i,j)) < 1e-5) mat2(i,j) = 0.0;
-	return mat2;
-}
+// workspace stuff
+Krang::WorkspaceControl* ws;
+VectorXd nullspace_dq_ref;
+bool myDebug;
 
 /* ********************************************************************************************* */
-/// Returns the 6 axes values from the spacenav
-bool getSpaceNav(VectorXd& config) {
-
-	// Get joystick data
-	int r = 0;
-	config = VectorXd::Zero(6);
-	Somatic__Joystick *js_msg = SOMATIC_GET_LAST_UNPACK(r, somatic__joystick,
-			&protobuf_c_system_allocator, 4096, &spacenav_chan);
-	if(!(ACH_OK == r || ACH_MISSED_FRAME == r) || (js_msg == NULL)) return false;
-
-	// Set the data to the input reference
-	Somatic__Vector* x = js_msg->axes;
-	config << -x->data[1], -x->data[0], -x->data[2], -x->data[4], -x->data[3], -x->data[5];
-
-	// Free the liberty message
-	somatic__joystick__free_unpacked(js_msg, &protobuf_c_system_allocator);
-	return true;
-}
-
-/* ********************************************************************************************* */
-/// softly resist movements into joint limits. Basically just set a
-/// velocity away from the limit and increase it as the joint gets
-/// closer to the limit; eventually the system will reach a point
-/// where the commanded velocity matches the velocity pushing back
-/// and the joint will safely stop.
-void computeQdotAvoidLimits(const Eigen::VectorXd& q, Eigen::VectorXd& qdot_avoid) {
-	double error;
-	double region;
-	for(int i = 0; i < 7; i++) {
-		// find our dof so we can get limits
-		kinematics::Dof* dof = robot->getDof(left_arm_ids[i]);
-
-		// store this so we aren't typing so much junk
-		region = JOINTLIMITREGIONS[i];
-
-		// no avoidance if we arne't near a limit
-		qdot_avoid[i] = 0.0;
-
-		// if we're close to hitting the lower limit, move positive
-		if (q[i] < dof->getMin()) {
-			qdot_avoid[i] = JOINTLIMIT_MAXSTRENGTH;
-		}
-		if (q[i] < dof->getMin() + region) {
-			// figure out how close we are to the limit.
-			error = q[i] - dof->getMin();
-
-			// take the inverse to get the magnitude of our response
-			// subtract 1/region so that our response starts at zero
-			qdot_avoid[i] = (JOINTLIMIT_WIDTH / error) - (JOINTLIMIT_WIDTH / region);
-
-			// clamp it to the maximum allowed avoidance strength
-			qdot_avoid[i] = std::min(qdot_avoid[i], JOINTLIMIT_MAXSTRENGTH);
-		}
-
-		// if we're close to hitting the lower limit, move positive
-		if (q[i] > dof->getMax()) {
-			qdot_avoid[i] = -JOINTLIMIT_MAXSTRENGTH;
-		}
-		if (q[i] > dof->getMax() - region) {
-			// figure out how close we are to the limit.
-			error = q[i] - dof->getMax();
-
-			// take the inverse to get the magnitude of our response
-			// subtract 1/region so that our response starts at zero
-			qdot_avoid[i] = (JOINTLIMIT_WIDTH / error) + (JOINTLIMIT_WIDTH / region);
-
-			// clamp it to the maximum allowed avoidance strength
-			qdot_avoid[i] = std::max(qdot_avoid[i], -JOINTLIMIT_MAXSTRENGTH);
-		}
-	}
-}
-
-/* ********************************************************************************************* */
-/// Scales the parameter spacenav input and computes the new reference configuration
-void updateReference (VectorXd& spacenav_input) {
-
-	// Scale the translation and orientation components of displacement; and make a matrix for it
-	spacenav_input.topLeftCorner<3,1>() *= 0.02;
-	spacenav_input.bottomLeftCorner<3,1>() *= 0.06;
-	Matrix4d xdotM = Krang::eulerToTransform(spacenav_input, math::XYZ);
-	
-	// Compute the displacement in the end-effector frame with a similarity transform
-	Matrix4d R = Tref;
-	R.topRightCorner<3,1>().setZero();
-	Matrix4d Tdisp = R.inverse() * xdotM * R;
-
-	// Update the reference position for the end-effector with the given workspace velocity
-	Tref = Tref * Tdisp;
-}
-
-/* ********************************************************************************************* */
-/// Returns the workspace velocity, xdot, from the reference, Tref, using the current arm
-/// configuration
-void getXdotFromXref (VectorXd& xdot) {
-
-	// Get the current end-effector transform and also, just its orientation 
-	Matrix4d Tcur = robot->getNode("lGripper")->getWorldTransform();
-	Matrix4d Rcur = Tcur;
-	Rcur.topRightCorner<3,1>().setZero();
-
-	// Apply the similarity transform to the displacement between current transform and reference
-	Matrix4d Tdisp = Tcur.inverse() * Tref;
-	Matrix4d xdotM = Rcur * Tdisp * Rcur.inverse();
-	xdot = Krang::transformToEuler(xdotM, math::XYZ);
-}
-
-/* ********************************************************************************************* */
-/// Compute qdot with the dampened inverse Jacobian with nullspace projection
-/// Important constants are for the null space gain, the dampening gain and the second goal pos.
-void getQdot (const VectorXd& xdot, VectorXd& qdot) {
-
-	// Set the parameter constants
-	static const double dampGain = 0.005;
-	static const double qdotRefDt = 0.1;
-	static const VectorXd qRef = (VectorXd(7) << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0).finished();
-
-	// Get the Jacobian for the left end-effector
-	kinematics::BodyNode* ee = robot->getNode("lGripper");
-	MatrixXd Jlin = ee->getJacobianLinear().topRightCorner<3,7>();
-	MatrixXd Jang = ee->getJacobianAngular().topRightCorner<3,7>();
-	MatrixXd J (6,7);
-	J << Jlin, Jang;
-
-	// Compute the inverse of the Jacobian with dampening
-	MatrixXd Jt = J.transpose(), JJt = J * Jt;
-	for (int i=0; i < JJt.rows(); i++) JJt(i,i) += dampGain;
-
-	// Compute the reference joint velocities for nullspace projection
-	VectorXd q = robot->getConfig(left_arm_ids);
-	VectorXd qDotRef = (qRef - q) * qdotRefDt;
-	
-	// Compute the qdot using the reference joint velocity and the reference position 
-	MatrixXd Jinv = Jt * JJt.inverse();
-	MatrixXd JinvJ = Jinv*J;
-	MatrixXd I = MatrixXd::Identity(7,7);
-	qdot = Jinv * xdot + (I - JinvJ) * qDotRef;
-}
+/// Configurations for workspace control
+const double K_WORKERR_P = 1.00;
+const double NULLSPACE_GAIN = 0.0;
+const Eigen::VectorXd NULLSPACE_Q_REF_INIT = 
+		(VectorXd(7) << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0).finished();
+const double DAMPING_GAIN = 0.005;
+const double SPACENAV_ORIENTATION_GAIN = 0.25;
+const double SPACENAV_TRANSLATION_GAIN = 0.25; 
+const double COMPLIANCE_GAIN = 1.0 / 750.0;
 
 /* ********************************************************************************************* */
 /// Gets the workspace velocity input from the spacenav, updates a workspace reference position
 /// and moves the left arm end-effector to that position
 void Timer::Notify() {
 
+	static int c_ = 0;
+	myDebug = ((c_++ % 5) == 0);
+	ws->debug = myDebug;
+	if(myDebug) std::cout << "\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << std::endl;
+
+	// ============================================================================
+	// Update the time and spacenav reading, and compute the input velocities
+
+	// Update times
+	static double time_last = aa_tm_timespec2sec(aa_tm_now());
+	double time_now = aa_tm_timespec2sec(aa_tm_now());
+	double time_delta = time_now - time_last;
+	time_last = time_now;
+
 	// Get the workspace velocity input from the spacenav
 	VectorXd spacenav_input (6);
-	bool result = false;
-	while(!result) result = getSpaceNav(spacenav_input);
+	static Eigen::VectorXd last_spacenav_input = Eigen::VectorXd::Zero(6);
+	static int badSpaceNavCtr = 0;
+	if(!getSpaceNav(&spacenav_chan, spacenav_input)) 
+		spacenav_input = (badSpaceNavCtr++ > 20) ? VectorXd::Zero(6) : last_spacenav_input;
+	else badSpaceNavCtr = 0;
+	last_spacenav_input = spacenav_input;
 
-	// Update the reference configuration with the spacenav input and visualize it
-	updateReference(spacenav_input);
-	mWorld->getSkeleton("g1")->setConfig(Krang::dart_root_dof_ids, Krang::transformToEuler(Tref, math::XYZ));
-	pv(spacenav_input);
+	// Compute the desired jointspace velocity from the inputs (no ft sensor)
+	Eigen::VectorXd qdot_jacobian;
+	VectorXd ft = VectorXd::Zero(6);
+	ws->update(spacenav_input, ft, nullspace_dq_ref, time_delta, qdot_jacobian);
 
-	// Get xdot from the reference configuration
-	VectorXd xdot;
-	getXdotFromXref(xdot);
+	// ============================================================================
+	// Threshold the input jointspace velocity for safety and send them
 
-	// Compute qdot with the dampened inverse Jacobian with nullspace projection
-	VectorXd qdot;
-	getQdot(xdot, qdot);
+	// Scale the values down if the norm is too big or set it to zero if too small
+	double magn = qdot_jacobian.norm();
+	if(magn > 0.5) qdot_jacobian *= (0.5 / magn);
+	else if(magn < 0.05) qdot_jacobian = VectorXd::Zero(7);
+	if(myDebug) DISPLAY_VECTOR(qdot_jacobian);
 
-	// pull out our current configuration
-	Eigen::VectorXd q = robot->getConfig(left_arm_ids);
+	// Avoid joint limits - set velocities away from them as we get close
+	Eigen::VectorXd qdot_avoid(7);
+	Eigen::VectorXd q = robot->getConfig(*ws->arm_ids);
+	if(myDebug) DISPLAY_VECTOR(q);
+	computeQdotAvoidLimits(robot, *(ws->arm_ids), q, qdot_avoid);
+	if(myDebug) DISPLAY_VECTOR(qdot_avoid);
 
-	// avoid joint limits
-	VectorXd qdotAvoid(7);
-	computeQdotAvoidLimits(q, qdotAvoid);
-	pv(qdotAvoid);
-	qdot += qdotAvoid;
+	// Add our qdots together to get the overall movement
+	Eigen::VectorXd qdot_apply = qdot_avoid + qdot_jacobian;
+	if(myDebug) DISPLAY_VECTOR(qdot_apply);
 
 	// Apply the joint velocities
-	q += qdot * 0.03;
+	q += qdot_apply * 0.03;
 	robot->setConfig(left_arm_ids, q);
 
 	// Visualize the scene
@@ -260,23 +141,25 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	somatic_d_channel_open(&daemon_cx, &spacenav_chan, "spacenav-data", NULL);
 
 	// Manually set the initial arm configuration for the left arm
-	for(int i = 11; i < 24; i+=2) left_arm_ids.push_back(i);
 	homeConfig <<  1.102, -0.589,  0.000, -1.339,  0.000, -0.959, -1.000;
 	robot->setConfig(left_arm_ids, homeConfig);
 
 	// Also, set the imu and waist angles
-	vector <int> imuWaist_ids;
+	std::vector <int> imuWaist_ids;
 	imuWaist_ids.push_back(5);
 	imuWaist_ids.push_back(8);
 	Vector2d imuWaist (3.45, 2.81);
 	robot->setConfig(imuWaist_ids, imuWaist);
 
-	// Initialize the "initial" reference configuration for the end-effector with current
-	Tref = robot->getNode("lGripper")->getWorldTransform();
+	// Set up the workspace controllers
+	ws = new WorkspaceControl(robot, LEFT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
+		SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_GAIN);
+	nullspace_dq_ref = VectorXd::Zero(7);
 
 	// Send a message; set the event code and the priority
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
 			SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
+
 }
 
 /* ********************************************************************************************* */
