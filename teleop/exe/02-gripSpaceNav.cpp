@@ -34,6 +34,11 @@ std::map<Krang::Side, Krang::SpaceNav*> spnavs; ///< points to spacenavs
 std::map<Krang::Side, Krang::WorkspaceControl*> wss; ///< does workspace control for the arms
 bool myDebug;
 
+// sync-mode stuff
+Eigen::MatrixXd Trel_left_to_right; ///< translation from the left hand to the right hand
+Eigen::MatrixXd Trel_mid_to_right; ///< translation from the manipulation middle to the right hand
+Eigen::MatrixXd Trel_mid_to_left; ///< translation from the manipulation middle to the left hand
+
 /* ********************************************************************************************* */
 /// Configurations for workspace control
 const double K_WORKERR_P = 1.00;
@@ -41,7 +46,7 @@ const double NULLSPACE_GAIN = 0.0;
 const Eigen::VectorXd NULLSPACE_DQ_REF_INIT = 
 	(VectorXd(7) << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0).finished();
 const double DAMPING_GAIN = 0.005;
-const double SPACENAV_ORIENTATION_GAIN = 0.25;
+const double SPACENAV_ORIENTATION_GAIN = 0.75;
 const double SPACENAV_TRANSLATION_GAIN = 0.25; 
 const double COMPLIANCE_GAIN = 1.0 / 750.0;
 
@@ -106,7 +111,8 @@ void Timer::Notify() {
 	// wss[Krang::LEFT]->debug = myDebug;
 	// wss[Krang::RIGHT]->debug = myDebug;
 
-	if(myDebug) std::cout << "\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << std::endl;
+	// if(myDebug) 
+		std::cout << "\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << std::endl;
 
 	// Visualize the reference positions
 	VectorXd refConfigL = transformToEuler(wss[Krang::LEFT]->Tref, math::XYZ);
@@ -114,51 +120,155 @@ void Timer::Notify() {
 	VectorXd refConfigR = transformToEuler(wss[Krang::RIGHT]->Tref, math::XYZ);
 	mWorld->getSkeleton("g2")->setConfig(dart_root_dof_ids, refConfigR);
 
-	// run the arms
-	for(int sint = Krang::LEFT; sint-1 != Krang::RIGHT; sint++) {
-		// we can only iterate over an int, so convert to Side
-		Krang::Side s = static_cast<Krang::Side>(sint);
+	// get workspace velocity from spacenav for the right arm
+	// move the right arm as usual:
+	//   move position reference by spacenav velocity
+	//   get position-reference velocity from proportional controller
+	//   add pos-ref velocity to spacenav velocity
+	//   run result through jacobian
+	//   apply resulting jointspace velocity
 
-		// ============================================================================
-		// Update the spacenav reading and compute the input velocities
+
+	// ================================================================================
+	// right arm
+
+	// Get a workspace velocity input from the spacenav
+	Eigen::VectorXd spacenav_input_L = spnavs[Krang::LEFT]->updateSpaceNav();
+	Eigen::VectorXd xdot_spacenav_L = wss[Krang::LEFT]->uiInputVelToXdot(spacenav_input_L);
+
+	// compute the desired jointspace velocity from the inputs (ft is zero)
+	Eigen::VectorXd qdot_jacobian_L;
+	VectorXd ft_L = VectorXd::Zero(6);
+	wss[Krang::LEFT]->updateFromXdot(xdot_spacenav_L, ft_L, nullspace_dq_refs[Krang::LEFT], time_delta, qdot_jacobian_L);
+	
+	// make sure we're not going too fast
+	double magn = qdot_jacobian_L.norm();
+	if (magn > 0.5) qdot_jacobian_L *= (0.5 / magn);
+	if (magn < .05) qdot_jacobian_L *= 0.0;
+	
+	// avoid joint limits
+	Eigen::VectorXd qdot_avoid_L(7);
+	Eigen::VectorXd q_left = robot->getConfig(*wss[Krang::LEFT]->arm_ids);
+	computeQdotAvoidLimits(robot, *wss[Krang::LEFT]->arm_ids, q_left, qdot_avoid_L);
+	
+	// add qdots together to get the overall movement
+	Eigen::VectorXd qdot_apply_L = qdot_avoid_L + qdot_jacobian_L;
+
+	// and apply that to the right arm
+	q_left += qdot_apply_L * time_delta;
+	robot->setConfig(*wss[Krang::LEFT]->arm_ids, q_left);
+
+	// ================================================================================
+	// right arm
+	
+	// move the right arm in synch mode:
+	//   transform spacenav velocity to apply to right EE:
+	//     copy angular velocity from left
+	//     copy linear velocity from left
+	//     get additional linear velocity by multiplying angular velocity of left by relative translation from left to right
+	//   find position reference for right EE:
+	//     multiply position reference of left by relative transform from left to right
+	//     might not be necessary if numerical accuracy of velocity transformation is good enough to integrate
+	//   get pos-ref velocity
+	//   add pos-ref velocity to transformed spacenav velocity
+	//   run result through jacobian
+	//   apply resulting jointspace velocity to right arm
+
+	// // the angular and rotational velocities translate over
+	// // independently, so we can just copy the motion and update it to
+	// // account for the effect of the rotation on the translation
+	// Eigen::VectorXd xdot_spacenav_R = xdot_spacenav_L;
+	// DISPLAY_VECTOR(xdot_spacenav_R);
+
+	// // this is a table of partial derivatives of angle with respect to
+	// // time, in units of radians per second. multiply this by a vector
+	// // in meters to get a linear velocity in meters per second.
+	// Eigen::MatrixXd xdot_spacenav_R_mat = Krang::eulerToTransform(xdot_spacenav_R, math::XYZ);
+	// DISPLAY_MATRIX(xdot_spacenav_R_mat);
+
+	// // and we deal with that by using the relatve transform between
+	// // the hands
+	// // xdot_spacenav_R.topLeftCorner<3,1>() += Trel_left_to_right.topLeftCorner<3,3>() * xdot_spacenav_R.bottomLeftCorner<3,1>();
+	// xdot_spacenav_R[0] += 
+	// DISPLAY_VECTOR(xdot_spacenav_R);
+	
+	// // update the workspace controller using that as the input
+	// Eigen::VectorXd qdot_jacobian_R;
+	// Eigen::VectorXd ft_R = VectorXd::Zero(6);
+	// wss[Krang::RIGHT]->updateFromXdot(xdot_spacenav_R, ft_R, nullspace_dq_refs[Krang::RIGHT], time_delta, qdot_jacobian_R);
+	
+	// then, to see if it worked, figure out where the position
+	// reference should be using the relative transofrmation from the
+	// left hand to the right hand and compare
+	Eigen::MatrixXd Tref_R = wss[Krang::LEFT]->Tref * Trel_left_to_right;
+
+	// update the workspace controller for the other arm
+	Eigen::VectorXd qdot_jacobian_R;
+	Eigen::VectorXd ft_R = VectorXd::Zero(6);
+	wss[Krang::RIGHT]->updateFromPosRef(Tref_R, ft_R, nullspace_dq_refs[Krang::RIGHT], qdot_jacobian_R);
+
+	// make sure we're not going too fast
+	magn = qdot_jacobian_R.norm();
+	if (magn > 0.5) qdot_jacobian_R *= (0.5 / magn);
+	if (magn < .05) qdot_jacobian_R *= 0.0;
+	
+	// avoid joint limits
+	Eigen::VectorXd qdot_avoid_R(7);
+	Eigen::VectorXd q_right = robot->getConfig(*wss[Krang::RIGHT]->arm_ids);
+	computeQdotAvoidLimits(robot, *wss[Krang::RIGHT]->arm_ids, q_right, qdot_avoid_R);
+
+	// add qdots together to get the overall movement
+	Eigen::VectorXd qdot_apply_R = qdot_avoid_R + qdot_jacobian_R;
+	
+	// and apply that to the right arm
+	q_right += qdot_apply_R * time_delta;
+	robot->setConfig(*wss[Krang::RIGHT]->arm_ids, q_right);
+
+	// // run the arms
+	// for(int sint = Krang::LEFT; sint-1 != Krang::RIGHT; sint++) {
+	// 	// we can only iterate over an int, so convert to Side
+	// 	Krang::Side s = static_cast<Krang::Side>(sint);
+
+	// 	// ============================================================================
+	// 	// Update the spacenav reading and compute the input velocities
 		
-		// Get the workspace velocity input from the spacenav
-		VectorXd spacenav_input	= spnavs[s]->updateSpaceNav();
+	// 	// Get the workspace velocity input from the spacenav
+	// 	VectorXd spacenav_input	= spnavs[s]->updateSpaceNav();
 
-		// Compute the desired jointspace velocity from the inputs (no ft sensor)
-		Eigen::VectorXd qdot_jacobian;
-		VectorXd ft = VectorXd::Zero(6);
-		wss[s]->update(spacenav_input, ft, nullspace_dq_refs[s], time_delta, qdot_jacobian);
+	// 	// Compute the desired jointspace velocity from the inputs (no ft sensor)
+	// 	Eigen::VectorXd qdot_jacobian;
+	// 	VectorXd ft = VectorXd::Zero(6);
+	// 	wss[s]->update(spacenav_input, ft, nullspace_dq_refs[s], time_delta, qdot_jacobian);
 
-		// ============================================================================
-		// Threshold the input jointspace velocity for safety and send them
+	// 	// ============================================================================
+	// 	// Threshold the input jointspace velocity for safety and send them
 
-		// Scale the values down if the norm is too big or set it to zero if too small
-		double magn = qdot_jacobian.norm();
-		if(magn > 0.5) qdot_jacobian *= (0.5 / magn);
-		else if(magn < 0.05) qdot_jacobian = VectorXd::Zero(7);
+	// 	// Scale the values down if the norm is too big or set it to zero if too small
+	// 	double magn = qdot_jacobian.norm();
+	// 	if(magn > 0.5) qdot_jacobian *= (0.5 / magn);
+	// 	else if(magn < 0.05) qdot_jacobian = VectorXd::Zero(7);
 
-		// Avoid joint limits - set velocities away from them as we get close
-		Eigen::VectorXd qdot_avoid(7);
-		Eigen::VectorXd q = robot->getConfig(*wss[s]->arm_ids);
-		computeQdotAvoidLimits(robot, *(wss[s]->arm_ids), q, qdot_avoid);
+	// 	// Avoid joint limits - set velocities away from them as we get close
+	// 	Eigen::VectorXd qdot_avoid(7);
+	// 	Eigen::VectorXd q = robot->getConfig(*wss[s]->arm_ids);
+	// 	computeQdotAvoidLimits(robot, *(wss[s]->arm_ids), q, qdot_avoid);
 
-		// Add our qdots together to get the overall movement
-		Eigen::VectorXd qdot_apply = qdot_avoid + qdot_jacobian;
+	// 	// Add our qdots together to get the overall movement
+	// 	Eigen::VectorXd qdot_apply = qdot_avoid + qdot_jacobian;
 
-		// Apply the joint velocities
-		q += qdot_apply * time_delta;
-		robot->setConfig(*wss[s]->arm_ids, q);
+	// 	// Apply the joint velocities
+	// 	q += qdot_apply * time_delta;
+	// 	robot->setConfig(*wss[s]->arm_ids, q);
 
-		// do debug display
-		if (myDebug) {
-			// std::cout << "Side: " << s << std::endl;
-			// DISPLAY_VECTOR(qdot_apply);
-			// DISPLAY_VECTOR(qdot_avoid);
-			// DISPLAY_VECTOR(qdot_jacobian);
-			// DISPLAY_VECTOR(q);
-		}
-	}
+	// 	// do debug display
+	// 	if (myDebug) {
+	// 		// std::cout << "Side: " << s << std::endl;
+	// 		// DISPLAY_VECTOR(qdot_apply);
+	// 		// DISPLAY_VECTOR(qdot_avoid);
+	// 		// DISPLAY_VECTOR(qdot_jacobian);
+	// 		// DISPLAY_VECTOR(q);
+	// 	}
+	// }
 
 	// Visualize the scene
 	viewer->DrawGLScene();
@@ -227,6 +337,18 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	robot->setConfig(*wss[Krang::RIGHT]->arm_ids, homeConfigs[Krang::RIGHT]);
 	wss[Krang::LEFT]->resetReferenceTransform();
 	wss[Krang::RIGHT]->resetReferenceTransform();
+
+	// // initialize sync-mode stuff
+	Trel_left_to_right = wss[Krang::LEFT]->Tref.inverse() * wss[Krang::RIGHT]->Tref;
+	// Eigen::MatrixXd Trel_left_to_right = wss[Krang::LEFT]->Tref.inverse() * wss[Krang::RIGHT]->Tref;
+	// Eigen::MatrixXd Trel_left_to_middle = Trel_left_to_right;
+	// Trel_left_to_middle.topRightCorner<3,1> *= 0.5;
+	// Eigen::MatrixXd Tmiddle = wss[Krang::LEFT]->Tref * Trel_left_to_middle;
+	// Eigen::MatrixXd Trel_mid_to_left = Trel_left_to_middle.inverse();
+	// Eigen::MatrixXd Trel_mid_to_right = Tmiddle.inverse() * wss[Krang::RIGHT]->Tref;
+	// DISPLAY_MATRIX(Trel_mid_to_left);
+	// DISPLAY_MATRIX(Trel_mid_to_right);
+	// exit(EXIT_SUCCESS);
 
 	// and the nullspace references
 	nullspace_dq_refs[Krang::LEFT] = NULLSPACE_DQ_REF_INIT;

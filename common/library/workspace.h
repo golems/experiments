@@ -35,12 +35,24 @@ public:
 	void refJSVelocity(const VectorXd& xdot, const VectorXd& qdot_nullspace, VectorXd& qdot);
 
 	/// Returns the reference jointspace velocity incorporating the ui device and f/t sensor values
-	void update (const VectorXd& ui, const VectorXd& ft, const VectorXd& qdot_secondary, double dt, 
+	void updateFromUI (const VectorXd& ui, const VectorXd& ft, const VectorXd& qdot_secondary, double dt, 
 			VectorXd& qdot);
+
+	/// Returns the reference jointspace velocity incorporating the ui device and f/t sensor values
+	void updateFromXdot (const VectorXd& xdot, const VectorXd& ft, const VectorXd& qdot_secondary, double dt, 
+			VectorXd& qdot);
+
+	// Returns the reference jointspace velocity incorporating
+	// position input from teh ui device and f/t sensor values
+	void updateFromPosRef(const MatrixXd& xref, const VectorXd& ft, const VectorXd& qdot_secondary, VectorXd& qdot);
 
 	/// Sets the workspace controller's goal to the current end
 	/// effector position
 	void resetReferenceTransform();
+
+	/// Transforms a velocity-space user interface inptu into a
+	/// workspace velocity
+	Eigen::VectorXd uiInputVelToXdot(const VectorXd& ui_vel);
 
 public:
 	// Variables that represent the state of the end-effector or how we can control it
@@ -65,3 +77,7 @@ public:
 };
 
 };	// end of namespace
+
+// Local Variables:
+// mode: c++
+// End:
