@@ -15,6 +15,10 @@
 #include "GRIPApp.h"
 #include <math/UtilsRotation.h>
 
+#include <fstream>
+#include <iostream>
+#include <sstream>
+
 #include "workspace.h"
 #include "sensors.h"
 #include "safety.h"
@@ -36,13 +40,15 @@ bool myDebug;
 /* ********************************************************************************************* */
 /// Configurations for workspace control
 const double K_WORKERR_P = 1.00;
-const double NULLSPACE_GAIN = 0.0;
+const double NULLSPACE_GAIN = 1.0;
 const Eigen::VectorXd NULLSPACE_Q_REF_INIT = 
 		(VectorXd(7) << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0).finished();
 const double DAMPING_GAIN = 0.005;
 const double SPACENAV_ORIENTATION_GAIN = 0.25;
 const double SPACENAV_TRANSLATION_GAIN = 0.25; 
 const double COMPLIANCE_GAIN = 1.0 / 750.0;
+
+std::vector <Vector6d> data;
 
 /* ********************************************************************************************* */
 /// Given a desired workspace translation vel. for the elbow, returns the jointspace velocities for 
@@ -67,13 +73,13 @@ VectorXd elbowQdot (const VectorXd xdotElbow, Side side) {
 	if(myDebug) std::cout << "JlinInv:\n" << JlinInv << std::endl;
 
 	// Compute the qdotElbow
-	VectorXd qdotElbow = JlinInv * xdotElbow;
+	VectorXd qdotElbow = Jlin.transpose() * xdotElbow;
 	if(myDebug) std::cout << "qdotElbow before magn: " << qdotElbow.transpose() << std::endl;
 	
 	// Limit the magnitude of the velocity
 	double magn = qdotElbow.norm();
 	if(magn > 0.5) qdotElbow *= (0.5 / magn);
-	else if(magn < 0.05) qdotElbow = VectorXd::Zero(3);
+	else if(magn < 0.0005) qdotElbow = VectorXd::Zero(3);
 	if(myDebug) DISPLAY_VECTOR(qdotElbow);
 
 	// Fill the last 4 values with zeroes to get a velocity for the entire arm
@@ -81,6 +87,21 @@ VectorXd elbowQdot (const VectorXd xdotElbow, Side side) {
 	qdotElbowFull.topLeftCorner<3,1>() = qdotElbow;
 	if(myDebug) DISPLAY_VECTOR(qdotElbowFull);
 	return qdotElbowFull;
+}
+
+/* ********************************************************************************************* */
+/// Returns the joint angles for the top two joints which control the location of the elbow
+void getElbowAngles (const Vector3d& ref, double imuWaist, double& q0, double& q1) {
+
+	// Get the reference in the left arm base joint frame
+	double x = cos(imuWaist) * ref(0) - sin(imuWaist) * ref(2);
+	double y = ref(1);
+	double z = sin(imuWaist) * ref(0) + cos(imuWaist) * ref(2);
+
+	// Compute the angles
+	q0 = -atan2(-z, x);
+	q1 = atan2(-x * cos(q0) - z * sin(q0), y);
+	q0 += M_PI_2;
 }
 
 /* ********************************************************************************************* */
@@ -102,7 +123,6 @@ void Timer::Notify() {
 	double time_delta = time_now - time_last;
 	time_last = time_now;
 
-/*
 	// Get the workspace velocity input from the spacenav
 	VectorXd spacenav_input (6);
 	static Eigen::VectorXd last_spacenav_input = Eigen::VectorXd::Zero(6);
@@ -111,6 +131,21 @@ void Timer::Notify() {
 		spacenav_input = (badSpaceNavCtr++ > 20) ? VectorXd::Zero(6) : last_spacenav_input;
 	else badSpaceNavCtr = 0;
 	last_spacenav_input = spacenav_input;
+
+	bool readFromFile = true;
+	static size_t dataCounter = 0;
+	if(readFromFile) spacenav_input = data[std::min(data.size() - 1, dataCounter++)];
+	else data.push_back(spacenav_input);
+
+	// Get the joint angles we want to bias towards
+	Eigen::VectorXd q = robot->getConfig(*ws->arm_ids);
+	MatrixXd Tg2 = mWorld->getSkeleton("g2")->getNode("link_0")->getWorldTransform();
+	MatrixXd TL2 = mWorld->getSkeleton("Krang")->getNode("L1")->getWorldTransform();
+	Vector3d Tref = Tg2.topRightCorner<3,1>() - TL2.topRightCorner<3,1>();
+	double offset = -3.45 + 2.81;
+	VectorXd qElbowRef = q;
+	getElbowAngles(Tref, offset, qElbowRef(0), qElbowRef(1));
+	nullspace_dq_ref = (qElbowRef - q).normalized();
 
 	// Compute the desired jointspace velocity from the inputs (no ft sensor)
 	Eigen::VectorXd qdot_jacobian;
@@ -132,7 +167,6 @@ void Timer::Notify() {
 
 	// Avoid joint limits - set velocities away from them as we get close
 	Eigen::VectorXd qdot_avoid(7);
-	Eigen::VectorXd q = robot->getConfig(*ws->arm_ids);
 	if(myDebug) DISPLAY_VECTOR(q);
 	computeQdotAvoidLimits(robot, *(ws->arm_ids), q, qdot_avoid);
 	if(myDebug) DISPLAY_VECTOR(qdot_avoid);
@@ -140,31 +174,33 @@ void Timer::Notify() {
 	// Add our qdots together to get the overall movement
 	Eigen::VectorXd qdot_apply = qdot_avoid + qdot_jacobian;
 	if(myDebug) DISPLAY_VECTOR(qdot_apply);
-
-*/
 	
-	// Get the desired reference position for the elbow from the "g2" node
-	MatrixXd Tref = mWorld->getSkeleton("g2")->getNode("link_0")->getWorldTransform();
-
-	// Compute the desired workspace velocity for the elbow
-	kinematics::BodyNode* elbow = robot->getNode("L3");
-	MatrixXd Tcur = elbow->getWorldTransform();
-	VectorXd xdotElbow = Tref.topRightCorner<3,1>() - Tcur.topRightCorner<3,1>();
-
-	// Compute the desired jointspace velocity for the arm to achieve elbow position
-	VectorXd qdot_nullspace = elbowQdot(xdotElbow, LEFT);
-	VectorXd qdot_apply = qdot_nullspace;
-
-	// Apply the joint velocities
-	Eigen::VectorXd q = robot->getConfig(*ws->arm_ids);
-	q += qdot_apply * 0.03;
-	
+	// Integrate the qdot we want to apply
+	q += 0.03 * qdot_apply;
 	robot->setConfig(left_arm_ids, q);
 
 	// Visualize the scene
 	viewer->DrawGLScene();
 	Start(0.005 * 1e4);
 }
+
+/* ********************************************************************************************* */
+void readData () {
+
+	std::ifstream file ("data");
+	assert(file.is_open());
+	char line [1024];
+	while(file.getline(line, 1024)) {
+		std::stringstream stream(line, std::stringstream::in);
+		double newDouble;
+		VectorXd newData (6);
+		size_t i = 0;
+		while ((stream >> newDouble)) (newData)(i++) = newDouble;
+		data.push_back(newData);
+		std::cout << newData.transpose() << std::endl;
+	}
+}
+
 
 /* ********************************************************************************************* */
 SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const wxSize& size,
@@ -191,6 +227,8 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	// ============================================================================
 	// Initialize robot stuff
 
+	readData();
+
 	// Initialize this daemon (program!)
 	somatic_d_opts_t dopt;
 	memset(&dopt, 0, sizeof(dopt)); 
@@ -211,15 +249,14 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	Vector2d imuWaist (3.45, 2.81);
 	robot->setConfig(imuWaist_ids, imuWaist);
 
-	// Set the position of the reference indicator, g2, to elbow position
-	kinematics::BodyNode* elbow = robot->getNode("L3");
-	MatrixXd Tcur = elbow->getWorldTransform();
-	mWorld->getSkeleton("g2")->setConfig(dart_root_dof_ids, transformToEuler(Tcur, math::XYZ));
+  // Set the position of the reference indicator, g2, to elbow position
+  kinematics::BodyNode* elbow = robot->getNode("L3");
+  MatrixXd Tcur = elbow->getWorldTransform();
+  mWorld->getSkeleton("g2")->setConfig(dart_root_dof_ids, transformToEuler(Tcur, math::XYZ));
 
 	// Set up the workspace controllers
 	ws = new WorkspaceControl(robot, LEFT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
 		SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_GAIN);
-	nullspace_dq_ref = VectorXd::Zero(7);
 
 	// Send a message; set the event code and the priority
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
@@ -236,6 +273,9 @@ SimTab::~SimTab() {
 
 	// Clean up the daemon resources
 	somatic_d_destroy(&daemon_cx);
+
+	for(size_t i = 0; i < data.size(); i++)
+		std::cout << data[i].transpose() << std::endl;
 }
 
 /* ********************************************************************************************* */
