@@ -17,8 +17,8 @@ done
 #### start up daemons
 ach mk spacenav-data -o 666 -1
 ach mk spacenav2-data -o 666 -1
-nohup jachd -j 2 -c spacenav-data -I jachd-spacenav >/dev/null &
-nohup jachd -j 1 -c spacenav2-data -I jachd-spacenav2 >/dev/null &
+nohup jachd -j 1 -c spacenav-data -I jachd-spacenav >/dev/null &
+nohup jachd -j 0 -c spacenav2-data -I jachd-spacenav2 >/dev/null &
 
 if [[ -n $DO_LIBERTY ]] 
 then

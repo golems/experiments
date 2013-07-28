@@ -77,19 +77,12 @@ void WorkspaceControl::refJSVelocity(const VectorXd& xdot, const VectorXd& qdot_
 	MatrixXd Jt = J.transpose();
 	MatrixXd JJt = J * Jt;
 	for(int i = 0; i < JJt.rows(); i++) JJt(i,i) += damping_gain;
+	MatrixXd JJtinv = JJt;
+	aa_la_inv(6, JJtinv.data());
+	MatrixXd Jinv = Jt * JJtinv;
 	
 	// Compute the joint velocities qdot using the input xdot and a qdot for the secondary goal 
 	// projected into the nullspace
-	double aminoInv [36];
-	for(size_t i = 0, c = 0; i < 6; i++)
-		for(size_t j = 0; j < 6; j++, c++)
-			aminoInv[c] = JJt(i,j);
-	aa_la_inv(6, aminoInv);
-	MatrixXd JJtinv (6,6);
-	for(size_t i = 0, c = 0; i < 6; i++)
-		for(size_t j = 0; j < 6; j++, c++)
-			JJtinv(i,j) = aminoInv[c];
-	MatrixXd Jinv = Jt * JJtinv;
 	MatrixXd JinvJ = Jinv*J;
 	MatrixXd I = MatrixXd::Identity(7,7);
 	qdot = Jinv * xdot + (I - JinvJ) * qdot_nullspace * nullspace_gain;
