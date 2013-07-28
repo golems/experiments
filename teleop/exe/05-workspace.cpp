@@ -27,7 +27,7 @@ using namespace Krang;
 const double K_WORKERR_P = 1.00;
 const double NULLSPACE_GAIN = 0.1;
 const double DAMPING_GAIN = 0.005;
-const double SPACENAV_ORIENTATION_GAIN = 0.25;
+const double SPACENAV_ORIENTATION_GAIN = 0.50;
 const double SPACENAV_TRANSLATION_GAIN = 0.25; 
 const double COMPLIANCE_GAIN = 1.0 / 750.0;
 
@@ -97,7 +97,9 @@ void run() {
 
 		// set up debug printing
 		debug_print_this_it = (time_now - time_last_display) > (1.0 / DISPLAY_FREQUENCY);
-		if (debug_print_this_it) time_last_display = time_now;
+		if(debug_print_this_it) time_last_display = time_now;
+		if(debug_print_this_it) 
+			std::cout << "\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv\n";
 
 		// Update the robot
 		hw->updateSensors(time_delta);
@@ -113,6 +115,7 @@ void run() {
 		// ================================================================================
 		// Do workspace control for each arm
 		for(int i = Krang::LEFT; i-1 < Krang::RIGHT; i++) {
+
 			Krang::Side sde = static_cast<Krang::Side>(i);
 
 			// Get the joint angles for the arm for later use
@@ -128,7 +131,7 @@ void run() {
 			Eigen::VectorXd xdot_spacenav = wss[sde]->uiInputVelToXdot(spacenav_input);
 
 			// Compute the desired jointspace velocity from the inputs and sensors
-			Eigen::VectorXd qdot_jacobian;
+			Eigen::VectorXd qdot_jacobian (7);
 			wss[sde]->updateFromXdot(xdot_spacenav,
 			                         fts[sde]->lastExternal,
 			                         nullspace_qdot_refs[sde],
@@ -147,16 +150,18 @@ void run() {
 			// add qdots together to get the overall movement
 			Eigen::VectorXd qdot_apply = qdot_avoid + qdot_jacobian;
 
-			// // and apply that to the arm
-			// somatic_motor_setvel(&daemon_cx,
-			//                      sde == Krang::LEFT ? hw->larm : hw->rarm,
-			//                      qdot_apply.data(),
-			//                      7);
+			// and apply that to the arm
+			somatic_motor_setvel(&daemon_cx,
+			                     sde == Krang::LEFT ? hw->larm : hw->rarm,
+			                     qdot_apply.data(),
+			                     7);
 
 			if (debug_print_this_it) {
+				printf("Arm: '%s'\n", sde == Krang::LEFT ? "LEFT" : "RIGHT");
+				DISPLAY_VECTOR(fts[sde]->lastExternal);
 				DISPLAY_VECTOR(nullspace_qdot_refs[sde]);
+				DISPLAY_VECTOR(xdot_spacenav);
 				DISPLAY_VECTOR(qdot_jacobian);
-				DISPLAY_VECTOR(q);
 				DISPLAY_VECTOR(qdot_apply);
 			}
 		}
@@ -189,7 +194,7 @@ void init() {
 	somatic_d_init(&daemon_cx, &daemon_opt);
 
 	// Initialize the hardware
-	Hardware::Mode mode = (Hardware::Mode)((Hardware::MODE_ALL & ~Hardware::MODE_RARM) & ~Hardware::MODE_GRIPPERS);
+	Hardware::Mode mode = (Hardware::Mode)(Hardware::MODE_ALL & ~Hardware::MODE_GRIPPERS);
 	hw = new Hardware(mode, &daemon_cx, robot);
 
 	// fill out the convenient force-torque pointers
