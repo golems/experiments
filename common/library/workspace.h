@@ -38,6 +38,10 @@ public:
 	void update (const VectorXd& ui, const VectorXd& ft, const VectorXd& qdot_secondary, double dt, 
 			VectorXd& qdot);
 
+	/// Sets the workspace controller's goal to the current end
+	/// effector position
+	void resetReferenceTransform();
+
 public:
 	// Variables that represent the state of the end-effector or how we can control it
 

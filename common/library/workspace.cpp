@@ -36,6 +36,11 @@ WorkspaceControl::WorkspaceControl (dynamics::SkeletonDynamics* robot, Side side
 }
 
 /* ******************************************************************************************** */
+	void WorkspaceControl::resetReferenceTransform() {
+		this->Tref = endEffector->getWorldTransform();
+	}
+
+/* ******************************************************************************************** */
 	void WorkspaceControl::integrateWSVelocityInput(const VectorXd& xdot, const double dt) {
 
 	// Represent the workspace velocity input as a 4x4 homogeneous matrix

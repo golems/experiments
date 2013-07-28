@@ -207,11 +207,6 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	spnavs[Krang::LEFT] = new Krang::SpaceNav(&daemon_cx, "spacenav-data-l", .5);
 	spnavs[Krang::RIGHT] = new Krang::SpaceNav(&daemon_cx, "spacenav-data-r", .5);
 
-	// Manually set the initial arm configuration for the left arm
-	homeConfigs[Krang::LEFT] <<  0.97, -0.589,  0.000, -1.339,  0.000, -0.959, -1.000;
-	homeConfigs[Krang::RIGHT] << -1.102,  0.589,  0.000,  1.339,  0.141,  0.959, -1.000;
-	robot->setConfig(left_arm_ids, homeConfigs[Krang::LEFT]);
-
 	// Also, set the imu and waist angles
 	std::vector <int> imuWaist_ids;
 	imuWaist_ids.push_back(5);
@@ -229,6 +224,14 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	                                        SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_GAIN);
 	wss[Krang::RIGHT] = new WorkspaceControl(robot, RIGHT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
 	                                         SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_GAIN);
+
+	// Manually set the initial arm configuration for the arms
+	homeConfigs[Krang::LEFT] <<  0.97, -0.589,  0.000, -1.339,  0.000, -0.959, -1.000;
+	homeConfigs[Krang::RIGHT] << -1.102,  0.589,  0.000,  1.339,  0.141,  0.959, -1.000;
+	robot->setConfig(*wss[Krang::LEFT]->arm_ids, homeConfigs[Krang::LEFT]);
+	robot->setConfig(*wss[Krang::RIGHT]->arm_ids, homeConfigs[Krang::RIGHT]);
+	wss[Krang::LEFT]->resetReferenceTransform();
+	wss[Krang::RIGHT]->resetReferenceTransform();
 
 	// and the nullspace references
 	nullspace_dq_refs[Krang::LEFT] = NULLSPACE_DQ_REF_INIT;
