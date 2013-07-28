@@ -79,7 +79,8 @@ void run() {
 	Eigen::VectorXd last_spacenav_input = Eigen::VectorXd::Zero(6);
 	while(!somatic_sig_received) {
 
-		myDebug = ((c_++ % 30) == 1);
+		myDebug = ((c_++ % 10) == 0);
+		ws->debug = myDebug;
 		if(myDebug) std::cout << "\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << std::endl;
 
 		// ============================================================================
@@ -114,7 +115,7 @@ void run() {
 		// Compute qdot for our secondary goal (currently, drive qo to
 		// a reference position
 		Eigen::VectorXd q = robot->getConfig(*ws->arm_ids);
-		Eigen::VectorXd qdot_secondary = q - nullspace_q_ref;
+		Eigen::VectorXd qdot_secondary = Vector7d::Zero(); //q - nullspace_q_ref;
 
 		// Compute the final xdot incorporating the input velocity and  compliance 
 		Eigen::VectorXd qdot_jacobian;
@@ -178,43 +179,11 @@ void init() {
 	// Set up the workspace controllers
 	ws = new WorkspaceControl(robot, LEFT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
 		SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_GAIN);
-	nullspace_q_ref = VectorXd::Zero(6);
+	nullspace_q_ref = VectorXd::Zero(7);
 
 	// Start the daemon running
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
 		SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
-}
-
-/* ******************************************************************************************** *
-WorkspaceControl::WorkspaceControl(somatic_d_t* _daemon_cx,
-                                   const char* _spacenav_chan_name,
-                                   std::vector<int>* _arm_ids,
-                                   kinematics::BodyNode* _endeff,
-                                   double _K_workerr_p) {
-	// grab variables we want to hold on to
-	this->daemon_cx = _daemon_cx;
-	this->endeff = _endeff;
-	this->K_workerr_p = _K_workerr_p;
-	this->arm_ids = _arm_ids;
-
-	// open up our ach channel
-	somatic_d_channel_open(this->daemon_cx, &this->spacenav_chan, _spacenav_chan_name, NULL);
-
-	// initialize our position reference to the end effector's current
-	// position, just to be safe.
-	this->t_ref = this->endeff->getWorldTransform();
-
-	// Set some constants
-	this->K_workerr_p = K_WORKERR_P_INIT;
-	this->nullspace_gain = NULLSPACE_GAIN_INIT;
-	this->nullspace_q_ref = NULLSPACE_Q_REF_INIT;
-	this->damping_gain = DAMPING_GAIN_INIT;
-}
-
-/* ******************************************************************************************** *
-/// Closes the spacenav channel
-WorkspaceControl::~WorkspaceControl() {
-	somatic_d_channel_close(this->daemon_cx, &this->spacenav_chan);
 }
 
 /* ******************************************************************************************** */
