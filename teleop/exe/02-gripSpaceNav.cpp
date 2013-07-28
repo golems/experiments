@@ -25,21 +25,21 @@ using namespace dynamics;
 
 somatic_d_t daemon_cx;
 SkeletonDynamics* robot;
-VectorXd homeConfig(7);			///< Home configuration for the left arm
+std::map<Krang::Side, Vector7d> homeConfigs;			///< Home configurations for the arms
+std::map<Krang::Side, Vector7d> nullspace_dq_refs;			///< nullspace configurations for the arms
 
-Krang::SpaceNav* spnav;
+std::map<Krang::Side, Krang::SpaceNav*> spnavs; ///< points to spacenavs
 
 // workspace stuff
-Krang::WorkspaceControl* ws;
-VectorXd nullspace_dq_ref;
+std::map<Krang::Side, Krang::WorkspaceControl*> wss; ///< does workspace control for the arms
 bool myDebug;
 
 /* ********************************************************************************************* */
 /// Configurations for workspace control
 const double K_WORKERR_P = 1.00;
 const double NULLSPACE_GAIN = 0.0;
-const Eigen::VectorXd NULLSPACE_Q_REF_INIT = 
-		(VectorXd(7) << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0).finished();
+const Eigen::VectorXd NULLSPACE_DQ_REF_INIT = 
+	(VectorXd(7) << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0).finished();
 const double DAMPING_GAIN = 0.005;
 const double SPACENAV_ORIENTATION_GAIN = 0.25;
 const double SPACENAV_TRANSLATION_GAIN = 0.25; 
@@ -102,61 +102,68 @@ void Timer::Notify() {
 	static double DISPLAY_FREQUENCY = 3.0;
 	myDebug = (time_now - time_last_display) > (1.0 / DISPLAY_FREQUENCY);
 	if (myDebug) time_last_display = time_now;
-	ws->debug = myDebug;
+	wss[Krang::LEFT]->debug = myDebug;
+	wss[Krang::RIGHT]->debug = myDebug;
 
 	if(myDebug) std::cout << "\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << std::endl;
 
+	// Visualize the reference positions
+	VectorXd refConfigL = transformToEuler(wss[Krang::LEFT]->Tref, math::XYZ);
+	mWorld->getSkeleton("g1")->setConfig(dart_root_dof_ids, refConfigL);
+	VectorXd refConfigR = transformToEuler(wss[Krang::RIGHT]->Tref, math::XYZ);
+	mWorld->getSkeleton("g2")->setConfig(dart_root_dof_ids, refConfigR);
+
+
 	// ============================================================================
 	// Update the spacenav reading and compute the input velocities
+	for(int sint = Krang::LEFT; sint-1 != Krang::RIGHT; sint++) {
+		// we can only iterate over an int, so convert to Side
+		Krang::Side s = static_cast<Krang::Side>(sint);
 
-	// Get the workspace velocity input from the spacenav
-	VectorXd spacenav_input	= spnav->updateSpaceNav();
+		// Get the workspace velocity input from the spacenav
+		VectorXd spacenav_input	= spnavs[s]->updateSpaceNav();
 
-	// Compute the desired jointspace velocity from the inputs (no ft sensor)
-	Eigen::VectorXd qdot_jacobian;
-	VectorXd ft = VectorXd::Zero(6);
-	ws->update(spacenav_input, ft, nullspace_dq_ref, time_delta, qdot_jacobian);
+		// Compute the desired jointspace velocity from the inputs (no ft sensor)
+		Eigen::VectorXd qdot_jacobian;
+		VectorXd ft = VectorXd::Zero(6);
+		wss[s]->update(spacenav_input, ft, nullspace_dq_refs[s], time_delta, qdot_jacobian);
 
-	// Visualize the reference position
-	VectorXd refConfig = transformToEuler(ws->Tref, math::XYZ);
-	mWorld->getSkeleton("g1")->setConfig(dart_root_dof_ids, refConfig);
+		// ============================================================================
+		// Threshold the input jointspace velocity for safety and send them
 
-	// ============================================================================
-	// Threshold the input jointspace velocity for safety and send them
+		// Scale the values down if the norm is too big or set it to zero if too small
+		double magn = qdot_jacobian.norm();
+		if(magn > 0.5) qdot_jacobian *= (0.5 / magn);
+		else if(magn < 0.05) qdot_jacobian = VectorXd::Zero(7);
+		if(myDebug) DISPLAY_VECTOR(qdot_jacobian);
 
-	// Scale the values down if the norm is too big or set it to zero if too small
-	double magn = qdot_jacobian.norm();
-	if(magn > 0.5) qdot_jacobian *= (0.5 / magn);
-	else if(magn < 0.05) qdot_jacobian = VectorXd::Zero(7);
-	if(myDebug) DISPLAY_VECTOR(qdot_jacobian);
+		// Avoid joint limits - set velocities away from them as we get close
+		Eigen::VectorXd qdot_avoid(7);
+		Eigen::VectorXd q = robot->getConfig(*wss[s]->arm_ids);
+		if(myDebug) DISPLAY_VECTOR(q);
+		computeQdotAvoidLimits(robot, *(wss[s]->arm_ids), q, qdot_avoid);
+		if(myDebug) DISPLAY_VECTOR(qdot_avoid);
 
-	// Avoid joint limits - set velocities away from them as we get close
-	Eigen::VectorXd qdot_avoid(7);
-	Eigen::VectorXd q = robot->getConfig(*ws->arm_ids);
-	if(myDebug) DISPLAY_VECTOR(q);
-	computeQdotAvoidLimits(robot, *(ws->arm_ids), q, qdot_avoid);
-	if(myDebug) DISPLAY_VECTOR(qdot_avoid);
+		// Add our qdots together to get the overall movement
+		Eigen::VectorXd qdot_apply = qdot_avoid + qdot_jacobian;
+		if(myDebug) DISPLAY_VECTOR(qdot_apply);
 
-	// Add our qdots together to get the overall movement
-	Eigen::VectorXd qdot_apply = qdot_avoid + qdot_jacobian;
-	if(myDebug) DISPLAY_VECTOR(qdot_apply);
+		// // Get the desired reference position for the elbow from the "g2" node
+		// MatrixXd Tref = mWorld->getSkeleton("g2")->getNode("link_0")->getWorldTransform();
 
-	// // Get the desired reference position for the elbow from the "g2" node
-	// MatrixXd Tref = mWorld->getSkeleton("g2")->getNode("link_0")->getWorldTransform();
+		// // Compute the desired workspace velocity for the elbow
+		// kinematics::BodyNode* elbow = robot->getNode("L3");
+		// MatrixXd Tcur = elbow->getWorldTransform();
+		// VectorXd xdotElbow = Tref.topRightCorner<3,1>() - Tcur.topRightCorner<3,1>();
 
-	// // Compute the desired workspace velocity for the elbow
-	// kinematics::BodyNode* elbow = robot->getNode("L3");
-	// MatrixXd Tcur = elbow->getWorldTransform();
-	// VectorXd xdotElbow = Tref.topRightCorner<3,1>() - Tcur.topRightCorner<3,1>();
+		// // Compute the desired jointspace velocity for the arm to achieve elbow position
+		// VectorXd qdot_nullspace = elbowQdot(xdotElbow, LEFT);
+		// VectorXd qdot_apply = qdot_nullspace;
 
-	// // Compute the desired jointspace velocity for the arm to achieve elbow position
-	// VectorXd qdot_nullspace = elbowQdot(xdotElbow, LEFT);
-	// VectorXd qdot_apply = qdot_nullspace;
-
-	// Apply the joint velocities
-	q += qdot_apply * time_delta;
-	
-	robot->setConfig(left_arm_ids, q);
+		// Apply the joint velocities
+		q += qdot_apply * time_delta;
+		robot->setConfig(*wss[s]->arm_ids, q);
+	}
 
 	// Visualize the scene
 	viewer->DrawGLScene();
@@ -197,11 +204,13 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	somatic_d_init(&daemon_cx, &dopt);
 
 	// Initialize the spacenav
-	spnav = new Krang::SpaceNav(&daemon_cx, "spacenav-data", .5);
+	spnavs[Krang::LEFT] = new Krang::SpaceNav(&daemon_cx, "spacenav-data-l", .5);
+	spnavs[Krang::RIGHT] = new Krang::SpaceNav(&daemon_cx, "spacenav-data-r", .5);
 
 	// Manually set the initial arm configuration for the left arm
-	homeConfig <<  0.97, -0.589,  0.000, -1.339,  0.000, -0.959, -1.000;
-	robot->setConfig(left_arm_ids, homeConfig);
+	homeConfigs[Krang::LEFT] <<  0.97, -0.589,  0.000, -1.339,  0.000, -0.959, -1.000;
+	homeConfigs[Krang::RIGHT] << -1.102,  0.589,  0.000,  1.339,  0.141,  0.959, -1.000;
+	robot->setConfig(left_arm_ids, homeConfigs[Krang::LEFT]);
 
 	// Also, set the imu and waist angles
 	std::vector <int> imuWaist_ids;
@@ -216,9 +225,14 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	mWorld->getSkeleton("g2")->setConfig(dart_root_dof_ids, transformToEuler(Tcur, math::XYZ));
 
 	// Set up the workspace controllers
-	ws = new WorkspaceControl(robot, LEFT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
-	                          SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_GAIN);
-	nullspace_dq_ref = VectorXd::Zero(7);
+	wss[Krang::LEFT] = new WorkspaceControl(robot, LEFT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
+	                                        SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_GAIN);
+	wss[Krang::RIGHT] = new WorkspaceControl(robot, RIGHT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
+	                                         SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_GAIN);
+
+	// and the nullspace references
+	nullspace_dq_refs[Krang::LEFT] = NULLSPACE_DQ_REF_INIT;
+	nullspace_dq_refs[Krang::RIGHT] = NULLSPACE_DQ_REF_INIT;
 
 	// Send a message; set the event code and the priority
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
@@ -234,10 +248,12 @@ SimTab::~SimTab() {
 			SOMATIC__EVENT__CODES__PROC_STOPPING, NULL, NULL);
 
 	// close workspace stuff
-	delete ws;
+	delete wss[Krang::LEFT];
+	delete wss[Krang::RIGHT];
 
 	// close spacenav stuff
-	delete spnav;
+	delete spnavs[Krang::LEFT];
+	delete spnavs[Krang::RIGHT];
 
 	// Clean up the daemon resources
 	somatic_d_destroy(&daemon_cx);
