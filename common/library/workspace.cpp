@@ -6,6 +6,7 @@
  */
 
 #include "workspace.h"
+#include <amino/math.h>
 
 namespace Krang {
 
@@ -16,7 +17,8 @@ WorkspaceControl::WorkspaceControl (dynamics::SkeletonDynamics* robot, Side side
 
 	// Determine the end-effector and the arm indices based on the input side
 	endEffector = robot->getNode((side == LEFT) ? "lGripper" : "rGripper");
-	arm_ids = (side == LEFT) ? &left_arm_ids : &right_arm_ids;
+	arm_ids = (side == LEFT) ? (&left_arm_ids) : (&right_arm_ids);
+	Tref = endEffector->getWorldTransform();
 	
 	// Set the gains for control
 	K_posRef_p = _K_posRef_p, nullspace_gain = _nullspace_gain, damping_gain = _damping_gain;
@@ -24,6 +26,13 @@ WorkspaceControl::WorkspaceControl (dynamics::SkeletonDynamics* robot, Side side
 	// Set the gains for sensors
 	ui_translation_gain = _ui_translation_gain, ui_orientation_gain = _ui_orientation_gain;
 	compliance_gain = _compliance_gain;
+	pc(K_posRef_p);
+	pc(nullspace_gain);
+	pc(damping_gain);
+	pc(ui_translation_gain);
+	pc(ui_orientation_gain);
+	pc(compliance_gain);
+	debug = false;
 }
 
 /* ******************************************************************************************** */
@@ -71,7 +80,16 @@ void WorkspaceControl::refJSVelocity(const VectorXd& xdot, const VectorXd& qdot_
 	
 	// Compute the joint velocities qdot using the input xdot and a qdot for the secondary goal 
 	// projected into the nullspace
-	MatrixXd Jinv = Jt * JJt.inverse();
+	double aminoInv [36];
+	for(size_t i = 0, c = 0; i < 6; i++)
+		for(size_t j = 0; j < 6; j++, c++)
+			aminoInv[c] = JJt(i,j);
+	aa_la_inv(6, aminoInv);
+	MatrixXd JJtinv (6,6);
+	for(size_t i = 0, c = 0; i < 6; i++)
+		for(size_t j = 0; j < 6; j++, c++)
+			JJtinv(i,j) = aminoInv[c];
+	MatrixXd Jinv = Jt * JJtinv;
 	MatrixXd JinvJ = Jinv*J;
 	MatrixXd I = MatrixXd::Identity(7,7);
 	qdot = Jinv * xdot + (I - JinvJ) * qdot_nullspace * nullspace_gain;

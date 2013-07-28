@@ -16,6 +16,7 @@ namespace Krang {
 class WorkspaceControl {
 public:
 
+
 	/// Constructor
 	WorkspaceControl (dynamics::SkeletonDynamics* robot, Side side, double _K_posRef_p, 
 			double nullspace_gain, double damping_gain, double ui_translation_gain, 
@@ -54,6 +55,9 @@ public:
 	double ui_translation_gain;		///< The constant multiplier for ui inputs translations (vel/pos)
 	double ui_orientation_gain;		///< The constant multiplier for ui inputs orientations (vel/pos)
 	double compliance_gain;	///< The effect of compliance in the workspace control
+
+public:
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
 
 };	// end of namespace
