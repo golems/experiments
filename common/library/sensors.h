@@ -49,14 +49,45 @@ public:
 };
 
 /* ******************************************************************************************** */
+class SpaceNav {
+public:
+	// functions
+
+	/// The constructor. Opens ach channel and initializes the cache.
+	SpaceNav(somatic_d_t* daemon_cx, char* chan_name, double cache_timeout);
+
+	/// The destructor. Closes ach channel.
+	~SpaceNav();
+
+	/// Gets a safe, clean reading from the spacenav. If the network
+	/// hiccups slightly or you call it too often, it returns a cached
+	/// value from the last successful input. If it's unable to get a
+	/// value for longer than cache_timout seconds, it assumes that
+	/// the network has actually died and returns a nice, safe zero
+	/// input.
+	Eigen::VectorXd updateSpaceNav();
+
+private:
+	/// Get a new reading off the spacenav. Returns false if there is
+	/// no new value to be had.
+	bool getSpaceNavRaw(Eigen::VectorXd& spacenav_input_raw);
+
+	Eigen::VectorXd last_spacenav_input; ///< Cache the last successful reading.
+	double cache_timeout; ///< How long we keep the cached value before assuming a disconnect
+	double time_last_input; ///< When we last got a good reading
+	somatic_d_t* daemon_cx; ///< Holds on to the daemon context so we can do ach channel things
+	ach_channel_t spacenav_chan; ///< The actual ach channel
+};
+
+/* ******************************************************************************************** */
 // Helper functions to update other sensors (i.e. imu, kinect..)
 
 /// Returns the imu value and filters it if a filter struct is given
 void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt, 
 	     filter_kalman_t* kf);
 
-/// Returns the spacenav value in a Vector6d such that the axis match the world coordinates 
-/// defined in Dart framework
-bool getSpaceNav (ach_channel_t* spacenav_chan, VectorXd& config);
-
 };	// end of namespace
+
+// Local Variables:
+// mode: c++
+// End:
