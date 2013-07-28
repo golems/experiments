@@ -24,9 +24,10 @@ using namespace Eigen;
 using namespace dynamics;
 
 somatic_d_t daemon_cx;
-ach_channel_t spacenav_chan;
 SkeletonDynamics* robot;
 VectorXd homeConfig(7);			///< Home configuration for the left arm
+
+Krang::SpaceNav* spnav;
 
 // workspace stuff
 Krang::WorkspaceControl* ws;
@@ -95,6 +96,7 @@ void Timer::Notify() {
 
 	// ============================================================================
 	// Update the time and spacenav reading, and compute the input velocities
+	// Handle some timing and debug stuff
 
 	// Update times
 	static double time_last = aa_tm_timespec2sec(aa_tm_now());
@@ -103,14 +105,11 @@ void Timer::Notify() {
 	time_last = time_now;
 
 /*
+	// ============================================================================
+	// Update the spacenav reading and compute the input velocities
+
 	// Get the workspace velocity input from the spacenav
-	VectorXd spacenav_input (6);
-	static Eigen::VectorXd last_spacenav_input = Eigen::VectorXd::Zero(6);
-	static int badSpaceNavCtr = 0;
-	if(!getSpaceNav(&spacenav_chan, spacenav_input)) 
-		spacenav_input = (badSpaceNavCtr++ > 20) ? VectorXd::Zero(6) : last_spacenav_input;
-	else badSpaceNavCtr = 0;
-	last_spacenav_input = spacenav_input;
+	VectorXd spacenav_input	= spnav->updateSpaceNav();
 
 	// Compute the desired jointspace velocity from the inputs (no ft sensor)
 	Eigen::VectorXd qdot_jacobian;
@@ -194,11 +193,11 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	// Initialize this daemon (program!)
 	somatic_d_opts_t dopt;
 	memset(&dopt, 0, sizeof(dopt)); 
-	dopt.ident = "05-spacenav";
+	dopt.ident = "02-gripSpaceNav";
 	somatic_d_init(&daemon_cx, &dopt);
 
-	// Initialize the spacenav channel
-	somatic_d_channel_open(&daemon_cx, &spacenav_chan, "spacenav-data", NULL);
+	// Initialize the spacenav
+	spnav = new Krang::SpaceNav(&daemon_cx, "spacenav-data", .5);
 
 	// Manually set the initial arm configuration for the left arm
 	homeConfig <<  0.97, -0.589,  0.000, -1.339,  0.000, -0.959, -1.000;
@@ -218,7 +217,7 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 
 	// Set up the workspace controllers
 	ws = new WorkspaceControl(robot, LEFT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
-		SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_GAIN);
+	                          SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_GAIN);
 	nullspace_dq_ref = VectorXd::Zero(7);
 
 	// Send a message; set the event code and the priority
@@ -233,6 +232,12 @@ SimTab::~SimTab() {
 	// Send the stopping event
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
 			SOMATIC__EVENT__CODES__PROC_STOPPING, NULL, NULL);
+
+	// close workspace stuff
+	delete ws;
+
+	// close spacenav stuff
+	delete spnav;
 
 	// Clean up the daemon resources
 	somatic_d_destroy(&daemon_cx);
