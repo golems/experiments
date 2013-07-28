@@ -167,21 +167,34 @@ void Hardware::updateSensors (double dt) {
 /* ******************************************************************************************** */
 void Hardware::updateKinematics () {
 
+	// unify the id vectors so we only have to make a single call
+	std::vector<int> all_ids;
+	all_ids.insert(all_ids.end(), imuWaist_ids.begin(), imuWaist_ids.end());
+	all_ids.insert(all_ids.end(), left_arm_ids.begin(), left_arm_ids.end());
+	all_ids.insert(all_ids.end(), right_arm_ids.begin(), right_arm_ids.end());
+
+	// a spot to unify the config vectors for same
+	Eigen::VectorXd all_vals(all_ids.size());
+
 	// Update imu and waist values
 	assert((mode & MODE_WAIST) && "This code assumes that the robot at least has the waist modules");
 	double waist_val = (waist->pos[0] - waist->pos[1]) / 2.0;
 	Vector2d imuWaist_vals (-imu + M_PI_2, waist_val);
-	robot->setConfig(imuWaist_ids, imuWaist_vals);
+	all_vals.block(1, 1, imuWaist_ids.size(), 1) = imuWaist_vals;
+	// robot->setConfig(imuWaist_ids, imuWaist_vals);
 
 	// Update the arms state
 	if(mode & MODE_LARM) {
 		Vector7d larm_vals = eig7(larm->pos);
-		robot->setConfig(left_arm_ids, larm_vals);
+		all_vals.block(imuWaist_ids.size(), 1, left_arm_ids.size(), 1) = larm_vals;
+		// robot->setConfig(left_arm_ids, larm_vals);
 	}
 	if(mode & MODE_RARM) {
 		Vector7d rarm_vals = eig7(rarm->pos);
-		robot->setConfig(right_arm_ids, rarm_vals);
+		all_vals.block(imuWaist_ids.size() + left_arm_ids.size(), 1, right_arm_ids.size(), 1) = rarm_vals;
+		// robot->setConfig(right_arm_ids, rarm_vals);
 	}
+	robot->setConfig(all_ids, all_vals);
 }
 
 /* ******************************************************************************************** */
