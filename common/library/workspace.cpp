@@ -101,30 +101,34 @@ void WorkspaceControl::update (const VectorXd& ui, const VectorXd& ft,
 	Eigen::VectorXd xdot_ui = ui;
 	xdot_ui.topLeftCorner<3,1>() *= ui_translation_gain;
 	xdot_ui.bottomLeftCorner<3,1>() *= ui_orientation_gain;
-	if(debug) DISPLAY_VECTOR(xdot_ui);
 
 	// Move the workspace references around from that ui input
 	integrateWSVelocityInput(xdot_ui, dt);
-	if(debug) DISPLAY_MATRIX(Tref);
 
 	// Compute an xdot for complying with external forces if the f/t values are within thresholds
 	Eigen::VectorXd xdot_comply;
-	if(debug) DISPLAY_VECTOR(ft);
 	xdot_comply = -ft * compliance_gain;
-	if(debug) DISPLAY_VECTOR(xdot_comply);
 
 	// Get an xdot out of the P-controller that's trying to drive us to the refernece position
 	Eigen::VectorXd xdot_posref;
 	refWSVelocity(xdot_posref);
-	if(debug) DISPLAY_VECTOR(xdot_posref);
 
 	// Combine the velocities from the workspace position goal, the ui, and the compliance
 	Eigen::VectorXd xdot_apply = xdot_posref + xdot_ui + xdot_comply;
-	if(debug) DISPLAY_VECTOR(xdot_apply);
 
 	// Compute qdot with the dampened inverse Jacobian, using nullspace projection to achieve our 
 	// secondary goal
 	refJSVelocity(xdot_apply, qdot_secondary, qdot);
+
+	// do debug printing
+	if (debug) {
+		DISPLAY_VECTOR(xdot_apply);
+		DISPLAY_VECTOR(xdot_posref);
+		DISPLAY_VECTOR(xdot_comply);
+		DISPLAY_VECTOR(ft);
+		DISPLAY_MATRIX(Tref);
+		DISPLAY_VECTOR(xdot_ui);
+	}
 }
 
 };	// end of namespace

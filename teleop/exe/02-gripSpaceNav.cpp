@@ -99,11 +99,12 @@ void Timer::Notify() {
 	double time_delta = time_now - time_last;
 	time_last = time_now;
 
+	// set up debug prints
 	static double DISPLAY_FREQUENCY = 3.0;
 	myDebug = (time_now - time_last_display) > (1.0 / DISPLAY_FREQUENCY);
 	if (myDebug) time_last_display = time_now;
-	wss[Krang::LEFT]->debug = myDebug;
-	wss[Krang::RIGHT]->debug = myDebug;
+	// wss[Krang::LEFT]->debug = myDebug;
+	// wss[Krang::RIGHT]->debug = myDebug;
 
 	if(myDebug) std::cout << "\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << std::endl;
 
@@ -113,13 +114,14 @@ void Timer::Notify() {
 	VectorXd refConfigR = transformToEuler(wss[Krang::RIGHT]->Tref, math::XYZ);
 	mWorld->getSkeleton("g2")->setConfig(dart_root_dof_ids, refConfigR);
 
-
-	// ============================================================================
-	// Update the spacenav reading and compute the input velocities
+	// run the arms
 	for(int sint = Krang::LEFT; sint-1 != Krang::RIGHT; sint++) {
 		// we can only iterate over an int, so convert to Side
 		Krang::Side s = static_cast<Krang::Side>(sint);
 
+		// ============================================================================
+		// Update the spacenav reading and compute the input velocities
+		
 		// Get the workspace velocity input from the spacenav
 		VectorXd spacenav_input	= spnavs[s]->updateSpaceNav();
 
@@ -135,34 +137,27 @@ void Timer::Notify() {
 		double magn = qdot_jacobian.norm();
 		if(magn > 0.5) qdot_jacobian *= (0.5 / magn);
 		else if(magn < 0.05) qdot_jacobian = VectorXd::Zero(7);
-		if(myDebug) DISPLAY_VECTOR(qdot_jacobian);
 
 		// Avoid joint limits - set velocities away from them as we get close
 		Eigen::VectorXd qdot_avoid(7);
 		Eigen::VectorXd q = robot->getConfig(*wss[s]->arm_ids);
-		if(myDebug) DISPLAY_VECTOR(q);
 		computeQdotAvoidLimits(robot, *(wss[s]->arm_ids), q, qdot_avoid);
-		if(myDebug) DISPLAY_VECTOR(qdot_avoid);
 
 		// Add our qdots together to get the overall movement
 		Eigen::VectorXd qdot_apply = qdot_avoid + qdot_jacobian;
-		if(myDebug) DISPLAY_VECTOR(qdot_apply);
-
-		// // Get the desired reference position for the elbow from the "g2" node
-		// MatrixXd Tref = mWorld->getSkeleton("g2")->getNode("link_0")->getWorldTransform();
-
-		// // Compute the desired workspace velocity for the elbow
-		// kinematics::BodyNode* elbow = robot->getNode("L3");
-		// MatrixXd Tcur = elbow->getWorldTransform();
-		// VectorXd xdotElbow = Tref.topRightCorner<3,1>() - Tcur.topRightCorner<3,1>();
-
-		// // Compute the desired jointspace velocity for the arm to achieve elbow position
-		// VectorXd qdot_nullspace = elbowQdot(xdotElbow, LEFT);
-		// VectorXd qdot_apply = qdot_nullspace;
 
 		// Apply the joint velocities
 		q += qdot_apply * time_delta;
 		robot->setConfig(*wss[s]->arm_ids, q);
+
+		// do debug display
+		if (myDebug) {
+			// std::cout << "Side: " << s << std::endl;
+			// DISPLAY_VECTOR(qdot_apply);
+			// DISPLAY_VECTOR(qdot_avoid);
+			// DISPLAY_VECTOR(qdot_jacobian);
+			// DISPLAY_VECTOR(q);
+		}
 	}
 
 	// Visualize the scene
