@@ -114,7 +114,7 @@ void run() {
 				wss[Krang::LEFT]->resetReferenceTransform();
 				wss[Krang::RIGHT]->resetReferenceTransform();
 			} else {
-				Eigen::VectorXd z = Eigen::VectorXd(7);
+				Eigen::VectorXd z = Eigen::VectorXd::Zero(7);
 				somatic_motor_setvel(&daemon_cx, hw->larm, z.data(), 7);
 				somatic_motor_setvel(&daemon_cx, hw->rarm, z.data(), 7);
 			}
