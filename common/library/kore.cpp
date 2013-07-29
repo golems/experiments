@@ -33,7 +33,9 @@ Hardware::Hardware (Mode mode_, somatic_d_t* daemon_cx_, dynamics::SkeletonDynam
 	initImu();
 
 	// Define the pos/vel limits for the motor groups
-	VectorXd lim7 = VectorXd::Ones(7) * 1024.1, lim2 = VectorXd::Ones(2) * 1024.1; 
+	VectorXd lim7 = VectorXd::Ones(7) * 1024.1;
+	VectorXd lim4 = VectorXd::Ones(4) * 1024.1; 
+	VectorXd lim2 = VectorXd::Ones(2) * 1024.1; 
 	VectorXd lim1 = VectorXd::Ones(1) * 1024.1;
 
 	// Initialize the Schunk (+ Robotiq) motor groups
@@ -43,10 +45,14 @@ Hardware::Hardware (Mode mode_, somatic_d_t* daemon_cx_, dynamics::SkeletonDynam
 		initMotorGroup(rarm, "rlwa-cmd", "rlwa-state", -lim7, lim7, -lim7, lim7);	
 	if(mode & MODE_TORSO) 
 		initMotorGroup(torso, "torso-cmd", "torso-state", -lim1, lim1, -lim1, lim1);	
-	if((mode & MODE_LARM) && ((mode & MODE_GRIPPERS) || (mode & MODE_GRIPPERS_SCH))) 
-		initMotorGroup(lgripper, "lgripper-cmd", "lgripper-state", -lim1, lim1, -lim1, lim1);	
-	if((mode & MODE_RARM) && ((mode & MODE_GRIPPERS) || (mode & MODE_GRIPPERS_SCH))) 
-		initMotorGroup(rgripper, "rgripper-cmd", "rgripper-state", -lim1, lim1, -lim1, lim1);	
+	if((mode & MODE_LARM) && (mode & MODE_GRIPPERS_SCH))
+		initMotorGroup(lgripper, "lgripper-cmd", "lgripper-state", -lim1, lim1, -lim1, lim1);
+	if((mode & MODE_LARM) && (mode & MODE_GRIPPERS))
+		initMotorGroup(lgripper, "lgripper-cmd", "lgripper-state", -lim4, lim4, -lim4, lim4);
+	if((mode & MODE_RARM) && (mode & MODE_GRIPPERS_SCH))
+		initMotorGroup(rgripper, "rgripper-cmd", "rgripper-state", -lim1, lim1, -lim1, lim1);
+	if((mode & MODE_RARM) && (mode & MODE_GRIPPERS))
+		initMotorGroup(rgripper, "rgripper-cmd", "rgripper-state", -lim4, lim4, -lim4, lim4);
 
 	// Initialize the wheel motor groups which depend on imu readings to get absolute wheel positions
 	if(mode & MODE_AMC) initWheels();
