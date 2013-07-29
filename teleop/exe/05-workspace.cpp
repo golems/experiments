@@ -143,8 +143,8 @@ void run() {
 		wss[Krang::RIGHT]->debug_to_curses = debug_print_this_it;
 
 		// print some general debug output
-		hw->printStateCurses(1, 1);
 		if (debug_print_this_it) {
+			hw->printStateCurses(1, 1);
 			attron(COLOR_PAIR(sending_commands?COLOR_YELLOW:COLOR_WHITE));
 			mvprintw(11, 1, "sendcmds mode: %d", sending_commands);
 			attroff(COLOR_PAIR(sending_commands?COLOR_YELLOW:COLOR_WHITE));
@@ -240,6 +240,11 @@ void run() {
 		double time_loopend = aa_tm_timespec2sec(aa_tm_now());
 		double time_sleep = (1.0 / LOOP_FREQUENCY) - (time_loopend - time_now);
 		int time_sleep_usec = std::max(0, (int)(time_sleep * 1e6));
+		if (debug_print_this_it) {
+			Krang::curses_display_row++;
+			mvprintw(Krang::curses_display_row++, 1, "Loop period: %f/%f seconds", time_delta, (1.0/LOOP_FREQUENCY));
+			mvprintw(Krang::curses_display_row++, 1, "Will sleep for %f/%f seconds", time_sleep);
+		}
 		usleep(time_sleep_usec);
 	}
 		
