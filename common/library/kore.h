@@ -46,6 +46,7 @@ public:
 
 	/// Prints the state
 	void printState();
+	void printStateCurses(int row, int col);
 
 private:	
 

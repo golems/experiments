@@ -6,6 +6,7 @@
  */
 
 #include "workspace.h"
+#include "display.hpp"
 #include <amino/math.h>
 
 namespace Krang {
@@ -28,7 +29,7 @@ namespace Krang {
 		compliance_gain = _compliance_gain;
 		
 		// and don't print anything out
-		debug = false;
+		debug_to_cout = false;
 	}
 
 	/* ******************************************************************************************** */
@@ -113,14 +114,20 @@ namespace Krang {
 		// secondary goal
 		refJSVelocity(xdot_apply, qdot_secondary, qdot);
 
-		// do debug printing
-		if (debug) {
+		// do debug printing to standard out if configured
+		if (debug_to_cout) {
 			DISPLAY_VECTOR(xdot_apply);
 			DISPLAY_VECTOR(xdot_posref);
 			DISPLAY_VECTOR(xdot_comply);
 			DISPLAY_VECTOR(ft);
 			DISPLAY_MATRIX(Tref);
 			DISPLAY_VECTOR(xdot);
+		}
+
+		// do debug printing to standard out if configured
+		if (debug_to_curses) {
+			curses_display_vector(xdot_posref, "xdot from position ref");
+			curses_display_vector(xdot_comply, "xdot from compliance");
 		}
 	}
 

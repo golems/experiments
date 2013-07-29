@@ -8,6 +8,7 @@
 
 #include "kore.h"
 #include <unistd.h>
+#include <ncurses.h>
 
 using namespace Eigen;
 
@@ -182,21 +183,33 @@ void Hardware::updateSensors (double dt) {
 /* ******************************************************************************************** */
 void Hardware::updateKinematics () {
 
+	// unify the id vectors so we only have to make a single call
+	// TODO: move this to an outside variable and initialize in the
+	// the init function
+	std::vector<int> all_ids;
+	all_ids.insert(all_ids.end(), imuWaist_ids.begin(), imuWaist_ids.end());
+	all_ids.insert(all_ids.end(), left_arm_ids.begin(), left_arm_ids.end());
+	all_ids.insert(all_ids.end(), right_arm_ids.begin(), right_arm_ids.end());
+
+	// a spot to unify the config vectors for same
+	Eigen::VectorXd all_vals(all_ids.size());
+
 	// Update imu and waist values
 	assert((mode & MODE_WAIST) && "This code assumes that the robot at least has the waist modules");
 	double waist_val = (waist->pos[0] - waist->pos[1]) / 2.0;
 	Vector2d imuWaist_vals (-imu + M_PI_2, waist_val);
-	robot->setConfig(imuWaist_ids, imuWaist_vals);
+	for(int i = 0; i < imuWaist_vals.size(); i++) all_vals[i] = imuWaist_vals[i];
 
 	// Update the arms state
 	if(mode & MODE_LARM) {
 		Vector7d larm_vals = eig7(larm->pos);
-		robot->setConfig(left_arm_ids, larm_vals);
+		for(int i = 0; i < larm_vals.size(); i++) all_vals[imuWaist_ids.size() + i] = larm_vals[i];
 	}
 	if(mode & MODE_RARM) {
 		Vector7d rarm_vals = eig7(rarm->pos);
-		robot->setConfig(right_arm_ids, rarm_vals);
+		for(int i = 0; i < rarm_vals.size(); i++) all_vals[imuWaist_ids.size() + left_arm_ids.size() + i] = rarm_vals[i];
 	}
+	robot->setConfig(all_ids, all_vals);
 }
 
 /* ******************************************************************************************** */
@@ -293,5 +306,18 @@ void Hardware::printState () {
 	for(size_t i = 0; i < 7; i++) printf(" %.3lf,", s(right_arm_ids[i]));
 	printf("\b)\n");
 }
+
+    /* ******************************************************************************************** */
+	void Hardware::printStateCurses(int row, int col) {
+		VectorXd s = robot->getPose();
+		mvprintw(row, col, "Robot hardware state:");
+		mvprintw(row+1, col+1, "imu: %.3lf", s(imuWaist_ids[0]));
+		mvprintw(row+1, col+11, "waist: %.3lf", s(imuWaist_ids[1]));
+		mvprintw(row+1, col+21, "torso: %.3lf", s(9));
+		mvprintw(row+5, col+2, "left arm:");
+		for(int i = 0; i < 7; i++) mvprintw(row+5, col+14+(i*12), "%.8lf", s(left_arm_ids[i]));
+		mvprintw(row+6, col+2, "right arm:");
+		for(int i = 0; i < 7; i++) mvprintw(row+6, col+14+(i*12), "%.8lf", s(right_arm_ids[i]));
+	}
 
 };	// end of namespace
