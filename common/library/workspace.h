@@ -60,7 +60,8 @@ public:
 	Matrix4d Tref;														///< The integrated or set configuration reference
 	kinematics::BodyNode* endEffector;				///< The end-effector whose configuration we control
 	std::vector<int>* arm_ids;								///< The arm indices that the controller can manipulate
-	bool debug;							///< Debug verbosity
+	bool debug_to_cout;							///< Verbosity for printing debug to standard output
+	bool debug_to_curses;							///< Verbosity for printing debug to curses
 	
 public:
 	// The gains that affect the control

@@ -8,6 +8,7 @@
 
 #include "kore.h"
 #include <unistd.h>
+#include <ncurses.h>
 
 using namespace Eigen;
 
@@ -278,5 +279,18 @@ void Hardware::printState () {
 	for(size_t i = 0; i < 7; i++) printf(" %.3lf,", s(right_arm_ids[i]));
 	printf("\b)\n");
 }
+
+    /* ******************************************************************************************** */
+	void Hardware::printStateCurses(int row, int col) {
+		VectorXd s = robot->getPose();
+		mvprintw(row, col, "Robot hardware state:");
+		mvprintw(row+1, col+1, "imu: %.3lf", s(imuWaist_ids[0]));
+		mvprintw(row+2, col+9, "waist: %.3lf", s(imuWaist_ids[1]));
+		mvprintw(row+3, col+17, "torso: %.3lf", s(9));
+		mvprintw(row+5, col+2, "left arm:");
+		for(int i = 0; i < 7; i++) mvprintw(row+5, col+14+(i*12), ".8lf", s(left_arm_ids[i]));
+		mvprintw(row+6, col+2, "right arm:");
+		for(int i = 0; i < 7; i++) mvprintw(row+6, col+14+(i*12), ".8lf", s(right_arm_ids[i]));
+	}
 
 };	// end of namespace
