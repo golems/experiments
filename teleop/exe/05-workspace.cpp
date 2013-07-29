@@ -33,11 +33,16 @@ const double SPACENAV_TRANSLATION_GAIN = 0.25;
 const double COMPLIANCE_GAIN = 1.0 / 750.0;
 
 // various rate limits - be nice to other programs
-const double LOOP_FREQUENCY = 300.0;
+const double LOOP_FREQUENCY = 15.0;
 const double DISPLAY_FREQUENCY = 3.0;
 
 // display information
 const int CURSES_DEBUG_DISPLAY_START = 30;
+
+// gripper reference messages, so we don't have to do initialization in the middle of our program
+double GRIPPER_CURRENT_OPEN[] = {10.0};
+double GRIPPER_CURRENT_CLOSE[] = {-10.0};
+double GRIPPER_CURRENT_ZERO[] = {0.0};
 
 /* ********************************************************************************************* */
 // State variables
@@ -145,9 +150,9 @@ void run() {
 		// print some general debug output
 		if (debug_print_this_it) {
 			hw->printStateCurses(1, 1);
-			attron(COLOR_PAIR(sending_commands?COLOR_YELLOW:COLOR_WHITE));
+			attron(COLOR_PAIR(sending_commands?COLOR_RED:COLOR_WHITE));
 			mvprintw(11, 1, "sendcmds mode: %d", sending_commands);
-			attroff(COLOR_PAIR(sending_commands?COLOR_YELLOW:COLOR_WHITE));
+			attroff(COLOR_PAIR(sending_commands?COLOR_RED:COLOR_WHITE));
 		}
 		if (debug_print_this_it) { mvprintw(12, 1, "synch mode: %d", synch_mode); }
 
@@ -156,6 +161,7 @@ void run() {
 
 		// Check for too high currents
 		if(checkCurrentLimits(eig7(hw->larm->cur)) && checkCurrentLimits(eig7(hw->rarm->cur))) {
+			// TODO: handle this more nicely
 			destroy();
 			exit(EXIT_FAILURE);
 		}
@@ -170,7 +176,6 @@ void run() {
 			Krang::Side sde = static_cast<Krang::Side>(i);
 			Eigen::VectorXd q = robot->getConfig(*wss[sde]->arm_ids);
 
-			// do some preliminary debug printing
 			if (debug_print_this_it) {
 				Krang::curses_display_row++;
 				mvprintw(Krang::curses_display_row++, 1, "Arm: '%s'\n", sde == Krang::LEFT ? "LEFT" : "RIGHT");
@@ -181,13 +186,30 @@ void run() {
 			q_elbow_ref(3) = sde == Krang::LEFT ? -0.5 : 0.5;
 			nullspace_qdot_refs[sde] = (q_elbow_ref - q).normalized();
 
-			// Input: get a workspace velocity input from the spacenav or from left arm for synch mode
+			// update spacenav, because we use it for grippers regardless of the mode
+			spacenav_input = spnavs[sde]->updateSpaceNav();
+
+			// depending on the synch mode, get a workspace velocity either from the spacenav or
+			// from the other arm
 			if(synch_mode && (i == Krang::RIGHT)) {
 				Tref_R_sync = wss[Krang::LEFT]->Tref * Trel_left_to_right;
-			}
-			else {
-				spacenav_input = spnavs[sde]->updateSpaceNav();
+			} else {
 				xdot_spacenav = wss[sde]->uiInputVelToXdot(spacenav_input);
+			}
+
+			// Close the gripper if button 0 is pressed, open it if button 1.
+			somatic_motor_t* gripper = (sde == Krang::LEFT) ? hw->lgripper : hw->rgripper;
+			if(spnavs[sde]->buttons[0] == 1) {
+				somatic_motor_reset(&daemon_cx, gripper);
+				usleep(100);
+				somatic_motor_cmd(&daemon_cx, gripper, 
+				                  SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, GRIPPER_CURRENT_CLOSE, 1, NULL);
+			}
+			if(spnavs[sde]->buttons[1] == 1) {
+				somatic_motor_reset(&daemon_cx, gripper);
+				usleep(100);
+				somatic_motor_cmd(&daemon_cx, gripper, 
+				                  SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, GRIPPER_CURRENT_OPEN, 1, NULL);
 			}
 
 			// Jacobian: compute the desired jointspace velocity from the inputs and sensors
@@ -267,7 +289,7 @@ void init() {
 	somatic_d_init(&daemon_cx, &daemon_opt);
 
 	// Initialize the hardware
-	Hardware::Mode mode = (Hardware::Mode)(Hardware::MODE_ALL & ~Hardware::MODE_GRIPPERS);
+	Hardware::Mode mode = (Hardware::Mode)(Hardware::MODE_ALL_GRIPSCH);
 	hw = new Hardware(mode, &daemon_cx, robot);
 
 	// fill out the convenient force-torque pointers
