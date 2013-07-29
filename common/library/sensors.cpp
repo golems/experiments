@@ -133,23 +133,14 @@ void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt,
 	// ======================================================================
 	// Get the readings
 
-    // Get a message
-    int r;
-    struct timespec timeout = aa_tm_future(aa_tm_sec2timespec(1.0/30.0));
-    Somatic__Vector *imu_msg = SOMATIC_WAIT_LAST_UNPACK(r, somatic__vector, 
-                                                        &protobuf_c_system_allocator,
-                                                        IMU_CHANNEL_SIZE,
-                                                        imuChan,
-                                                        &timeout);
-    assert((imu_msg != NULL) && "Didn't get IMU message!");
-	// // Get the value
-	// int r;
-	// struct timespec currTime;
-	// clock_gettime(CLOCK_MONOTONIC, &currTime);
-	// struct timespec abstime = aa_tm_add(aa_tm_sec2timespec(1.0/30.0), currTime);
-	// Somatic__Vector *imu_msg = SOMATIC_WAIT_LAST_UNPACK(r, somatic__vector, 
-	// 		&protobuf_c_system_allocator, IMU_CHANNEL_SIZE, imuChan, &abstime );
-	// assert((imu_msg != NULL) && "Imu message is faulty!");
+	// Get a message
+	int r;
+	struct timespec currTime;
+	clock_gettime(CLOCK_MONOTONIC, &currTime);
+	struct timespec abstime = aa_tm_add(aa_tm_sec2timespec(1.0/30.0), currTime);
+	Somatic__Vector *imu_msg = SOMATIC_WAIT_LAST_UNPACK(r, somatic__vector, 
+		&protobuf_c_system_allocator, IMU_CHANNEL_SIZE, imuChan, &abstime);
+	assert((imu_msg != NULL) && "Didn't get IMU message!");
 
 	// Get the imu position and velocity value from the readings (note imu mounted at 45 deg).
 	static const double mountAngle = -.7853981634;
@@ -189,76 +180,77 @@ void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt,
 	_imu = kf->x[0], _imuSpeed = kf->x[1];
 }
 
-    /* ******************************************************************************************** */
-	SpaceNav::SpaceNav (somatic_d_t* _daemon_cx, char* _chan_name, double _cache_timeout) {
-		// grab variables
-		this->daemon_cx = _daemon_cx;
-		this->cache_timeout = _cache_timeout;
-		
-		// open our ach channel
-		somatic_d_channel_open(this->daemon_cx,
-		                       &this->spacenav_chan,
-		                       _chan_name,
-		                       NULL);
-		
-		// initialize the variables we use for caching state and
-		// failing safely
-		time_last_input = aa_tm_timespec2sec(aa_tm_now());
-		last_spacenav_input = Eigen::VectorXd::Zero(6);
+/* ******************************************************************************************** */
+SpaceNav::SpaceNav (somatic_d_t* _daemon_cx, char* _chan_name, double _cache_timeout) {
+	// grab variables
+	this->daemon_cx = _daemon_cx;
+	this->cache_timeout = _cache_timeout;
+	
+	// open our ach channel
+	somatic_d_channel_open(this->daemon_cx, &this->spacenav_chan, _chan_name, NULL);
+	
+	// initialize the variables we use for caching state and
+	// failing safely
+	time_last_input = aa_tm_timespec2sec(aa_tm_now());
+	last_spacenav_input = Eigen::VectorXd::Zero(6);
+	buttons[0] = buttons[1] = 0;
+}
+
+
+/* ******************************************************************************************** */
+SpaceNav::~SpaceNav() {
+	somatic_d_channel_close(this->daemon_cx, &this->spacenav_chan);
+}
+
+/* ******************************************************************************************** */
+/// Get a raw reading off the spacenav if possible. If not, return
+/// failure and don't fill in spacenav_raw_input.
+bool SpaceNav::getSpaceNavRaw(Eigen::VectorXd& spacenav_raw_input) {
+	// Get joystick data
+	int r = 0;
+	spacenav_raw_input = Eigen::VectorXd::Zero(6);
+	Somatic__Joystick *js_msg = SOMATIC_GET_LAST_UNPACK(r, somatic__joystick,
+																											&protobuf_c_system_allocator,
+																											4096, &this->spacenav_chan);
+	if(!(ACH_OK == r || ACH_MISSED_FRAME == r) || (js_msg == NULL)) return false;
+
+	// Set the data to the input reference
+	Somatic__Vector* x = js_msg->axes;
+	spacenav_raw_input << -x->data[1], -x->data[0], -x->data[2], -x->data[4], -x->data[3], -x->data[5];
+
+	// Set the buttons
+	for(size_t i = 0; i < 2; i++) buttons[i] = js_msg->buttons[i];
+
+	// Free the liberty message
+	somatic__joystick__free_unpacked(js_msg, &protobuf_c_system_allocator);
+	return true;
+}
+
+/* ******************************************************************************************** */
+Eigen::VectorXd SpaceNav::updateSpaceNav() {
+	// grab the current time
+	double time_now = aa_tm_timespec2sec(aa_tm_now());
+
+	// try to get a raw input
+	Eigen::VectorXd spacenav_input_raw;
+	bool got_new_input;
+	got_new_input = this->getSpaceNavRaw(spacenav_input_raw);
+
+	// if we get a raw input got_new_inputfully, cache it.
+	if (got_new_input) {
+		this->last_spacenav_input = spacenav_input_raw;
+		this->time_last_input = aa_tm_timespec2sec(aa_tm_now());
 	}
 
-
-    /* ******************************************************************************************** */
-	SpaceNav::~SpaceNav() {
-		somatic_d_channel_close(this->daemon_cx, &this->spacenav_chan);
+	// if we have a recently cached value, including one that we
+	// just got in this call, use the cached value instead
+	if (time_now - this->time_last_input < this->cache_timeout) {
+		return this->last_spacenav_input;
 	}
 
-    /* ******************************************************************************************** */
-	/// Get a raw reading off the spacenav if possible. If not, return
-	/// failure and don't fill in spacenav_raw_input.
-	bool SpaceNav::getSpaceNavRaw(Eigen::VectorXd& spacenav_raw_input) {
-		// Get joystick data
-		int r = 0;
-		spacenav_raw_input = Eigen::VectorXd::Zero(6);
-		Somatic__Joystick *js_msg = SOMATIC_GET_LAST_UNPACK(r, somatic__joystick,
-		                                                    &protobuf_c_system_allocator,
-		                                                    4096, &this->spacenav_chan);
-		if(!(ACH_OK == r || ACH_MISSED_FRAME == r) || (js_msg == NULL)) return false;
-
-		// Set the data to the input reference
-		Somatic__Vector* x = js_msg->axes;
-		spacenav_raw_input << -x->data[1], -x->data[0], -x->data[2], -x->data[4], -x->data[3], -x->data[5];
-
-		// Free the liberty message
-		somatic__joystick__free_unpacked(js_msg, &protobuf_c_system_allocator);
-		return true;
-	}
-
-    /* ******************************************************************************************** */
-	Eigen::VectorXd SpaceNav::updateSpaceNav() {
-		// grab the current time
-		double time_now = aa_tm_timespec2sec(aa_tm_now());
-
-		// try to get a raw input
-		Eigen::VectorXd spacenav_input_raw;
-		bool got_new_input;
-		got_new_input = this->getSpaceNavRaw(spacenav_input_raw);
-
-		// if we get a raw input got_new_inputfully, cache it.
-		if (got_new_input) {
-			this->last_spacenav_input = spacenav_input_raw;
-			this->time_last_input = aa_tm_timespec2sec(aa_tm_now());
-		}
-
-		// if we have a recently cached value, including one that we
-		// just got in this call, use the cached value instead
-		if (time_now - this->time_last_input < this->cache_timeout) {
-			return this->last_spacenav_input;
-		}
-
-		// if our cached value is too old, then the system has become
-		// unsafe and we instead return a zero input
-		return Eigen::VectorXd::Zero(6);
-	}
+	// if our cached value is too old, then the system has become
+	// unsafe and we instead return a zero input
+	return Eigen::VectorXd::Zero(6);
+}
 
 };	// end of namespace
