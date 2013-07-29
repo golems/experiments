@@ -12,6 +12,7 @@
 
 #include <iostream>
 #include <iomanip>
+#include <ncurses.h>
 
 #include <robotics/parser/dart_parser/DartLoader.h>
 #include <simulation/World.h>
@@ -35,6 +36,11 @@ const double COMPLIANCE_GAIN = 1.0 / 750.0;
 const double LOOP_FREQUENCY = 300.0;
 const double DISPLAY_FREQUENCY = 3.0;
 
+// display information
+const bool DO_CURSES = true;
+const int CURSES_DISPLAY_PRECISION = 12;
+const int CURSES_DEBUG_DISPLAY_START = 30;
+
 /* ********************************************************************************************* */
 // State variables
 
@@ -53,9 +59,39 @@ dynamics::SkeletonDynamics* robot;
 std::map<Krang::Side, Krang::WorkspaceControl*> wss; ///< does workspace control for the arms
 std::map<Krang::Side, Vector7d> nullspace_qdot_refs; ///< nullspace configurations for the arms
 Eigen::MatrixXd Trel_left_to_right; ///< translation from the left hand to the right hand
+bool synch_mode;
 
 // debug stuff
 bool debug_print_this_it;       ///< whether we print
+int curses_display_row;
+
+/* ******************************************************************************************** */
+/// Curses code
+void init_curses() {
+    if (!DO_CURSES) return;
+    initscr();
+    clear();
+    noecho();                   // do not echo input to the screen
+    cbreak();                   // do not buffer by line (receive characters immediately)
+    timeout(0);                 // non-blocking getch
+}
+
+void destroy_curses() {
+    if (!DO_CURSES) return;
+    clrtoeol();
+    refresh();
+    endwin();
+}
+
+void curses_new_iteration() {
+	curses_display_row = CURSES_DEBUG_DISPLAY_START;
+}
+void curses_display_vector(const VectorXd& v, const char* label = "") {
+	mvprintw(curses_display_row, 1, label);
+	for(int i = 0; i < v.size(); i++)
+		mvprintw(curses_display_row, 2+i*CURSES_DISPLAY_PRECISION, "%f", v[i]);
+	curses_display_row++;
+}
 
 /* ******************************************************************************************** */
 /// Clean up
@@ -75,6 +111,9 @@ void destroy() {
 
 	// Destroy the daemon resources
 	somatic_d_destroy(&daemon_cx);
+
+	// close display
+	destroy_curses();
 }
 
 /* ********************************************************************************************* */
@@ -86,6 +125,20 @@ void run() {
 	double time_last = aa_tm_timespec2sec(aa_tm_now());
 
 	while(!somatic_sig_received) {
+        // get input from curses
+        if(DO_CURSES) {
+            int ch = getch();
+            switch (ch) {
+            case 'q': somatic_sig_received = true; break;
+            case ' ':
+	            synch_mode = !synch_mode;
+	            if (synch_mode) {
+		            Trel_left_to_right = wss[Krang::LEFT]->Tref.inverse() * wss[Krang::RIGHT]->Tref;
+	            }
+	            break;
+            }
+        }
+				curses_new_iteration();
 
 		// ============================================================================
 		// Update state: get passed time and kinematics, sensor input and check for current limit
@@ -98,87 +151,166 @@ void run() {
 		// set up debug printing
 		debug_print_this_it = (time_now - time_last_display) > (1.0 / DISPLAY_FREQUENCY);
 		if(debug_print_this_it) time_last_display = time_now;
-		if(debug_print_this_it) 
-			std::cout << "\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv\n";
 
 		// Update the robot
 		hw->updateSensors(time_delta);
-		if(debug_print_this_it) hw->printState();
 
 		// Check for too high currents
-		if(debug_print_this_it) DISPLAY_VECTOR(eig7(hw->larm->cur));
 		if(checkCurrentLimits(eig7(hw->larm->cur))) {
 			destroy();
 			exit(EXIT_FAILURE);
 		}
 
-		// ================================================================================
-		// Do workspace control for each arm
-		for(int i = Krang::LEFT; i-1 < Krang::RIGHT; i++) {
+		if (!synch_mode) {
+			// ================================================================================
+			// Do workspace control for each arm individually
+			for(int i = Krang::LEFT; i-1 < Krang::RIGHT; i++) {
+				Krang::Side sde = static_cast<Krang::Side>(i);
 
-			Krang::Side sde = static_cast<Krang::Side>(i);
+				// Get the joint angles for the arm for later use
+				Eigen::VectorXd q = robot->getConfig(*wss[sde]->arm_ids);
+
+				// Construct a qdot that the jacobian will bias toward using the nullspace
+				Eigen::VectorXd q_elbow_ref = q;
+				q_elbow_ref(3) = sde == Krang::LEFT ? -0.5 : 0.5;
+				nullspace_qdot_refs[sde] = (q_elbow_ref - q).normalized();
+
+				// Get a workspace velocity input from the spacenav
+				Eigen::VectorXd spacenav_input = spnavs[sde]->updateSpaceNav();
+				Eigen::VectorXd xdot_spacenav = wss[sde]->uiInputVelToXdot(spacenav_input);
+
+				// Compute the desired jointspace velocity from the inputs and sensors
+				Eigen::VectorXd qdot_jacobian;
+				wss[sde]->updateFromXdot(xdot_spacenav,
+				                         fts[sde]->lastExternal,
+				                         nullspace_qdot_refs[sde],
+				                         time_delta,
+				                         qdot_jacobian);
+	
+				// make sure we're not going too fast
+				double magn = qdot_jacobian.norm();
+				if (magn > 0.5) qdot_jacobian *= (0.5 / magn);
+				if (magn < .05) qdot_jacobian *= 0.0;
+	
+				// avoid joint limits
+				Eigen::VectorXd qdot_avoid(7);
+				computeQdotAvoidLimits(robot, *wss[sde]->arm_ids, q, qdot_avoid);
+	
+				// add qdots together to get the overall movement
+				Eigen::VectorXd qdot_apply = qdot_avoid + qdot_jacobian;
+
+			 // and apply that to the arm
+			 somatic_motor_setvel(&daemon_cx,
+			                      sde == Krang::LEFT ? hw->larm : hw->rarm,
+			                      qdot_apply.data(),
+			                      7);
+			}
+		} else {
+			// ================================================================================
+			// Do workspace control for the left arm, then copy over a
+			// position ref to the right arm
+			
+			// update nullspace bias
+			for(int i = Krang::LEFT; i-1 < Krang::RIGHT; i++) {
+				Krang::Side sde = static_cast<Krang::Side>(i);
+
+				// Get the joint angles for the arm for later use
+				Eigen::VectorXd q = robot->getConfig(*wss[sde]->arm_ids);
+
+				// Construct a qdot that the jacobian will bias toward using the nullspace
+				Eigen::VectorXd q_elbow_ref = q;
+				q_elbow_ref(3) = sde == Krang::LEFT ? -0.5 : 0.5;
+				nullspace_qdot_refs[sde] = (q_elbow_ref - q).normalized();
+			}
+
+			// ================================================================================
+			// left arm
 
 			// Get the joint angles for the arm for later use
-			Eigen::VectorXd q = robot->getConfig(*wss[sde]->arm_ids);
-
-			// Construct a qdot that the jacobian will bias toward using the nullspace
-			Eigen::VectorXd q_elbow_ref = q;
-			q_elbow_ref(3) = sde == Krang::LEFT ? -0.5 : 0.5;
-			nullspace_qdot_refs[sde] = (q_elbow_ref - q).normalized();
+			Eigen::VectorXd q_left = robot->getConfig(*wss[Krang::LEFT]->arm_ids);
 
 			// Get a workspace velocity input from the spacenav
-			Eigen::VectorXd spacenav_input = spnavs[sde]->updateSpaceNav();
-			Eigen::VectorXd xdot_spacenav = wss[sde]->uiInputVelToXdot(spacenav_input);
+			Eigen::VectorXd spacenav_input_L = spnavs[Krang::LEFT]->updateSpaceNav();
+			Eigen::VectorXd xdot_spacenav_L = wss[Krang::LEFT]->uiInputVelToXdot(spacenav_input_L);
 
-			// Compute the desired jointspace velocity from the inputs and sensors
-			Eigen::VectorXd qdot_jacobian (7);
-			wss[sde]->updateFromXdot(xdot_spacenav,
-			                         fts[sde]->lastExternal,
-			                         nullspace_qdot_refs[sde],
-			                         time_delta,
-			                         qdot_jacobian);
+			// compute the desired jointspace velocity from the inputs (ft is zero)
+			Eigen::VectorXd qdot_jacobian_L;
+			wss[Krang::LEFT]->updateFromXdot(xdot_spacenav_L,
+			                                 fts[Krang::LEFT]->lastExternal,
+			                                 nullspace_qdot_refs[Krang::LEFT],
+			                                 time_delta,
+			                                 qdot_jacobian_L);
 	
 			// make sure we're not going too fast
-			double magn = qdot_jacobian.norm();
-			if (magn > 0.5) qdot_jacobian *= (0.5 / magn);
-			if (magn < .05) qdot_jacobian *= 0.0;
+			double magn = qdot_jacobian_L.norm();
+			if (magn > 0.5) qdot_jacobian_L *= (0.5 / magn);
+			if (magn < .05) qdot_jacobian_L *= 0.0;
 	
 			// avoid joint limits
-			Eigen::VectorXd qdot_avoid(7);
-			computeQdotAvoidLimits(robot, *wss[sde]->arm_ids, q, qdot_avoid);
+			Eigen::VectorXd qdot_avoid_L(7);
+			computeQdotAvoidLimits(robot, *wss[Krang::LEFT]->arm_ids, q_left, qdot_avoid_L);
 	
 			// add qdots together to get the overall movement
-			Eigen::VectorXd qdot_apply = qdot_avoid + qdot_jacobian;
+			Eigen::VectorXd qdot_apply_L = qdot_avoid_L + qdot_jacobian_L;
 
-			// and apply that to the arm
-			somatic_motor_setvel(&daemon_cx,
-			                     sde == Krang::LEFT ? hw->larm : hw->rarm,
-			                     qdot_apply.data(),
-			                     7);
+			// // and apply that to the arm
+			somatic_motor_setvel(&daemon_cx, hw->larm, qdot_apply_L.data(), 7);
 
-			if (debug_print_this_it) {
-				printf("Arm: '%s'\n", sde == Krang::LEFT ? "LEFT" : "RIGHT");
-				DISPLAY_VECTOR(fts[sde]->lastExternal);
-				DISPLAY_VECTOR(nullspace_qdot_refs[sde]);
-				DISPLAY_VECTOR(xdot_spacenav);
-				DISPLAY_VECTOR(qdot_jacobian);
-				DISPLAY_VECTOR(qdot_apply);
-			}
+			// ================================================================================
+			// right arm
+	
+			// figure out where the position reference should be using the
+			// relative transofrmation from the left hand to the right hand
+			Eigen::MatrixXd Tref_R = wss[Krang::LEFT]->Tref * Trel_left_to_right;
+
+			// update the workspace controller for the other arm
+			Eigen::VectorXd qdot_jacobian_R;
+			wss[Krang::RIGHT]->updateFromUIPos(Tref_R,
+			                                   fts[Krang::RIGHT]->lastExternal,
+			                                   nullspace_qdot_refs[Krang::RIGHT],
+			                                   qdot_jacobian_R);
+
+			// make sure we're not going too fast
+			magn = qdot_jacobian_R.norm();
+			if (magn > 0.5) qdot_jacobian_R *= (0.5 / magn);
+			if (magn < .05) qdot_jacobian_R *= 0.0;
+	
+			// avoid joint limits
+			Eigen::VectorXd qdot_avoid_R(7);
+			Eigen::VectorXd q_right = robot->getConfig(*wss[Krang::RIGHT]->arm_ids);
+			computeQdotAvoidLimits(robot, *wss[Krang::RIGHT]->arm_ids, q_right, qdot_avoid_R);
+
+			// add qdots together to get the overall movement
+			Eigen::VectorXd qdot_apply_R = qdot_avoid_R + qdot_jacobian_R;
+	
+			// // and apply that to the right arm
+			somatic_motor_setvel(&daemon_cx, hw->rarm, qdot_apply_R.data(), 7);
 		}
+		
+		if (debug_print_this_it) {
+			mvprintw(1, 1, "synch mode: %d", synch_mode);
+			//mvprintw(3, 1, "Arm: '%s'\n", sde == Krang::LEFT ? "LEFT" : "RIGHT");
 
+				//curses_display_vector(fts[sde]->lastExternal);
+				//curses_display_vector(nullspace_qdot_refs[sde]);
+				//curses_display_vector(xdot_spacenav);
+				//curses_display_vector(qdot_jacobian);
+				//curses_display_vector(qdot_apply);
+			}
 		// And sleep to fill out the loop period so we don't eat the entire CPU
 		double time_loopend = aa_tm_timespec2sec(aa_tm_now());
 		double time_sleep = (1.0 / LOOP_FREQUENCY) - (time_loopend - time_now);
 		int time_sleep_usec = std::max(0, (int)(time_sleep * 1e6));
-		if (debug_print_this_it)
-			std::cout << "sleeping for: " << time_sleep_usec << std::endl;
 		usleep(time_sleep_usec);
 	}
+		
 }
 
 /* ******************************************************************************************** */
 /// Initialization
 void init() {
+	// initialize display
+	init_curses();
 
 	// Initalize dart. Do this before we initialize the daemon because initalizing the daemon 
 	// changes our current directory to somewhere in /var/run.
@@ -201,7 +333,8 @@ void init() {
 	fts[Krang::LEFT] = hw->lft;
 	fts[Krang::RIGHT] = hw->rft;
 
-	// Set up the workspace controllers
+	// Set up the workspace stuff
+	synch_mode = false;
 	wss[Krang::LEFT] = new WorkspaceControl(robot, LEFT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
 	                                        SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_GAIN);
 	wss[Krang::RIGHT] = new WorkspaceControl(robot, RIGHT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 

@@ -16,7 +16,7 @@ include(cmake/simulation.cmake)
 # Link to somatic, amino and ach
 # NOTE: Ideally we would like to 'find' these packages but for now, we assume they are either 
 # in /usr/lib or /usr/local/lib
-link_libraries(protobuf-c amino ach somatic filter stdc++)
+link_libraries(protobuf-c amino ach somatic filter stdc++ ncurses)
 
 
 # Include Eigen
