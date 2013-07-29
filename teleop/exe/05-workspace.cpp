@@ -37,12 +37,15 @@ const double LOOP_FREQUENCY = 15.0;
 const double DISPLAY_FREQUENCY = 3.0;
 
 // display information
-const int CURSES_DEBUG_DISPLAY_START = 30;
+const int CURSES_DEBUG_DISPLAY_START = 20;
 
 // gripper reference messages, so we don't have to do initialization in the middle of our program
 double GRIPPER_CURRENT_OPEN[] = {10.0};
 double GRIPPER_CURRENT_CLOSE[] = {-10.0};
 double GRIPPER_CURRENT_ZERO[] = {0.0};
+
+double GRIPPER_POSITION_OPEN[] = {0, 0, 0, 0};
+double GRIPPER_POSITION_CLOSE[] = {255, 255, 255, 0};
 
 /* ********************************************************************************************* */
 // State variables
@@ -200,16 +203,18 @@ void run() {
 			// Close the gripper if button 0 is pressed, open it if button 1.
 			somatic_motor_t* gripper = (sde == Krang::LEFT) ? hw->lgripper : hw->rgripper;
 			if(spnavs[sde]->buttons[0] == 1) {
-				somatic_motor_reset(&daemon_cx, gripper);
-				usleep(100);
-				somatic_motor_cmd(&daemon_cx, gripper, 
-				                  SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, GRIPPER_CURRENT_CLOSE, 1, NULL);
+				// somatic_motor_reset(&daemon_cx, gripper);
+				// usleep(100);
+				// somatic_motor_cmd(&daemon_cx, gripper, 
+				//                   SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, GRIPPER_CURRENT_CLOSE, 1, NULL);
+				somatic_motor_setpos(&daemon_cx, gripper, GRIPPER_POSITION_CLOSE, 4);
 			}
 			if(spnavs[sde]->buttons[1] == 1) {
-				somatic_motor_reset(&daemon_cx, gripper);
-				usleep(100);
-				somatic_motor_cmd(&daemon_cx, gripper, 
-				                  SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, GRIPPER_CURRENT_OPEN, 1, NULL);
+				// somatic_motor_reset(&daemon_cx, gripper);
+				// usleep(100);
+				// somatic_motor_cmd(&daemon_cx, gripper, 
+				//                   SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, GRIPPER_CURRENT_OPEN, 1, NULL);
+				somatic_motor_setpos(&daemon_cx, gripper, GRIPPER_POSITION_OPEN, 4);
 			}
 
 			// Jacobian: compute the desired jointspace velocity from the inputs and sensors
