@@ -219,7 +219,7 @@ bool SpaceNav::getSpaceNavRaw(Eigen::VectorXd& spacenav_raw_input) {
 	spacenav_raw_input << -x->data[1], -x->data[0], -x->data[2], -x->data[4], -x->data[3], -x->data[5];
 
 	// Set the buttons
-	for(size_t i = 0; i < 2; i++) buttons[i] = js_msg->buttons[i];
+	for(size_t i = 0; i < 2; i++) buttons[i] = js_msg->buttons->data[i];
 
 	// Free the liberty message
 	somatic__joystick__free_unpacked(js_msg, &protobuf_c_system_allocator);
