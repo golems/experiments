@@ -97,7 +97,8 @@ public:
 	somatic_motor_t* larm;								///< Left arm motors interface
 	somatic_motor_t* rarm;								///< Right arm motors interface
 	somatic_motor_t* torso;								///< Torso motor interface
-	somatic_motor_t* grippers;						///< Gripper motors interface
+	somatic_motor_t* lgripper;						///< Gripper motors interface
+	somatic_motor_t* rgripper;						///< Gripper motors interface
 	somatic_motor_t* waist;								///< Waist motors interface - only read
 	ach_channel_t* waistCmdChan;					///< Command channel for the waist daemon
 };

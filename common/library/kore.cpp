@@ -23,7 +23,7 @@ Hardware::Hardware (Mode mode_, somatic_d_t* daemon_cx_, dynamics::SkeletonDynam
 
 	// Initialize all the 'optional' pointers to nulls and sanity check the inputs
 	lft = rft = NULL;
-	amc = larm = rarm = torso = grippers = NULL;
+	amc = larm = rarm = torso = lgripper = rgripper = NULL;
 	waistCmdChan = NULL;
 	assert((daemon_cx != NULL) && "Can not give null daemon context to hardware constructor");
 	assert((robot != NULL) && "Can not give null dart kinematics to hardware constructor");
@@ -42,8 +42,10 @@ Hardware::Hardware (Mode mode_, somatic_d_t* daemon_cx_, dynamics::SkeletonDynam
 		initMotorGroup(rarm, "rlwa-cmd", "rlwa-state", -lim7, lim7, -lim7, lim7);	
 	if(mode & MODE_TORSO) 
 		initMotorGroup(torso, "torso-cmd", "torso-state", -lim1, lim1, -lim1, lim1);	
-	if(mode & MODE_GRIPPERS) 
-		initMotorGroup(torso, "grippers-cmd", "grippers-state", -lim2, lim2, -lim2, lim2);	
+	if((mode & MODE_LARM) && (mode & MODE_GRIPPERS_SCH)) 
+		initMotorGroup(lgripper, "lgripper-cmd", "lgripper-state", -lim1, lim1, -lim1, lim1);	
+	if((mode & MODE_RARM) && (mode & MODE_GRIPPERS_SCH)) 
+		initMotorGroup(rgripper, "rgripper-cmd", "rgripper-state", -lim1, lim1, -lim1, lim1);	
 
 	// Initialize the wheel motor groups which depend on imu readings to get absolute wheel positions
 	if(mode & MODE_AMC) initWheels();
@@ -92,7 +94,20 @@ Hardware::~Hardware () {
 		somatic_motor_destroy(daemon_cx, larm);
 		delete larm;
 	}
+	
+	// Destroy the gripper motors
+	if(lgripper != NULL) { 
+		somatic_motor_halt(daemon_cx, lgripper);
+		somatic_motor_destroy(daemon_cx, lgripper);
+		delete lgripper;
+	}
+	if(rgripper != NULL) { 
+		somatic_motor_halt(daemon_cx, rgripper);
+		somatic_motor_destroy(daemon_cx, rgripper);
+		delete rgripper;
+	}
 
+	// Stop and destroy	waist motors
 	if(waist != NULL) { 
 
 		// Create a waist daemon message with the stop mode

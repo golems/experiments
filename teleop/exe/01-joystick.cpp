@@ -68,14 +68,16 @@ void controlArms () {
 
 	// Check if one of the preset configurations are requested by pressing 9 and
 	// any of the buttons from 1 to 4 at the same time
-	if((b[4] == 1) && (b[5] == 1) && (b[6] == 1) && (b[7] == 1)) {
+	if(((b[4] == 1) && (b[6] == 1)) || ((b[5] == 1) && (b[7] == 1))) {
 
 		// Check if the button is pressed for the arm configuration is pressed, if so send pos commands
 		bool noConfs = true;
 		for(size_t i = 0; i < 4; i++) {
 			if(b[i] == 1) {
-				somatic_motor_cmd(&daemon_cx, &llwa, POSITION, presetArmConfs[2*i], 7, NULL);
-				somatic_motor_cmd(&daemon_cx, &rlwa, POSITION, presetArmConfs[2*i+1], 7, NULL);
+				if((b[4] == 1) && (b[6] == 1)) 
+					somatic_motor_cmd(&daemon_cx, &llwa, POSITION, presetArmConfs[2*i], 7, NULL);
+				if((b[5] == 1) && (b[7] == 1)) 
+					somatic_motor_cmd(&daemon_cx, &rlwa, POSITION, presetArmConfs[2*i+1], 7, NULL);
 				noConfs = false; 
 				return;
 			}
