@@ -255,7 +255,6 @@ void run() {
 				Krang::curses_display_vector(xdot_spacenav, "xdot_spacenav");
 				Krang::curses_display_vector(qdot_jacobian, "qdot_jacobian");
 				Krang::curses_display_vector(qdot_apply, "qdot_apply");
-				Krang::curses_display_vector(q, "q");
 				Eigen::VectorXd cur(7);
 				double largest_cur = 0;
 				for (int i = 0; i < 7; i++) {
@@ -276,7 +275,7 @@ void run() {
 		if (debug_print_this_it) {
 			Krang::curses_display_row++;
 			mvprintw(Krang::curses_display_row++, 1, "Loop period: %f/%f seconds", time_delta, (1.0/LOOP_FREQUENCY));
-			mvprintw(Krang::curses_display_row++, 1, "Will sleep for %f/%f seconds", time_sleep);
+			mvprintw(Krang::curses_display_row++, 1, "Will sleep for %f seconds", time_sleep);
 		}
 		usleep(time_sleep_usec);
 	}
