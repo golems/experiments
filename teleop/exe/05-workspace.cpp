@@ -106,6 +106,9 @@ void run() {
 	double time_last_display = aa_tm_timespec2sec(aa_tm_now());
 	double time_last = aa_tm_timespec2sec(aa_tm_now());
 
+	// initialize display
+	Krang::init_curses();
+
 	while(!somatic_sig_received) {
 
 		// ========================================================================================
@@ -263,6 +266,9 @@ void run() {
 			}
 		}
 
+		// display everything curses has done
+		refresh();
+
 		// And sleep to fill out the loop period so we don't eat the entire CPU
 		double time_loopend = aa_tm_timespec2sec(aa_tm_now());
 		double time_sleep = (1.0 / LOOP_FREQUENCY) - (time_loopend - time_now);
@@ -314,9 +320,6 @@ void init() {
 
 	// set up the relative transform between the hands
 	Trel_left_to_right = wss[Krang::LEFT]->Tref.inverse() * wss[Krang::RIGHT]->Tref;
-
-	// initialize display
-	Krang::init_curses();
 
 	// Start the daemon running
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
