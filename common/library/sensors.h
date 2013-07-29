@@ -65,18 +65,20 @@ public:
 	/// value for longer than cache_timout seconds, it assumes that
 	/// the network has actually died and returns a nice, safe zero
 	/// input.
+	/// TODO Change the interface to cover buttons as well
 	Eigen::VectorXd updateSpaceNav();
 
-private:
+public:
 	/// Get a new reading off the spacenav. Returns false if there is
 	/// no new value to be had.
 	bool getSpaceNavRaw(Eigen::VectorXd& spacenav_input_raw);
 
-	Eigen::VectorXd last_spacenav_input; ///< Cache the last successful reading.
-	double cache_timeout; ///< How long we keep the cached value before assuming a disconnect
+	int buttons [2];											///< Indicates whether a button is pressed		
+	Eigen::VectorXd last_spacenav_input; 	///< Cache the last successful reading.
+	double cache_timeout; 	///< How long we keep the cached value before assuming a disconnect
 	double time_last_input; ///< When we last got a good reading
 	somatic_d_t* daemon_cx; ///< Holds on to the daemon context so we can do ach channel things
-	ach_channel_t spacenav_chan; ///< The actual ach channel
+	ach_channel_t spacenav_chan; 					///< The actual ach channel
 };
 
 /* ******************************************************************************************** */
@@ -84,10 +86,6 @@ private:
 
 /// Returns the imu value and filters it if a filter struct is given
 void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt, 
-	     filter_kalman_t* kf);
+	 filter_kalman_t* kf);
 
 };	// end of namespace
-
-// Local Variables:
-// mode: c++
-// End:
