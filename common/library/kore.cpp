@@ -43,9 +43,9 @@ Hardware::Hardware (Mode mode_, somatic_d_t* daemon_cx_, dynamics::SkeletonDynam
 		initMotorGroup(rarm, "rlwa-cmd", "rlwa-state", -lim7, lim7, -lim7, lim7);	
 	if(mode & MODE_TORSO) 
 		initMotorGroup(torso, "torso-cmd", "torso-state", -lim1, lim1, -lim1, lim1);	
-	if((mode & MODE_LARM) && (mode & MODE_GRIPPERS_SCH)) 
+	if((mode & MODE_LARM) && ((mode & MODE_GRIPPERS) || (mode & MODE_GRIPPERS_SCH))) 
 		initMotorGroup(lgripper, "lgripper-cmd", "lgripper-state", -lim1, lim1, -lim1, lim1);	
-	if((mode & MODE_RARM) && (mode & MODE_GRIPPERS_SCH)) 
+	if((mode & MODE_RARM) && ((mode & MODE_GRIPPERS) || (mode & MODE_GRIPPERS_SCH))) 
 		initMotorGroup(rgripper, "rgripper-cmd", "rgripper-state", -lim1, lim1, -lim1, lim1);	
 
 	// Initialize the wheel motor groups which depend on imu readings to get absolute wheel positions
@@ -60,8 +60,11 @@ Hardware::Hardware (Mode mode_, somatic_d_t* daemon_cx_, dynamics::SkeletonDynam
 	
 	// After initializing the rest of the robot (need kinematics), we can initialize f/t sensors. 
 	// TODO: Determine the type of the gripper from the mode
-	if(mode & MODE_LARM) lft = new FT(FT::GRIPPER_TYPE_SCHUNK, daemon_cx, robot, LEFT);
-	if(mode & MODE_RARM) rft = new FT(FT::GRIPPER_TYPE_SCHUNK, daemon_cx, robot, RIGHT);
+	FT::GripperType ft_grippers;
+	if (mode & MODE_GRIPPERS) ft_grippers = FT::GRIPPER_TYPE_ROBOTIQ;
+	if (mode & MODE_GRIPPERS_SCH) ft_grippers = FT::GRIPPER_TYPE_SCHUNK;
+	if(mode & MODE_LARM) lft = new FT(ft_grippers, daemon_cx, robot, LEFT);
+	if(mode & MODE_RARM) rft = new FT(ft_grippers, daemon_cx, robot, RIGHT);
 }
 
 /* ******************************************************************************************** */
