@@ -44,8 +44,8 @@ double GRIPPER_CURRENT_OPEN[] = {10.0};
 double GRIPPER_CURRENT_CLOSE[] = {-10.0};
 double GRIPPER_CURRENT_ZERO[] = {0.0};
 
-double GRIPPER_POSITION_OPEN[] = {0, 0, 0, 0};
-double GRIPPER_POSITION_CLOSE[] = {255, 255, 255, 0};
+double GRIPPER_POSITION_OPEN[] = {0, 0, 0, 128};
+double GRIPPER_POSITION_CLOSE[] = {255, 255, 255, 128};
 
 /* ********************************************************************************************* */
 // State variables
@@ -299,7 +299,7 @@ void init() {
 	somatic_d_init(&daemon_cx, &daemon_opt);
 
 	// Initialize the hardware
-	Hardware::Mode mode = (Hardware::Mode)(Hardware::MODE_ALL_GRIPSCH);
+	Hardware::Mode mode = (Hardware::Mode)(Hardware::MODE_ALL);
 	hw = new Hardware(mode, &daemon_cx, robot);
 
 	// fill out the convenient force-torque pointers
