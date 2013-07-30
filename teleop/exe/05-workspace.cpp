@@ -166,7 +166,6 @@ void run() {
 			somatic_motor_setpos(&daemon_cx, hw->rgripper, GRIPPER_POSITION_PARTIAL, 4);
 		} break;
 		case ' ': {
-			// TODO: halt or unhalt motors as necessary
 			sending_commands = !sending_commands;
 			if (sending_commands) {
 				somatic_motor_reset(&daemon_cx, hw->larm);
@@ -185,29 +184,24 @@ void run() {
 				Trel_left_to_right = wss[Krang::LEFT]->Tref.inverse() * wss[Krang::RIGHT]->Tref;
 			}
 		} break;
-		case '8':
+		case '8': {
 			// begin left hand hand-over-hand
-			break;
-		}
-		case '7':
+		} break;
+		case '7': {
 			// left hand go hand-over-hand away from right hand
-			break;
-		}
-		case '9':
+		} break;
+		case '9': {
 			// left hand go hand-over-hand away from right hand
-			break;
-		}
-		case '5':
+		} break;
+		case '5': {
 			// begin right hand hand-over-hand
-			break;
-		}
-		case '4':
+		} break;
+		case '4': {
 			// right hand go hand-over-hand away from left hand
-			break;
-		}
-		case '6':
+		} break;
+		case '6': {
 			// right hand go hand-over-hand away from left hand
-			break;
+		} break;
 		}
 		Krang::curses_display_row = CURSES_DEBUG_DISPLAY_START;
 
