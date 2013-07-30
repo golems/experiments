@@ -48,7 +48,7 @@ const double SPACENAV_ORIENTATION_GAIN = 0.50; // maximum 50 cm per second from 
 const double SPACENAV_TRANSLATION_GAIN = 0.25; // maximum .25 radians per second from spacenav
 const double COMPLIANCE_TRANSLATION_GAIN = 1.0 / 750.0;
 const double COMPLIANCE_ORIENTATION_GAIN = .125 / 750.0;
-const double HAND_OVER_HAND_SPEED = 0.03; // 3 cm per second when going hand-over-hand
+const double HAND_OVER_HAND_SPEED = 0.05; // 3 cm per second when going hand-over-hand
 
 // various rate limits - be nice to other programs
 const double LOOP_FREQUENCY = 15.0;
