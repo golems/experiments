@@ -128,10 +128,10 @@ namespace Krang {
 		}
 
 		// do debug printing to standard out if configured
-		if (debug_to_curses) {
-			curses_display_vector(xdot_posref, "xdot from position ref");
-			curses_display_vector(xdot_comply, "xdot from compliance");
-		}
+		// if (debug_to_curses) {
+		// 	curses_display_vector(xdot_posref, "xdot from position ref");
+		// 	curses_display_vector(xdot_comply, "xdot from compliance");
+		// }
 	}
 
 	/* ******************************************************************************************** */
