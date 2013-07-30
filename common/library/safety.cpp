@@ -6,6 +6,7 @@
  */
 
 #include "safety.h"
+#include "display.hpp"
 
 namespace Krang {
 
@@ -13,12 +14,19 @@ namespace Krang {
 bool checkCurrentLimits (const VectorXd& cur) {
 
 	for(size_t i = 0; i < cur.size(); i++) {
-		if(fabs(cur(i)) > CURRENT_WARN_LIMIT)
-			printf("\t\t\tWARNING: Current at module %zu has passed %lf amps: %lf amps\n", i, 	
-				CURRENT_WARN_LIMIT, cur(i));
+		if(fabs(cur(i)) > CURRENT_WARN_LIMIT) {
+			if(doing_curses) {
+			} else {
+				printf("\t\t\tWARNING: Current at module %zu has passed %lf amps: %lf amps\n", i, 	
+				       CURRENT_WARN_LIMIT, cur(i));
+			}
+		}
 		if(fabs(cur(i)) > CURRENT_KILL_LIMIT) {
-			printf("\t\t\tStopping because current at module %zu has passed %lf amps: %lf amps\n", i,
-				 CURRENT_KILL_LIMIT, cur(i));
+			if(doing_curses) {
+			} else {
+				printf("\t\t\tStopping because current at module %zu has passed %lf amps: %lf amps\n", i,
+				       CURRENT_KILL_LIMIT, cur(i));
+			}
 			return true;
 		}
 	}

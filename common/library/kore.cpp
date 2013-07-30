@@ -8,7 +8,7 @@
 
 #include "kore.h"
 #include <unistd.h>
-#include <ncurses.h>
+#include "display.hpp"
 
 using namespace Eigen;
 
@@ -323,10 +323,30 @@ void Hardware::printState () {
 		mvprintw(row+1, col+1, "imu: %.3lf", s(imuWaist_ids[0]));
 		mvprintw(row+1, col+16, "waist: %.3lf", s(imuWaist_ids[1]));
 		mvprintw(row+1, col+31, "torso: %.3lf", s(9));
-		mvprintw(row+5, col+2, "left arm:");
-		for(int i = 0; i < 7; i++) mvprintw(row+5, col+14+(i*12), "%.8lf", s(left_arm_ids[i]));
-		mvprintw(row+6, col+2, "right arm:");
-		for(int i = 0; i < 7; i++) mvprintw(row+6, col+14+(i*12), "%.8lf", s(right_arm_ids[i]));
+		
+		// print out the left arm, with pretty colors for joint limits
+		mvprintw(row+3, col+2, "left arm:");
+		kinematics::Dof* dof;
+		double dist;
+		for(int i = 0; i < 7; i++) {
+			dof = robot->getDof(left_arm_ids[i]);
+			dist = std::min(std::abs(s[left_arm_ids[i]] - dof->getMin()),
+			                std::abs(s[left_arm_ids[i]] - dof->getMax()));
+			if (dist < .25) attron(COLOR_PAIR(COLOR_RED_BACKGROUND));
+			mvprintw(row+3, col+14+(i*12), "%.8lf", s(left_arm_ids[i]));
+			if (dist < .25) attroff(COLOR_PAIR(COLOR_RED_BACKGROUND));
+		}
+
+		// the same for the right arm. TODO: unify these
+		mvprintw(row+4, col+2, "right arm:");
+		for(int i = 0; i < 7; i++) {
+			dof = robot->getDof(right_arm_ids[i]);
+			dist = std::min(std::abs(s[right_arm_ids[i]] - dof->getMin()),
+			                std::abs(s[right_arm_ids[i]] - dof->getMax()));
+			if (dist < .25) attron(COLOR_PAIR(COLOR_RED_BACKGROUND));
+			mvprintw(row+4, col+14+(i*12), "%.8lf", s(right_arm_ids[i]));
+			if (dist < .25) attroff(COLOR_PAIR(COLOR_RED_BACKGROUND));
+		}
 	}
 
 };	// end of namespace

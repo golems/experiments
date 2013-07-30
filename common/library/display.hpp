@@ -12,10 +12,16 @@
 
 namespace Krang {
 
+	extern int COLOR_RED_BACKGROUND;
+	extern int COLOR_YELLOW_BACKGROUND;
+	extern int COLOR_GREEN_BACKGROUND;
+	extern int COLOR_WHITE_BACKGROUND;
+		
     // some configuration and utility variables
     // TODO: move the definitions of these to a more useful place
 	extern int curses_display_precision;
 	extern int curses_display_row;
+	extern bool doing_curses;
 	
 	// functions for starting up and shutting down curses cleanly
 	void init_curses();
