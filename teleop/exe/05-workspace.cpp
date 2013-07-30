@@ -85,13 +85,18 @@ dynamics::SkeletonDynamics* robot;
 manip_mode_t ws_mode;
 manip_primary_t ws_primary;
 std::map<Krang::Side, Krang::WorkspaceControl*> wss; ///< does workspace control for the arms
+std::map<Krang::Side, Vector7d> nullspace_q_refs; ///< nullspace configurations for the arms
+std::map<Krang::Side, Vector7d> nullspace_q_masks; ///< nullspace configurations for the arms
 std::map<Krang::Side, Vector7d> nullspace_qdot_refs; ///< nullspace configurations for the arms
 Eigen::MatrixXd Trel_left_to_right; ///< translation from the left hand to the right hand
 bool synch_mode;
 bool fixed_orientation_mode;
 
 // hand-over-hand stuff
-std::map<Krang::Side, Vector3d> hoh_initpos;
+std::map<Krang::Side, Eigen::Vector3d> hoh_initpos;
+bool hoh_mode = false;
+Krang::Side hoh_side = Krang::LEFT;
+bool hoh_moving_right = false;
 
 // debug stuff
 bool debug_print_this_it;       ///< whether we print
@@ -155,7 +160,7 @@ void run() {
 		} break;
 		case 'h': {
 			ws_mode = MANIP_MODE_OFF;
-			sending_commands = !sending_commands;
+			sending_commands = false;
 			somatic_motor_halt(&daemon_cx, hw->larm);
 			somatic_motor_halt(&daemon_cx, hw->rarm);
 		} break;
@@ -184,23 +189,27 @@ void run() {
 				Trel_left_to_right = wss[Krang::LEFT]->Tref.inverse() * wss[Krang::RIGHT]->Tref;
 			}
 		} break;
-		case '8': {
-			// begin left hand hand-over-hand
-		} break;
-		case '7': {
-			// left hand go hand-over-hand away from right hand
-		} break;
-		case '9': {
-			// left hand go hand-over-hand away from right hand
-		} break;
 		case '5': {
-			// begin right hand hand-over-hand
+			// start or stop moving hand-over-hand
+			hoh_mode = !hoh_mode;
+			hoh_initpos[Krang::RIGHT] = wss[Krang::RIGHT]->endEffector->getWorldTransform().topRightCorner<3,1>();
+			hoh_initpos[Krang::LEFT] = wss[Krang::LEFT]->endEffector->getWorldTransform().topRightCorner<3,1>();
+		} break;
+		case '1': {
+			// select moving leftward hand-over-hand
+			hoh_moving_right = false;
+		} break;
+		case '3': {
+			// select moving to the right hand-over-hand
+			hoh_moving_right = true;
 		} break;
 		case '4': {
-			// right hand go hand-over-hand away from left hand
+			// select the left hand for hand-over-hand movement
+			hoh_side = Krang::LEFT;
 		} break;
 		case '6': {
-			// right hand go hand-over-hand away from left hand
+			// select the left hand for hand-over-hand movement
+			hoh_side = Krang::RIGHT;
 		} break;
 		}
 		Krang::curses_display_row = CURSES_DEBUG_DISPLAY_START;
@@ -221,12 +230,27 @@ void run() {
 
 		// print some general debug output
 		if (debug_print_this_it) {
-			hw->printStateCurses(5, 1);
-			attron(COLOR_PAIR(sending_commands?COLOR_RED:COLOR_WHITE));
-			mvprintw(11, 1, "sendcmds mode: %d", sending_commands);
-			attroff(COLOR_PAIR(sending_commands?COLOR_RED:COLOR_WHITE));
+			hw->printStateCurses(3, 1);
+
+			attron(COLOR_PAIR(sending_commands?COLOR_RED_BACKGROUND:COLOR_WHITE));
+			mvprintw(11, 1, "sendcmds mode: %s", sending_commands?"yes":"no ");
+			attroff(COLOR_PAIR(sending_commands?COLOR_RED_BACKGROUND:COLOR_WHITE));
+			
+			attron(COLOR_PAIR(synch_mode?COLOR_RED_BACKGROUND:COLOR_WHITE));
+			mvprintw(12, 1, "synch mode: %s", synch_mode?"yes":"no ");
+			attroff(COLOR_PAIR(synch_mode?COLOR_RED_BACKGROUND:COLOR_WHITE));
+
+			attron(COLOR_PAIR(hoh_mode?COLOR_RED_BACKGROUND:COLOR_WHITE));
+			mvprintw(13, 1, "hand-over-hand mode: %s", hoh_mode?"yes":"no ");
+			attroff(COLOR_PAIR(hoh_mode?COLOR_RED_BACKGROUND:COLOR_WHITE));
+
+			mvprintw(14, 5, "hoh side: ");
+			if (hoh_side == Krang::LEFT) mvprintw(14, 16, "left       ");
+			else mvprintw(14, 16, "      right");
+			mvprintw(15, 5, " hoh dir: ");
+			if (hoh_moving_right) mvprintw(15, 16, "      right");
+			else mvprintw(15, 16, "left       ");
 		}
-		if (debug_print_this_it) { mvprintw(12, 1, "synch mode: %d", synch_mode); }
 
 		// Update the robot
 		hw->updateSensors(time_delta);
@@ -247,50 +271,57 @@ void run() {
 		// ========================================================================================
 		// Perform workspace for each arm, changing the input for right arm based on synch mode
 
-		Eigen::MatrixXd Tref_R_sync;
-		Eigen::VectorXd spacenav_input, xdot_spacenav;
 		for(int sint = Krang::LEFT; sint-1 < Krang::RIGHT; sint++) {
 			// Get the arm side and the joint angles
 			Krang::Side sde = static_cast<Krang::Side>(sint);
 			Eigen::VectorXd q = robot->getConfig(*wss[sde]->arm_ids);
 
+			// some debugs
 			if (debug_print_this_it) {
+				// clear out a row to separate the arms' prints
+				mvprintw(Krang::curses_display_row, 1, "                                                                                                                        ");
 				Krang::curses_display_row++;
 				mvprintw(Krang::curses_display_row++, 1, "Arm: '%s'\n", sde == Krang::LEFT ? "LEFT" : "RIGHT");
 			}
 
+			// Create variables
+			Eigen::MatrixXd Tref_R_sync;
+			Eigen::VectorXd spacenav_input;
+			Eigen::VectorXd xdot_spacenav = Eigen::VectorXd::Zero(6);
+			Eigen::VectorXd xdot_hoh = Eigen::VectorXd::Zero(6);
+			Eigen::VectorXd xdot_ws_goal = Eigen::VectorXd::Zero(6);
+
 			// Nullspace: construct a qdot that the jacobian will bias toward using the nullspace
-			Eigen::VectorXd q_elbow_ref = q;
-			q_elbow_ref(3) = sde == Krang::LEFT ? -0.5 : 0.5;
-			nullspace_qdot_refs[sde] = (q_elbow_ref - q).normalized();
+			nullspace_qdot_refs[sde] = (nullspace_q_refs[sde] - q).cwiseProduct(nullspace_q_masks[sde]);
 
 			// update spacenav, because we use it for grippers regardless of the mode
 			spacenav_input = spnavs[sde]->updateSpaceNav();
+
+			// Close the gripper if button 0 is pressed, open it if button 1.
+			somatic_motor_t* gripper = (sde == Krang::LEFT) ? hw->lgripper : hw->rgripper;
+			if(spnavs[sde]->buttons[sint] == 1) {
+				somatic_motor_setpos(&daemon_cx, gripper, GRIPPER_POSITION_OPEN, 4);
+			}
+			if(spnavs[sde]->buttons[(sint + 1) % 2] == 1) {
+				somatic_motor_setpos(&daemon_cx, gripper, GRIPPER_POSITION_CLOSE, 4);
+			}
 
 			// depending on the synch mode, get a workspace velocity either from the spacenav or
 			// from the other arm
 			if(synch_mode && (sde == Krang::RIGHT)) {
 				Tref_R_sync = wss[Krang::LEFT]->Tref * Trel_left_to_right;
-			} else {
+			} else if (!hoh_mode) {
 				xdot_spacenav = wss[sde]->uiInputVelToXdot(spacenav_input);
+			} else if (hoh_mode && (hoh_side == sde)) {
+				Eigen::Vector3d dx_hoh = hoh_initpos[Krang::RIGHT] - hoh_initpos[Krang::LEFT];
+				if (!hoh_moving_right)
+					dx_hoh *= -1;
+				xdot_hoh = Eigen::VectorXd::Zero(6);
+				xdot_hoh.topLeftCorner<3,1>() = dx_hoh.normalized() * HAND_OVER_HAND_SPEED;
 			}
 
-			// Close the gripper if button 0 is pressed, open it if button 1.
-			somatic_motor_t* gripper = (sde == Krang::LEFT) ? hw->lgripper : hw->rgripper;
-			if(spnavs[sde]->buttons[sint] == 1) {
-				// somatic_motor_reset(&daemon_cx, gripper);
-				// usleep(100);
-				// somatic_motor_cmd(&daemon_cx, gripper, 
-				//                   SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, GRIPPER_CURRENT_CLOSE, 1, NULL);
-				somatic_motor_setpos(&daemon_cx, gripper, GRIPPER_POSITION_OPEN, 4);
-			}
-			if(spnavs[sde]->buttons[(sint + 1) % 2] == 1) {
-				// somatic_motor_reset(&daemon_cx, gripper);
-				// usleep(100);
-				// somatic_motor_cmd(&daemon_cx, gripper, 
-				//                   SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, GRIPPER_CURRENT_OPEN, 1, NULL);
-				somatic_motor_setpos(&daemon_cx, gripper, GRIPPER_POSITION_CLOSE, 4);
-			}
+			// put together the inputs from spacenav and hand-over-hand
+			xdot_ws_goal = xdot_spacenav + xdot_hoh;
 
 			// Jacobian: compute the desired jointspace velocity from the inputs and sensors
 			Eigen::VectorXd qdot_jacobian;
@@ -299,7 +330,7 @@ void run() {
 				                                   nullspace_qdot_refs[Krang::RIGHT], qdot_jacobian);
 			}
 			else {
-				wss[sde]->updateFromXdot(xdot_spacenav, fts[sde]->lastExternal,
+				wss[sde]->updateFromXdot(xdot_ws_goal, fts[sde]->lastExternal,
 				                         nullspace_qdot_refs[sde], time_delta, qdot_jacobian);
 			}
 
@@ -325,12 +356,14 @@ void run() {
 				Eigen::MatrixXd ee_trans = wss[sde]->endEffector->getWorldTransform();
 				Eigen::VectorXd ee_pos = Krang::transformToEuler(ee_trans, math::XYZ);
 
-				Krang::curses_display_vector(ee_pos, "current ee pos");
-				Krang::curses_display_vector(fts[sde]->lastExternal, "ft");
-				Krang::curses_display_vector(nullspace_qdot_refs[sde], "nullspace_qdot");
-				Krang::curses_display_vector(xdot_spacenav, "xdot_spacenav");
-				Krang::curses_display_vector(qdot_jacobian, "qdot_jacobian");
-				Krang::curses_display_vector(qdot_apply, "qdot_apply");
+				Krang::curses_display_vector(fts[sde]->lastExternal,   "ft                                  ");
+				Krang::curses_display_vector(xdot_spacenav,            "xdot_spacenav                       ");
+				Krang::curses_display_vector(xdot_hoh,                 "xdot_hoh                            ");
+				Krang::curses_display_vector(xdot_ws_goal,             "xdot_ws_goal                        ");
+				Krang::curses_display_vector(nullspace_qdot_refs[sde], "nullspace_qdot                      ");
+				Krang::curses_display_vector(qdot_jacobian,            "qdot_jacobian                       ");
+				Krang::curses_display_vector(qdot_apply,               "qdot_apply                          ");
+				Krang::curses_display_vector(ee_pos,                   "current ee pos                      ");
 
 				Eigen::VectorXd cur(7);
 				double largest_cur = 0;
@@ -338,7 +371,19 @@ void run() {
 					cur[i] = (sde == Krang::LEFT ? hw->larm->cur[i] : hw->rarm->cur[i]);
 					largest_cur = std::max(largest_cur, cur[i]);
 				}
-				Krang::curses_display_vector(cur, "measured_current", 0, largest_cur < 8 ? COLOR_WHITE : COLOR_YELLOW);
+
+				if(largest_cur < .1) {
+					attron(COLOR_PAIR(COLOR_RED_BACKGROUND));
+					mvprintw(11, sde==Krang::LEFT ? 30 : 50,
+					         sde==Krang::LEFT ? "left halt?" : "right halt?");
+					attroff(COLOR_PAIR(COLOR_RED_BACKGROUND));
+				} else {
+					mvprintw(11, sde==Krang::LEFT ? 30 : 50,
+					         sde==Krang::LEFT ? "          " : "           ");
+				}
+
+				Krang::curses_display_vector(cur, "measured_current                    ",
+				                             0, largest_cur < 8 ? COLOR_WHITE : COLOR_YELLOW);
 			}
 		}
 
@@ -399,6 +444,16 @@ void init() {
 
 	// set up the relative transform between the hands
 	Trel_left_to_right = wss[Krang::LEFT]->Tref.inverse() * wss[Krang::RIGHT]->Tref;
+
+	// set up nullspace stuff
+	nullspace_q_refs[Krang::LEFT] = (Vector7d()   << 0, -1.0, 0, -0.5, 0, -0.8, 0).finished();
+	nullspace_q_refs[Krang::RIGHT] = (Vector7d()  << 0,  1.0, 0,  0.5, 0,  0.8, 0).finished();
+	nullspace_q_masks[Krang::LEFT] = (Vector7d()  << 0,    0, 0,    1, 0,    0, 0).finished();
+	nullspace_q_masks[Krang::RIGHT] = (Vector7d() << 0,    0, 0,    1, 0,    0, 0).finished();
+	// nullspace_q_refs[Krang::LEFT] = (Vector7d()   << 0, -1.0, 0, -0.5, 0, -0.8, 0).finished();
+	// nullspace_q_refs[Krang::RIGHT] = (Vector7d()  << 0,  1.0, 0,  0.5, 0,  0.8, 0).finished();
+	// nullspace_q_masks[Krang::LEFT] = (Vector7d()  << 1,    1, 1,    1, 1,    0, 1).finished();
+	// nullspace_q_masks[Krang::RIGHT] = (Vector7d() << 1,    1, 1,    1, 1,    0, 1).finished();
 
 	// Start the daemon running
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
