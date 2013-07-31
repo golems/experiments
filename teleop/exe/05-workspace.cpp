@@ -177,6 +177,7 @@ void run() {
 				somatic_motor_reset(&daemon_cx, hw->rarm);
 				wss[Krang::LEFT]->resetReferenceTransform();
 				wss[Krang::RIGHT]->resetReferenceTransform();
+				Trel_left_to_right = wss[Krang::LEFT]->Tref.inverse() * wss[Krang::RIGHT]->Tref;
 			} else {
 				Eigen::VectorXd z = Eigen::VectorXd::Zero(7);
 				hoh_mode = false;
