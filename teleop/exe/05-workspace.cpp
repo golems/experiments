@@ -103,8 +103,6 @@ bool debug_print_this_it;       ///< whether we print
 int Krang::curses_display_row = 30;
 int Krang::curses_display_precision = 15;
 bool Krang::doing_curses = false;
-// std::ofstream debug_log;
-double time_log_start;
 
 int Krang::COLOR_RED_BACKGROUND = 11;
 int Krang::COLOR_YELLOW_BACKGROUND = 12;
@@ -160,6 +158,7 @@ void run() {
 		} break;
 		case 'h': {
 			ws_mode = MANIP_MODE_OFF;
+			hoh_mode = false;
 			sending_commands = false;
 			somatic_motor_halt(&daemon_cx, hw->larm);
 			somatic_motor_halt(&daemon_cx, hw->rarm);
@@ -173,12 +172,14 @@ void run() {
 		case ' ': {
 			sending_commands = !sending_commands;
 			if (sending_commands) {
+				hoh_mode = false;
 				somatic_motor_reset(&daemon_cx, hw->larm);
 				somatic_motor_reset(&daemon_cx, hw->rarm);
 				wss[Krang::LEFT]->resetReferenceTransform();
 				wss[Krang::RIGHT]->resetReferenceTransform();
 			} else {
 				Eigen::VectorXd z = Eigen::VectorXd::Zero(7);
+				hoh_mode = false;
 				somatic_motor_setvel(&daemon_cx, hw->larm, z.data(), 7);
 				somatic_motor_setvel(&daemon_cx, hw->rarm, z.data(), 7);
 			}
@@ -259,6 +260,7 @@ void run() {
 		if(checkCurrentLimits(eig7(hw->larm->cur)) && checkCurrentLimits(eig7(hw->rarm->cur))) {
 			if (sending_commands) {
 				sending_commands = false;
+				hoh_mode = false;
 				somatic_motor_halt(&daemon_cx, hw->larm);
 				somatic_motor_halt(&daemon_cx, hw->rarm);
 			}
