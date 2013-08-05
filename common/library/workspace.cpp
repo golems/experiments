@@ -41,7 +41,8 @@ namespace Krang {
 	/* ******************************************************************************************** */
 	WorkspaceControl::WorkspaceControl (dynamics::SkeletonDynamics* robot, Side side, 
 	                                    double _K_posRef_p, double _nullspace_gain, double _damping_gain, 
-	                                    double _ui_translation_gain, double _ui_orientation_gain, double _compliance_gain) {
+	                                    double _ui_translation_gain, double _ui_orientation_gain,
+	                                    double _compliance_translation_gain, double _compliance_orientation_gain) {
 
 		// Determine the end-effector and the arm indices based on the input side
 		endEffector = robot->getNode((side == LEFT) ? "lGripper" : "rGripper");
@@ -53,7 +54,8 @@ namespace Krang {
 
 		// Set the gains for sensors
 		ui_translation_gain = _ui_translation_gain, ui_orientation_gain = _ui_orientation_gain;
-		compliance_gain = _compliance_gain;
+		compliance_translation_gain = _compliance_translation_gain;
+		compliance_orientation_gain = _compliance_orientation_gain;
 		
 		// and don't print anything out
 		debug_to_cout = false;
@@ -127,8 +129,9 @@ namespace Krang {
 		integrateWSVelocityInput(xdot, dt);
 
 		// Compute an xdot for complying with external forces if the f/t values are within thresholds
-		Eigen::VectorXd xdot_comply;
-		xdot_comply = -ft * compliance_gain;
+		Eigen::VectorXd xdot_comply(6);
+		xdot_comply.topLeftCorner<3,1>() = -ft.topLeftCorner<3,1>() * compliance_translation_gain;
+		xdot_comply.bottomLeftCorner<3,1>() = -ft.bottomLeftCorner<3,1>() * compliance_orientation_gain;
 
 		// Get an xdot out of the P-controller that's trying to drive us to the refernece position
 		Eigen::VectorXd xdot_posref;
@@ -152,10 +155,10 @@ namespace Krang {
 		}
 
 		// do debug printing to standard out if configured
-		if (debug_to_curses) {
-			curses_display_vector(xdot_posref, "xdot from position ref");
-			curses_display_vector(xdot_comply, "xdot from compliance");
-		}
+		// if (debug_to_curses) {
+		// 	curses_display_vector(xdot_posref, "xdot from position ref");
+		// 	curses_display_vector(xdot_comply, "xdot from compliance");
+		// }
 	}
 
 	/* ******************************************************************************************** */
@@ -186,8 +189,9 @@ namespace Krang {
 		this->Tref = xref;
 
 		// Compute an xdot for complying with external forces if the f/t values are within thresholds
-		Eigen::VectorXd xdot_comply;
-		xdot_comply = -ft * compliance_gain;
+		Eigen::VectorXd xdot_comply(6);
+		xdot_comply.topLeftCorner<3,1>() = -ft.topLeftCorner<3,1>() * compliance_translation_gain;
+		xdot_comply.bottomLeftCorner<3,1>() = -ft.bottomLeftCorner<3,1>() * compliance_orientation_gain;
 
 		// Get an xdot out of the P-controller that's trying to drive us to the refernece position
 		Eigen::VectorXd xdot_posref;

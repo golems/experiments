@@ -47,7 +47,7 @@ public:
 	/// Constructor
 	WorkspaceControl (dynamics::SkeletonDynamics* robot, Side side, double _K_posRef_p, 
 			double nullspace_gain, double damping_gain, double ui_translation_gain, 
-			double ui_orientation_gain, double compliance_gain);
+			double ui_orientation_gain, double compliance_translation_gain, double compliance_orientation_gain);
 
 	/// Integrates the input workspace velocity if one is given. This is for a user interface device
 	/// such as spacenav or joystick whose input is more natural to interpret as velocities.
@@ -98,7 +98,8 @@ public:
 	double damping_gain;		///< The damping factor on the Jacobian to deal with singularities
 	double ui_translation_gain;		///< The constant multiplier for ui inputs translations (vel/pos)
 	double ui_orientation_gain;		///< The constant multiplier for ui inputs orientations (vel/pos)
-	double compliance_gain;	///< The effect of compliance in the workspace control
+	double compliance_translation_gain;	///< The effect of compliance in the workspace control
+	double compliance_orientation_gain;	///< The effect of compliance in the workspace control
 
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW

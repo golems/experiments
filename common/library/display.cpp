@@ -40,6 +40,9 @@ namespace Krang {
 	/* ############################################################################################## */
 	/// Set up a curses display and some commonly used color pairs.
 	void init_curses() {
+		// tell people to do curses
+		doing_curses = true;
+		
 		// general curses stuff
 		initscr();
 		clear();
@@ -53,11 +56,20 @@ namespace Krang {
 		init_pair(COLOR_YELLOW, COLOR_YELLOW, COLOR_BLACK);
 		init_pair(COLOR_GREEN, COLOR_GREEN, COLOR_BLACK);
 		init_pair(COLOR_WHITE, COLOR_WHITE, COLOR_BLACK);
+		init_pair(COLOR_RED_BACKGROUND, COLOR_WHITE, COLOR_RED);
+		init_pair(COLOR_YELLOW_BACKGROUND, COLOR_BLACK, COLOR_YELLOW);
+		init_pair(COLOR_GREEN_BACKGROUND, COLOR_BLACK, COLOR_GREEN);
+		init_pair(COLOR_WHITE_BACKGROUND, COLOR_BLACK, COLOR_WHITE);
+		
 	}
 
 	/* ############################################################################################## */
 	/// Close down and clean up after curses
 	void destroy_curses() {
+		// tell people to stop doing curses
+		doing_curses = true;
+		
+		// and clear out the curses configurations
 		clrtoeol();
 		refresh();
 		endwin();
