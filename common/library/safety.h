@@ -39,7 +39,7 @@ namespace Krang {
 	/// The boundary at the joint limits where the joint limit avoidance starts advicing a nonzero	
 	/// velocity in the opposite direction
 	const Eigen::VectorXd JOINTLIMIT_REGIONSIZE = 
-		(VectorXd(7) << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1).finished();
+		(Eigen::VectorXd(7) << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1).finished();
 
 	/// The maximum velocity at which we oppose joint limits
 	const double JOINTLIMIT_MAXVEL = 1.0; 
@@ -53,7 +53,8 @@ namespace Krang {
 	
 	/// Monitors the current values and either prints warnings or returns a boolean which indicates the program
 	/// should be stopped immediately
-	bool checkCurrentLimits (const VectorXd& cur);
+	bool checkCurrentLimits (const Eigen::VectorXd& cur);
+	bool checkCurrentLimits (const double* cur, size_t n);
 
 	/// Returns a jointspace velocity to move with to oppose the joint limit in a smooth way
 	/// Basically, an inverse distance to boundary function which returns higher velocity as the 
