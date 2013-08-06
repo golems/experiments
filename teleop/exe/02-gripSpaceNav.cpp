@@ -42,6 +42,7 @@
 #include "workspace.h"
 #include "sensors.h"
 #include "safety.h"
+#include "display.hpp"
 
 using namespace Krang;
 using namespace Eigen;
@@ -55,7 +56,6 @@ std::map<Krang::Side, Krang::SpaceNav*> spnavs; ///< points to spacenavs
 
 // workspace stuff
 std::map<Krang::Side, Krang::WorkspaceControl*> wss; ///< does workspace control for the arms
-bool debug_print_this_it;
 
 // sync-mode stuff
 Eigen::MatrixXd Trel_left_to_right; ///< translation from the left hand to the right hand
@@ -69,10 +69,24 @@ const double NULLSPACE_GAIN = 0.1;
 const double DAMPING_GAIN = 0.005;
 const double SPACENAV_ORIENTATION_GAIN = 0.75;
 const double SPACENAV_TRANSLATION_GAIN = 0.25; 
-const double COMPLIANCE_GAIN = 1.0 / 750.0;
+const double COMPLIANCE_TRANSLATION_GAIN = 1.0 / 750.0;
+const double COMPLIANCE_ORIENTATION_GAIN = .125 / 750.0;
 
 const double LOOP_FREQUENCY = 10.0;
 const double DISPLAY_FREQUENCY = 3.0;
+
+
+/* ********************************************************************************************* */
+// junk needed by the curses display stuff
+bool debug_print_this_it;       ///< whether we print
+int Krang::curses_display_row = 30;
+int Krang::curses_display_precision = 15;
+bool Krang::doing_curses = false;
+
+int Krang::COLOR_RED_BACKGROUND = 11;
+int Krang::COLOR_YELLOW_BACKGROUND = 12;
+int Krang::COLOR_GREEN_BACKGROUND = 13;
+int Krang::COLOR_WHITE_BACKGROUND = 14;
 
 /* ********************************************************************************************* */
 /// Gets the workspace velocity input from the spacenav, updates a workspace reference position
@@ -233,9 +247,11 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 
 	// Set up the workspace controllers
 	wss[Krang::LEFT] = new WorkspaceControl(robot, LEFT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
-	                                        SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_GAIN);
+	                                        SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_TRANSLATION_GAIN,
+	                                        COMPLIANCE_ORIENTATION_GAIN);
 	wss[Krang::RIGHT] = new WorkspaceControl(robot, RIGHT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
-	                                         SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_GAIN);
+	                                         SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_TRANSLATION_GAIN,
+	                                         COMPLIANCE_ORIENTATION_GAIN);
 
 	// Manually set the initial arm configuration for the arms
 	Eigen::VectorXd homeConfigsL(7);
