@@ -128,14 +128,6 @@ bool hoh_moving_right = false;
 
 // debug stuff
 bool debug_print_this_it;       ///< whether we print
-int Krang::curses_display_row = 30;
-int Krang::curses_display_precision = 15;
-bool Krang::doing_curses = false;
-
-int Krang::COLOR_RED_BACKGROUND = 11;
-int Krang::COLOR_YELLOW_BACKGROUND = 12;
-int Krang::COLOR_GREEN_BACKGROUND = 13;
-int Krang::COLOR_WHITE_BACKGROUND = 14;
 
 // stuff for visualization
 ach_channel_t vis_chan;

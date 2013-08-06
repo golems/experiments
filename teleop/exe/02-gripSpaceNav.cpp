@@ -42,7 +42,6 @@
 #include "workspace.h"
 #include "sensors.h"
 #include "safety.h"
-#include "display.hpp"
 
 using namespace Krang;
 using namespace Eigen;
@@ -75,18 +74,7 @@ const double COMPLIANCE_ORIENTATION_GAIN = .125 / 750.0;
 const double LOOP_FREQUENCY = 10.0;
 const double DISPLAY_FREQUENCY = 3.0;
 
-
-/* ********************************************************************************************* */
-// junk needed by the curses display stuff
 bool debug_print_this_it;       ///< whether we print
-int Krang::curses_display_row = 30;
-int Krang::curses_display_precision = 15;
-bool Krang::doing_curses = false;
-
-int Krang::COLOR_RED_BACKGROUND = 11;
-int Krang::COLOR_YELLOW_BACKGROUND = 12;
-int Krang::COLOR_GREEN_BACKGROUND = 13;
-int Krang::COLOR_WHITE_BACKGROUND = 14;
 
 /* ********************************************************************************************* */
 /// Gets the workspace velocity input from the spacenav, updates a workspace reference position

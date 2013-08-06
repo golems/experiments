@@ -52,7 +52,6 @@
 
 #include "kore.h"
 #include "util.h"
-#include "display.hpp"
 
 using namespace std;
 using namespace Eigen;
@@ -71,17 +70,7 @@ Matrix4d Tlst;              ///< The current configuration of the sensor in the 
 Matrix4d Twg0;							///< The initial configuration of the gripper in the world frame
 Matrix4d Tls0;							///< The initial configuration of the sensor in the liberty frame
 
-/* ********************************************************************************************* */
-// junk needed by the curses display stuff
 bool debug_print_this_it;       ///< whether we print
-int Krang::curses_display_row = 30;
-int Krang::curses_display_precision = 15;
-bool Krang::doing_curses = false;
-
-int Krang::COLOR_RED_BACKGROUND = 11;
-int Krang::COLOR_YELLOW_BACKGROUND = 12;
-int Krang::COLOR_GREEN_BACKGROUND = 13;
-int Krang::COLOR_WHITE_BACKGROUND = 14;
 
 /* ********************************************************************************************* */
 /// Returns the values of the first liberty sensor

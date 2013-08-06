@@ -37,6 +37,16 @@
 
 namespace Krang {
 
+	int COLOR_RED_BACKGROUND;
+	int COLOR_YELLOW_BACKGROUND;
+	int COLOR_GREEN_BACKGROUND;
+	int COLOR_WHITE_BACKGROUND;
+
+	int curses_display_precision;
+	int curses_display_row;
+	bool doing_curses;
+
+
 	/* ############################################################################################## */
 	/// Set up a curses display and some commonly used color pairs.
 	void init_curses() {
@@ -49,6 +59,15 @@ namespace Krang {
 		noecho();                   // do not echo input to the screen
 		cbreak();                   // do not buffer by line (receive characters immediately)
 		timeout(0);                 // non-blocking getch
+
+		COLOR_RED_BACKGROUND = 11;
+		COLOR_YELLOW_BACKGROUND = 12;
+		COLOR_GREEN_BACKGROUND = 13;
+		COLOR_WHITE_BACKGROUND = 14;
+
+		curses_display_precision = 30;
+		curses_display_row = 15;
+		doing_curses = false;
 
 		// color
 		start_color();              // start printing in color
@@ -80,7 +99,7 @@ namespace Krang {
 	/// keeping track of which rows have been printed to, so all you need to do to use this is make
 	/// sure you set curses_display_row to something sensible at the beginning of every iteration
 	/// of your main loop.
-	void curses_display_vector(const VectorXd& v, const char* label, int column, int color) {
+	void curses_display_vector(const Eigen::VectorXd& v, const char* label, int column, int color) {
 		attron(COLOR_PAIR(color));
 		mvprintw(curses_display_row, 1, label);
 		for(int i = 0; i < v.size(); i++)
@@ -96,7 +115,7 @@ namespace Krang {
 	/// keeping track of which rows have been printed to, so all you need to do to use this is make
 	/// sure you set curses_display_row to something sensible at the beginning of every iteration
 	/// of your main loop.
-	void curses_display_matrix(const MatrixXd& m, const char* label, int column, int color) {
+	void curses_display_matrix(const Eigen::MatrixXd& m, const char* label, int column, int color) {
 		attron(COLOR_PAIR(color));
 		mvprintw(curses_display_row, 1, label);
 		for(int mrow = 0; mrow < m.rows(); mrow++) {
