@@ -81,6 +81,7 @@ extern std::vector <int> imuWaist_ids;			///< Ids for waist/imu
 extern std::vector <int> dart_root_dof_ids;        ///< Ids for the root position/orientation dofs in DART
 
 /* ******************************************************************************************** */
+// TODO: these should be in the Eigen namespace, not the Krang namespace.
 typedef Matrix<double, 6, 1> Vector6d;			///< A typedef for convenience to contain f/t values
 typedef Matrix<double, 7, 1> Vector7d;			///< A typedef for convenience to contain joint values
 typedef Matrix<double, 6, 6> Matrix6d;			///< A typedef for convenience to contain wrenches
