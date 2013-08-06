@@ -37,6 +37,7 @@
 #include "kore.h"
 #include "workspace.h"
 #include "display.hpp"
+#include "visualization.hpp"
 
 #include <iostream>
 #include <iomanip>
@@ -136,6 +137,11 @@ int Krang::COLOR_YELLOW_BACKGROUND = 12;
 int Krang::COLOR_GREEN_BACKGROUND = 13;
 int Krang::COLOR_WHITE_BACKGROUND = 14;
 
+// stuff for visualization
+ach_channel_t vis_chan;
+Krang::teleop_05_workspace_vis_t vis_msg;
+
+
 /* ******************************************************************************************** */
 /// Clean up
 void destroy() {
@@ -146,6 +152,9 @@ void destroy() {
 	// Stop the daemon
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
 	                SOMATIC__EVENT__CODES__PROC_STOPPING, NULL, NULL);
+	
+	// close the channel we use for publishing visualization data
+	somatic_d_channel_close(&daemon_cx, &vis_chan);
 
 	// Clean up the workspace stuff
 	delete wss[Krang::LEFT];
@@ -380,6 +389,14 @@ void run() {
 			if(sending_commands)
 				somatic_motor_setvel(&daemon_cx, sde == Krang::LEFT ? hw->larm : hw->rarm, qdot_apply.data(), 7);
 
+			// store some internal state into the vis_msg so we can publish it
+			Eigen::VectorXd posref_euler = transformToEuler(wss[sde]->Tref, math::XYZ);
+			aa_fcpy(vis_msg.pos_ref[sde], posref_euler.data(), 6);
+			aa_fcpy(vis_msg.xdot_spacenav[sde], xdot_spacenav.data(), 6);
+			aa_fcpy(vis_msg.xdot_hoh[sde], xdot_hoh.data(), 6);
+			aa_fcpy(vis_msg.ft_external[sde], fts[sde]->lastExternal.data(), 6);
+
+			// do some debug output by printing to curses
 			if (debug_print_this_it) {
 				// if(synch_mode && (sde == Krang::RIGHT)) 
 				// 	Krang::curses_display_matrix(Tref_R_sync);
@@ -415,6 +432,9 @@ void run() {
 				Krang::curses_display_vector(cur, "measured_current                    ",
 				                             0, largest_cur < 8 ? COLOR_WHITE : COLOR_YELLOW);
 			}
+
+			// publish our visualization data
+			ach_put(&vis_chan, &vis_msg, sizeof(vis_msg));
 		}
 
 		// display everything curses has done
@@ -484,6 +504,9 @@ void init() {
 	// nullspace_q_refs[Krang::RIGHT] = (Vector7d()  << 0,  1.0, 0,  0.5, 0,  0.8, 0).finished();
 	// nullspace_q_masks[Krang::LEFT] = (Vector7d()  << 1,    1, 1,    1, 1,    0, 1).finished();
 	// nullspace_q_masks[Krang::RIGHT] = (Vector7d() << 1,    1, 1,    1, 1,    0, 1).finished();
+
+	// open the ach channel we'll use for visualizing things
+	somatic_d_channel_open(&daemon_cx, &vis_chan, "teleop-05-workspace-vis", NULL);
 
 	// Start the daemon running
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
