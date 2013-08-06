@@ -61,8 +61,7 @@ using namespace dynamics;
 somatic_d_t daemon_cx;
 ach_channel_t liberty_chan;
 
-SkeletonDynamics* robot;
-vector <int> left_arm_ids;  ///< The indices to the Krang dofs in dart
+dynamics::SkeletonDynamics* robot;
 
 VectorXd homeConfig(7);			///< Home configuration for the left arm
 Matrix4d Tref;							///< The reference pos/ori for the left end-effector
@@ -168,8 +167,8 @@ void getQdot (const VectorXd& xdot, VectorXd& qdot) {
 	for (int i=0; i < JJt.rows(); i++) JJt(i,i) += dampGain;
 
 	// Compute the reference joint velocities for nullspace projection
-	VectorXd q = robot->getConfig(left_arm_ids);
-	VectorXd qDotRef = (q - qRef) * qdotRefDt;
+	Eigen::VectorXd q = robot->getConfig(Krang::left_arm_ids);
+	Eigen::VectorXd qDotRef = (q - qRef) * qdotRefDt;
 	
 	// Compute the qdot using the reference joint velocity and the reference position 
 	MatrixXd Jinv = Jt * JJt.inverse();
@@ -212,10 +211,10 @@ void Timer::Notify() {
 	DISPLAY_VECTOR(qdot);
 
 	// Apply the joint velocities
-	Eigen::VectorXd q = robot->getConfig(left_arm_ids);
+	Eigen::VectorXd q = robot->getConfig(Krang::left_arm_ids);
 	q += qdot * 0.03;
 	DISPLAY_VECTOR(q);
-	robot->setConfig(left_arm_ids, q);
+	robot->setConfig(Krang::left_arm_ids, q);
 
 	// Visualize the scene
 	viewer->DrawGLScene();
@@ -256,16 +255,12 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	somatic_d_channel_open(&daemon_cx, &liberty_chan, "liberty", NULL);
 
 	// Manually set the initial arm configuration for the left arm
-	for(int i = 11; i < 24; i+=2) left_arm_ids.push_back(i);
 	homeConfig <<  1.102, -0.589,  0.000, -1.339,  0.000, -0.959, -1.000;
-	robot->setConfig(left_arm_ids, homeConfig);
+	robot->setConfig(Krang::left_arm_ids, homeConfig);
 
 	// Also, set the imu and waist angles
-	vector <int> imuWaist_ids;
-	imuWaist_ids.push_back(5);
-	imuWaist_ids.push_back(8);
 	Vector2d imuWaist (3.45, 2.81);
-	robot->setConfig(imuWaist_ids, imuWaist);
+	robot->setConfig(Krang::imuWaist_ids, imuWaist);
 
 	// Initialize the "initial" reference configuration for the end-effector with current
 	Tref = robot->getNode("lGripper")->getWorldTransform();
