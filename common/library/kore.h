@@ -115,18 +115,15 @@ public:
 	double imu, imuSpeed;									///< Latest imu readings (or the mean over a window)
 	filter_kalman_t* kfImu; 							///< The kalman filter for the imu readings
 
-	FT* lft;															///< Force/torque data from left arm
-	FT* rft;															///< Force/torque data from right arm
+	std::map<Side, FT*> fts; ///< Force/torque data from the arms, indexed by siden
 
 public:
 	// The interfaces to the motor groups on Krang
 
 	somatic_motor_t* amc;									///< Wheel motors interface
-	somatic_motor_t* larm;								///< Left arm motors interface
-	somatic_motor_t* rarm;								///< Right arm motors interface
+	std::map<Side, somatic_motor_t*> arms; ///< Arm motors interfaces, indexed by side
+	std::map<Side, somatic_motor_t*> grippers; ///< Gripper motor interfaces, indexed by side
 	somatic_motor_t* torso;								///< Torso motor interface
-	somatic_motor_t* lgripper;						///< Gripper motors interface
-	somatic_motor_t* rgripper;						///< Gripper motors interface
 	somatic_motor_t* waist;								///< Waist motors interface - only read
 	ach_channel_t* waistCmdChan;					///< Command channel for the waist daemon
 };

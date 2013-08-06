@@ -50,8 +50,7 @@ Hardware::Hardware (Mode mode_, somatic_d_t* daemon_cx_, dynamics::SkeletonDynam
 	mode = mode_;
 
 	// Initialize all the 'optional' pointers to nulls and sanity check the inputs
-	lft = rft = NULL;
-	amc = larm = rarm = torso = lgripper = rgripper = NULL;
+	amc = torso = NULL;
 	waistCmdChan = NULL;
 	assert((daemon_cx != NULL) && "Can not give null daemon context to hardware constructor");
 	assert((robot != NULL) && "Can not give null dart kinematics to hardware constructor");
@@ -67,19 +66,19 @@ Hardware::Hardware (Mode mode_, somatic_d_t* daemon_cx_, dynamics::SkeletonDynam
 
 	// Initialize the Schunk (+ Robotiq) motor groups
 	if(mode & MODE_LARM) 
-		initMotorGroup(larm, "llwa-cmd", "llwa-state", -lim7, lim7, -lim7, lim7);	
+		initMotorGroup(arms[LEFT], "llwa-cmd", "llwa-state", -lim7, lim7, -lim7, lim7);	
 	if(mode & MODE_RARM) 
-		initMotorGroup(rarm, "rlwa-cmd", "rlwa-state", -lim7, lim7, -lim7, lim7);	
+		initMotorGroup(arms[RIGHT], "rlwa-cmd", "rlwa-state", -lim7, lim7, -lim7, lim7);	
 	if(mode & MODE_TORSO) 
 		initMotorGroup(torso, "torso-cmd", "torso-state", -lim1, lim1, -lim1, lim1);	
 	if((mode & MODE_LARM) && (mode & MODE_GRIPPERS_SCH))
-		initMotorGroup(lgripper, "lgripper-cmd", "lgripper-state", -lim1, lim1, -lim1, lim1);
+		initMotorGroup(grippers[LEFT], "lgripper-cmd", "lgripper-state", -lim1, lim1, -lim1, lim1);
 	if((mode & MODE_LARM) && (mode & MODE_GRIPPERS))
-		initMotorGroup(lgripper, "lgripper-cmd", "lgripper-state", -lim4, lim4, -lim4, lim4);
+		initMotorGroup(grippers[LEFT], "lgripper-cmd", "lgripper-state", -lim4, lim4, -lim4, lim4);
 	if((mode & MODE_RARM) && (mode & MODE_GRIPPERS_SCH))
-		initMotorGroup(rgripper, "rgripper-cmd", "rgripper-state", -lim1, lim1, -lim1, lim1);
+		initMotorGroup(grippers[RIGHT], "rgripper-cmd", "rgripper-state", -lim1, lim1, -lim1, lim1);
 	if((mode & MODE_RARM) && (mode & MODE_GRIPPERS))
-		initMotorGroup(rgripper, "rgripper-cmd", "rgripper-state", -lim4, lim4, -lim4, lim4);
+		initMotorGroup(grippers[RIGHT], "rgripper-cmd", "rgripper-state", -lim4, lim4, -lim4, lim4);
 
 	// Initialize the wheel motor groups which depend on imu readings to get absolute wheel positions
 	if(mode & MODE_AMC) initWheels();
@@ -96,8 +95,8 @@ Hardware::Hardware (Mode mode_, somatic_d_t* daemon_cx_, dynamics::SkeletonDynam
 	FT::GripperType ft_grippers;
 	if (mode & MODE_GRIPPERS) ft_grippers = FT::GRIPPER_TYPE_ROBOTIQ;
 	if (mode & MODE_GRIPPERS_SCH) ft_grippers = FT::GRIPPER_TYPE_SCHUNK;
-	if(mode & MODE_LARM) lft = new FT(ft_grippers, daemon_cx, robot, LEFT);
-	if(mode & MODE_RARM) rft = new FT(ft_grippers, daemon_cx, robot, RIGHT);
+	if(mode & MODE_LARM) fts[LEFT] = new FT(ft_grippers, daemon_cx, robot, LEFT);
+	if(mode & MODE_RARM) fts[RIGHT] = new FT(ft_grippers, daemon_cx, robot, RIGHT);
 }
 
 /* ******************************************************************************************** */
@@ -109,8 +108,8 @@ Hardware::~Hardware () {
 	filter_kalman_destroy(kfImu);	
 
 	// Destroy the ft sensors
-	if(lft != NULL) delete lft;
-	if(rft != NULL) delete rft;
+	if(fts.count(LEFT) != 0) delete fts[LEFT];
+	if(fts.count(RIGHT) != 0) delete fts[RIGHT];
 	
 	// Send zero velocity to amc and clean it up
 	double zeros2[2] = {0.0, 0.0}, zeros7[7] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}; 
@@ -121,27 +120,28 @@ Hardware::~Hardware () {
 	}
 
 	// Send halt messages directly to the left and right arms
-	if(rarm != NULL) {
-		somatic_motor_halt(daemon_cx, rarm);
-		somatic_motor_destroy(daemon_cx, rarm);
-		delete rarm;
+	// TODO: should we be halting the arms?
+	if(arms.count(RIGHT) != 0) {
+		somatic_motor_halt(daemon_cx, arms[RIGHT]);
+		somatic_motor_destroy(daemon_cx, arms[RIGHT]);
+		delete arms[RIGHT];
 	}
-	if(larm != NULL) {
-		somatic_motor_halt(daemon_cx, larm);
-		somatic_motor_destroy(daemon_cx, larm);
-		delete larm;
+	if(arms.count(LEFT) != 0) {
+		somatic_motor_halt(daemon_cx, arms[LEFT]);
+		somatic_motor_destroy(daemon_cx, arms[LEFT]);
+		delete arms[LEFT];
 	}
 	
 	// Destroy the gripper motors
-	if(lgripper != NULL) { 
-		somatic_motor_halt(daemon_cx, lgripper);
-		somatic_motor_destroy(daemon_cx, lgripper);
-		delete lgripper;
+	if(grippers.count(LEFT) != 0) { 
+		somatic_motor_halt(daemon_cx, grippers[LEFT]);
+		somatic_motor_destroy(daemon_cx, grippers[LEFT]);
+		delete grippers[LEFT];
 	}
-	if(rgripper != NULL) { 
-		somatic_motor_halt(daemon_cx, rgripper);
-		somatic_motor_destroy(daemon_cx, rgripper);
-		delete rgripper;
+	if(grippers.count(RIGHT) != 0) { 
+		somatic_motor_halt(daemon_cx, grippers[RIGHT]);
+		somatic_motor_destroy(daemon_cx, grippers[RIGHT]);
+		delete grippers[RIGHT];
 	}
 
 	// Stop and destroy	waist motors
@@ -205,15 +205,15 @@ void Hardware::updateSensors (double dt) {
 	getImu(imu_chan, imu, imuSpeed, dt, kfImu); 
 
 	// Update the arms
-	if(mode & MODE_LARM) somatic_motor_update(daemon_cx, larm);
-	if(mode & MODE_RARM) somatic_motor_update(daemon_cx, rarm);
+	if(mode & MODE_LARM) somatic_motor_update(daemon_cx, arms[LEFT]);
+	if(mode & MODE_RARM) somatic_motor_update(daemon_cx, arms[RIGHT]);
 
 	// Update the kinematics
 	updateKinematics();
 
 	// Update the f/t readings
-	if(mode & MODE_LARM) lft->updateExternal();
-	if(mode & MODE_RARM) rft->updateExternal();
+	if(mode & MODE_LARM) fts[LEFT]->updateExternal();
+	if(mode & MODE_RARM) fts[RIGHT]->updateExternal();
 }
 
 /* ******************************************************************************************** */
@@ -238,11 +238,11 @@ void Hardware::updateKinematics () {
 
 	// Update the arms state
 	if(mode & MODE_LARM) {
-		Vector7d larm_vals = eig7(larm->pos);
+		Vector7d larm_vals = eig7(arms[LEFT]->pos);
 		for(int i = 0; i < larm_vals.size(); i++) all_vals[imuWaist_ids.size() + i] = larm_vals[i];
 	}
 	if(mode & MODE_RARM) {
-		Vector7d rarm_vals = eig7(rarm->pos);
+		Vector7d rarm_vals = eig7(arms[RIGHT]->pos);
 		for(int i = 0; i < rarm_vals.size(); i++) all_vals[imuWaist_ids.size() + left_arm_ids.size() + i] = rarm_vals[i];
 	}
 	robot->setConfig(all_ids, all_vals);
