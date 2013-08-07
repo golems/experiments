@@ -43,7 +43,7 @@
 #include <simulation/World.h>
 #include <yui/GLFuncs.h>
 
-#include "kore.h"
+#include "kore.hpp"
 #include "display.hpp"
 #include "visualization.hpp"
 

@@ -15,7 +15,6 @@ endif()
 
 # include kore
 include_directories(..)
-include_directories(../library)
 
 # Include Dart and Grip stuff and eigen
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -24,13 +23,8 @@ find_package(Eigen3 REQUIRED)
 include_directories(EIGEN3_INCLUDE_DIR)
 
 # Link to libraries that we need
-link_libraries(protobuf-c amino ach somatic filter ncurses stdc++)
-
-# build kore
-file(GLOB kore_source "../library/*.cpp")
-add_library(kore SHARED ${kore_source})
+link_libraries(protobuf-c amino ach somatic filter ncurses kore stdc++)
 
 # and build our executable
 add_executable(krang-vis-tab krang-vis-tab.cpp krang-vis-tab.hpp)
-target_link_libraries(krang-vis-tab kore)
 target_link_libraries(krang-vis-tab ${GRIP_LIBRARIES} ${DART_LIBRARIES} ${DARTExt_LIBRARIES} ${wxWidgets_LIBRARIES})

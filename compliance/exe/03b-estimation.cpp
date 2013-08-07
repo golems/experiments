@@ -38,7 +38,7 @@
 
 #include <robotics/parser/dart_parser/DartLoader.h>
 #include <simulation/World.h>
-#include "kore.h"
+#include "kore.hpp"
 
 using namespace std;
 using namespace Krang;
@@ -73,7 +73,7 @@ void run() {
 		// Print the external f/t readings for the left arm
 		if(c % 10 == 1) {
 			hw->printState();
-			std::cout << "lft ext: " << hw->lft->lastExternal.transpose() << "\n" << std::endl;
+			std::cout << "lft ext: " << hw->fts[Krang::LEFT]->lastExternal.transpose() << "\n" << std::endl;
 		}
 		usleep(1e4);
 	}
