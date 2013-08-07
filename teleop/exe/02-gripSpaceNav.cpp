@@ -39,9 +39,9 @@
 #include "GRIPApp.h"
 #include <math/UtilsRotation.h>
 
-#include "workspace.h"
-#include "sensors.h"
-#include "safety.h"
+#include "workspace.hpp"
+#include "sensors.hpp"
+#include "safety.hpp"
 #include "display.hpp"
 
 using namespace Krang;

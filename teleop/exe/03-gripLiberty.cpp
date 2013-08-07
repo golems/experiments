@@ -50,8 +50,8 @@
 
 #include "simTab.h"
 
-#include "kore.h"
-#include "util.h"
+#include "kore.hpp"
+#include "util.hpp"
 #include "display.hpp"
 
 using namespace std;

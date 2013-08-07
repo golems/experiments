@@ -34,8 +34,8 @@
  * demonstrations.
  */
 
-#include "kore.h"
-#include "workspace.h"
+#include "kore.hpp"
+#include "workspace.hpp"
 #include "display.hpp"
 #include "visualization.hpp"
 
@@ -45,7 +45,7 @@
 #include <robotics/parser/dart_parser/DartLoader.h>
 #include <simulation/World.h>
 
-#include "util.h"
+#include "util.hpp"
 
 using namespace Krang;
 

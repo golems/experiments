@@ -16,7 +16,7 @@ include(cmake/simulation.cmake)
 # Link to somatic, amino and ach
 # NOTE: Ideally we would like to 'find' these packages but for now, we assume they are either 
 # in /usr/lib or /usr/local/lib
-link_libraries(protobuf-c amino ach somatic filter stdc++ ncurses)
+link_libraries(protobuf-c amino ach kore somatic filter stdc++ ncurses)
 
 
 # Include Eigen
@@ -30,15 +30,14 @@ include_directories(EIGEN3_INCLUDE_DIR)
 # Include the project files and the common helpers for all the experiments
 include_directories(src)
 include_directories(../common)
-include_directories(../common/library)
 
 # Collect the source, script and fortran files
-file(GLOB main_source "src/*.cpp" "src/*.c" "../common/library/*.cpp")
+#file(GLOB main_source "src/*.cpp" "src/*.c")
 file(GLOB scripts_source "exe/*.cpp")
 LIST(SORT scripts_source)
 
 # Build the library and set the executables that use it (have to hardcode for now)
-add_library(Main SHARED ${main_source})
+#add_library(Main SHARED ${main_source})
 
 # uncomment to break apart libraries
 #add_library(KrangControl SHARED "src/KrangControl.cpp")
