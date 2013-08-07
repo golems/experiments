@@ -53,10 +53,6 @@
 #include "kore.h"
 #include "util.h"
 
-using namespace std;
-using namespace Eigen;
-using namespace dynamics;
-
 /* ********************************************************************************************* */
 somatic_d_t daemon_cx;
 ach_channel_t liberty_chan;

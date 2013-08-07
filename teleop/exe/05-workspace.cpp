@@ -45,10 +45,6 @@
 #include <robotics/parser/dart_parser/DartLoader.h>
 #include <simulation/World.h>
 
-#include "util.h"
-
-using namespace Krang;
-
 /* ********************************************************************************************* */
 // Declarations
 typedef enum {

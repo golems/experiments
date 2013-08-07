@@ -43,10 +43,6 @@
 #include "sensors.h"
 #include "safety.h"
 
-using namespace Krang;
-using namespace Eigen;
-using namespace dynamics;
-
 somatic_d_t daemon_cx;
 dynamics::SkeletonDynamics* robot;
 std::map<Krang::Side, Krang::Vector7d> nullspace_qdot_refs;			///< nullspace configurations for the arms
