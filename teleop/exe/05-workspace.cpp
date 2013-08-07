@@ -189,36 +189,36 @@ void run() {
 		switch (ch) {
 		case 'q': somatic_sig_received = true; break;
 		case 'r': {
-			somatic_motor_reset(&daemon_cx, hw->larm);
-			somatic_motor_reset(&daemon_cx, hw->rarm);
+			somatic_motor_reset(&daemon_cx, hw->arms[Krang::LEFT]);
+			somatic_motor_reset(&daemon_cx, hw->arms[Krang::RIGHT]);
 		} break;
 		case 'h': {
 			ws_mode = MANIP_MODE_OFF;
 			hoh_mode = false;
 			sending_commands = false;
-			somatic_motor_halt(&daemon_cx, hw->larm);
-			somatic_motor_halt(&daemon_cx, hw->rarm);
+			somatic_motor_halt(&daemon_cx, hw->arms[Krang::LEFT]);
+			somatic_motor_halt(&daemon_cx, hw->arms[Krang::RIGHT]);
 		} break;
 		case 'u': {
-			somatic_motor_setpos(&daemon_cx, hw->lgripper, GRIPPER_POSITION_PARTIAL, 4);
+			somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::LEFT], GRIPPER_POSITION_PARTIAL, 4);
 		} break;
 		case 'i': {
-			somatic_motor_setpos(&daemon_cx, hw->rgripper, GRIPPER_POSITION_PARTIAL, 4);
+			somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::RIGHT], GRIPPER_POSITION_PARTIAL, 4);
 		} break;
 		case ' ': {
 			sending_commands = !sending_commands;
 			if (sending_commands) {
 				hoh_mode = false;
-				somatic_motor_reset(&daemon_cx, hw->larm);
-				somatic_motor_reset(&daemon_cx, hw->rarm);
+				somatic_motor_reset(&daemon_cx, hw->arms[Krang::LEFT]);
+				somatic_motor_reset(&daemon_cx, hw->arms[Krang::RIGHT]);
 				wss[Krang::LEFT]->resetReferenceTransform();
 				wss[Krang::RIGHT]->resetReferenceTransform();
 				Trel_left_to_right = wss[Krang::LEFT]->Tref.inverse() * wss[Krang::RIGHT]->Tref;
 			} else {
 				Eigen::VectorXd z = Eigen::VectorXd::Zero(7);
 				hoh_mode = false;
-				somatic_motor_setvel(&daemon_cx, hw->larm, z.data(), 7);
-				somatic_motor_setvel(&daemon_cx, hw->rarm, z.data(), 7);
+				somatic_motor_setvel(&daemon_cx, hw->arms[Krang::LEFT], z.data(), 7);
+				somatic_motor_setvel(&daemon_cx, hw->arms[Krang::RIGHT], z.data(), 7);
 			}
 		} break;
 		case 's': {
@@ -294,12 +294,12 @@ void run() {
 		hw->updateSensors(time_delta);
 
 		// Check for too high currents
-		if(checkCurrentLimits(eig7(hw->larm->cur)) && checkCurrentLimits(eig7(hw->rarm->cur))) {
+		if(checkCurrentLimits(eig7(hw->arms[Krang::LEFT]->cur)) && checkCurrentLimits(eig7(hw->arms[Krang::RIGHT]->cur))) {
 			if (sending_commands) {
 				sending_commands = false;
 				hoh_mode = false;
-				somatic_motor_halt(&daemon_cx, hw->larm);
-				somatic_motor_halt(&daemon_cx, hw->rarm);
+				somatic_motor_halt(&daemon_cx, hw->arms[Krang::LEFT]);
+				somatic_motor_halt(&daemon_cx, hw->arms[Krang::RIGHT]);
 			}
 
 			// // TODO: handle this more nicely
@@ -337,12 +337,11 @@ void run() {
 			spacenav_input = spnavs[sde]->updateSpaceNav();
 
 			// Close the gripper if button 0 is pressed, open it if button 1.
-			somatic_motor_t* gripper = (sde == Krang::LEFT) ? hw->lgripper : hw->rgripper;
 			if(spnavs[sde]->buttons[sint] == 1) {
-				somatic_motor_setpos(&daemon_cx, gripper, GRIPPER_POSITION_OPEN, 4);
+				somatic_motor_setpos(&daemon_cx, hw->grippers[sde], GRIPPER_POSITION_OPEN, 4);
 			}
 			if(spnavs[sde]->buttons[(sint + 1) % 2] == 1) {
-				somatic_motor_setpos(&daemon_cx, gripper, GRIPPER_POSITION_CLOSE, 4);
+				somatic_motor_setpos(&daemon_cx, hw->grippers[sde], GRIPPER_POSITION_CLOSE, 4);
 			}
 
 			// depending on the synch mode, get a workspace velocity either from the spacenav or
@@ -365,11 +364,11 @@ void run() {
 			// Jacobian: compute the desired jointspace velocity from the inputs and sensors
 			Eigen::VectorXd qdot_jacobian;
 			if(synch_mode && (sde == Krang::RIGHT)) {
-				wss[Krang::RIGHT]->updateFromUIPos(Tref_R_sync, fts[Krang::RIGHT]->lastExternal,
+				wss[Krang::RIGHT]->updateFromUIPos(Tref_R_sync, hw->fts[Krang::RIGHT]->lastExternal,
 				                                   nullspace_qdot_refs[Krang::RIGHT], qdot_jacobian);
 			}
 			else {
-				wss[sde]->updateFromXdot(xdot_ws_goal, fts[sde]->lastExternal,
+				wss[sde]->updateFromXdot(xdot_ws_goal, hw->fts[sde]->lastExternal,
 				                         nullspace_qdot_refs[sde], time_delta, qdot_jacobian);
 			}
 
@@ -387,14 +386,14 @@ void run() {
 
 			// and apply that to the arm
 			if(sending_commands)
-				somatic_motor_setvel(&daemon_cx, sde == Krang::LEFT ? hw->larm : hw->rarm, qdot_apply.data(), 7);
+				somatic_motor_setvel(&daemon_cx, hw->arms[sde], qdot_apply.data(), 7);
 
 			// store some internal state into the vis_msg so we can publish it
 			Eigen::VectorXd posref_euler = transformToEuler(wss[sde]->Tref, math::XYZ);
 			aa_fcpy(vis_msg.pos_ref[sde], posref_euler.data(), 6);
 			aa_fcpy(vis_msg.xdot_spacenav[sde], xdot_spacenav.data(), 6);
 			aa_fcpy(vis_msg.xdot_hoh[sde], xdot_hoh.data(), 6);
-			aa_fcpy(vis_msg.ft_external[sde], fts[sde]->lastExternal.data(), 6);
+			aa_fcpy(vis_msg.ft_external[sde], hw->fts[sde]->lastExternal.data(), 6);
 
 			// do some debug output by printing to curses
 			if (debug_print_this_it) {
@@ -403,7 +402,7 @@ void run() {
 				Eigen::MatrixXd ee_trans = wss[sde]->endEffector->getWorldTransform();
 				Eigen::VectorXd ee_pos = Krang::transformToEuler(ee_trans, math::XYZ);
 
-				Krang::curses_display_vector(fts[sde]->lastExternal,   "ft                                  ");
+				Krang::curses_display_vector(hw->fts[sde]->lastExternal,   "ft                                  ");
 				Krang::curses_display_vector(xdot_spacenav,            "xdot_spacenav                       ");
 				Krang::curses_display_vector(xdot_hoh,                 "xdot_hoh                            ");
 				Krang::curses_display_vector(xdot_ws_goal,             "xdot_ws_goal                        ");
@@ -415,7 +414,7 @@ void run() {
 				Eigen::VectorXd cur(7);
 				double largest_cur = 0;
 				for (int i = 0; i < 7; i++) {
-					cur[i] = (sde == Krang::LEFT ? hw->larm->cur[i] : hw->rarm->cur[i]);
+					cur[i] = hw->arms[sde]->cur[i];
 					largest_cur = std::max(largest_cur, cur[i]);
 				}
 
@@ -473,10 +472,6 @@ void init() {
 	// Initialize the hardware
 	Hardware::Mode mode = (Hardware::Mode)(Hardware::MODE_ALL);
 	hw = new Hardware(mode, &daemon_cx, robot);
-
-	// fill out the convenient force-torque pointers
-	fts[Krang::LEFT] = hw->lft;
-	fts[Krang::RIGHT] = hw->rft;
 
 	// Set up the workspace stuff
 	synch_mode = false;
