@@ -50,9 +50,9 @@
 
 #include "simTab.h"
 
-#include "kore.hpp"
-#include "util.hpp"
-#include "display.hpp"
+#include <kore.hpp>
+#include <kore/util.hpp>
+#include <kore/display.hpp>
 
 /* ********************************************************************************************* */
 somatic_d_t daemon_cx;

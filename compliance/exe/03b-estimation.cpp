@@ -38,7 +38,7 @@
 
 #include <robotics/parser/dart_parser/DartLoader.h>
 #include <simulation/World.h>
-#include "kore.hpp"
+#include <kore.hpp>
 
 using namespace std;
 using namespace Krang;

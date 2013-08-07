@@ -43,9 +43,9 @@
 #include <simulation/World.h>
 #include <yui/GLFuncs.h>
 
-#include "kore.hpp"
-#include "display.hpp"
-#include "visualization.hpp"
+#include <kore.hpp>
+#include <kore/display.hpp>
+#include <kore/visualization.hpp>
 
 /* ############################################################################################# */
 /* ############################################################################################# */

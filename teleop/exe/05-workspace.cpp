@@ -34,18 +34,17 @@
  * demonstrations.
  */
 
-#include "kore.hpp"
-#include "workspace.hpp"
-#include "display.hpp"
-#include "visualization.hpp"
+#include <kore.hpp>
+#include <kore/workspace.hpp>
+#include <kore/display.hpp>
+#include <kore/visualization.hpp>
+#include <kore/util.hpp>
 
 #include <iostream>
 #include <iomanip>
 
 #include <robotics/parser/dart_parser/DartLoader.h>
 #include <simulation/World.h>
-
-#include "util.hpp"
 
 /* ********************************************************************************************* */
 // Declarations
