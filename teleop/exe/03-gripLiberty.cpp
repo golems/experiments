@@ -54,38 +54,23 @@
 #include "util.hpp"
 #include "display.hpp"
 
-using namespace std;
-using namespace Eigen;
-using namespace dynamics;
-
 /* ********************************************************************************************* */
 somatic_d_t daemon_cx;
 ach_channel_t liberty_chan;
 
-SkeletonDynamics* robot;
-vector <int> left_arm_ids;  ///< The indices to the Krang dofs in dart
+dynamics::SkeletonDynamics* robot;
 
-VectorXd homeConfig(7);			///< Home configuration for the left arm
-Matrix4d Tref;							///< The reference pos/ori for the left end-effector
-Matrix4d Tlst;              ///< The current configuration of the sensor in the liberty frame
-Matrix4d Twg0;							///< The initial configuration of the gripper in the world frame
-Matrix4d Tls0;							///< The initial configuration of the sensor in the liberty frame
+Eigen::VectorXd homeConfig(7);			///< Home configuration for the left arm
+Eigen::Matrix4d Tref;							///< The reference pos/ori for the left end-effector
+Eigen::Matrix4d Tlst;              ///< The current configuration of the sensor in the liberty frame
+Eigen::Matrix4d Twg0;							///< The initial configuration of the gripper in the world frame
+Eigen::Matrix4d Tls0;							///< The initial configuration of the sensor in the liberty frame
 
-/* ********************************************************************************************* */
-// junk needed by the curses display stuff
 bool debug_print_this_it;       ///< whether we print
-int Krang::curses_display_row = 30;
-int Krang::curses_display_precision = 15;
-bool Krang::doing_curses = false;
-
-int Krang::COLOR_RED_BACKGROUND = 11;
-int Krang::COLOR_YELLOW_BACKGROUND = 12;
-int Krang::COLOR_GREEN_BACKGROUND = 13;
-int Krang::COLOR_WHITE_BACKGROUND = 14;
 
 /* ********************************************************************************************* */
 /// Returns the values of the first liberty sensor
-bool getLiberty(VectorXd& config) {
+bool getLiberty(Eigen::VectorXd& config) {
 
 	// Get the data
 	int r = 0;
@@ -99,9 +84,9 @@ bool getLiberty(VectorXd& config) {
 	config << s1->data[0], -s1->data[1], -s1->data[2], 0.0, 0.0, 0.0;
 
 	// Convert from a quaternion to rpy representation
-	Quaternion <double> oriQ (s1->data[6], s1->data[3], s1->data[4], s1->data[5]);
-	Matrix3d oriM = oriQ.matrix();
-	Vector3d oriE = math::matrixToEuler(oriM, math::XYZ);
+	Eigen::Quaternion <double> oriQ (s1->data[6], s1->data[3], s1->data[4], s1->data[5]);
+	Eigen::Matrix3d oriM = oriQ.matrix();
+	Eigen::Vector3d oriE = math::matrixToEuler(oriM, math::XYZ);
 	config.bottomLeftCorner<3,1>() << -oriE[2], -oriE[1], oriE[0];
 	return true;
 }
@@ -109,20 +94,20 @@ bool getLiberty(VectorXd& config) {
 /* ********************************************************************************************* */
 /// Takes a position from the liberty and uses it to compute a new
 /// reference configuration.
-void updateReference(VectorXd& liberty_input) {
+void updateReference(Eigen::VectorXd& liberty_input) {
 
 	Tlst = Krang::eulerToTransform(liberty_input, math::XYZ);
 	DISPLAY_MATRIX(Tlst);
 //	Tref = Tlst * Tls0.inverse() * Twg0;
 	DISPLAY_MATRIX(Tref);
-	Vector3d disp = Tlst.topRightCorner<3,1>() - Tls0.topRightCorner<3,1>();
+	Eigen::Vector3d disp = Tlst.topRightCorner<3,1>() - Tls0.topRightCorner<3,1>();
 	Tref.topRightCorner<3,1>() = Twg0.topRightCorner<3,1>() + disp;
 	Tref.topLeftCorner<3,3>() = Twg0.topLeftCorner<3,3>();
 	Tref(3,3) = 1.0;
 
-	Matrix3d Rlst = Tlst.topLeftCorner<3,3>();
-	Matrix3d Rls0 = Tls0.topLeftCorner<3,3>();
-	Matrix3d Rwg0 = Twg0.topLeftCorner<3,3>();
+	Eigen::Matrix3d Rlst = Tlst.topLeftCorner<3,3>();
+	Eigen::Matrix3d Rls0 = Tls0.topLeftCorner<3,3>();
+	Eigen::Matrix3d Rwg0 = Twg0.topLeftCorner<3,3>();
 	Tref.topLeftCorner<3,3>() = Rlst * Rls0.inverse() * Rwg0;
 /*
 	// Compute the current configuration of the sensor in the liberty frame
@@ -143,24 +128,24 @@ void updateReference(VectorXd& liberty_input) {
 /* ********************************************************************************************* */
 /// Returns the workspace velocity, xdot, from the reference, Tref, using the current arm
 /// configuration
-void getXdotFromXref (VectorXd& xdot) {
+void getXdotFromXref (Eigen::VectorXd& xdot) {
 
 	// Get the current end-effector transform and also, just its orientation 
-	Matrix4d Tcur = robot->getNode("lGripper")->getWorldTransform();
+	Eigen::Matrix4d Tcur = robot->getNode("lGripper")->getWorldTransform();
 	DISPLAY_MATRIX(Tcur);
-	Matrix4d Rcur = Tcur;
+	Eigen::Matrix4d Rcur = Tcur;
 	Rcur.topRightCorner<3,1>().setZero();
 
 	// Apply the similarity transform to the displacement between current transform and reference
-	Matrix4d Tdisp = Tcur.inverse() * Tref;
-	Matrix4d xdotM = Rcur * Tdisp * Rcur.inverse();
+	Eigen::Matrix4d Tdisp = Tcur.inverse() * Tref;
+	Eigen::Matrix4d xdotM = Rcur * Tdisp * Rcur.inverse();
 	xdot = Krang::transformToEuler(xdotM, math::XYZ);
 }
 
 /* ********************************************************************************************* */
 /// Compute qdot with the dampened inverse Jacobian with nullspace projection
 /// Important constants are for the null space gain, the dampening gain and the second goal pos.
-void getQdot (const VectorXd& xdot, VectorXd& qdot) {
+void getQdot (const Eigen::VectorXd& xdot, Eigen::VectorXd& qdot) {
 
 	// Set the parameter constants
 	static const double dampGain = 0.005;
@@ -169,23 +154,23 @@ void getQdot (const VectorXd& xdot, VectorXd& qdot) {
 
 	// Get the Jacobian for the left end-effector
 	kinematics::BodyNode* ee = robot->getNode("lGripper");
-	MatrixXd Jlin = ee->getJacobianLinear().topRightCorner<3,7>();
-	MatrixXd Jang = ee->getJacobianAngular().topRightCorner<3,7>();
-	MatrixXd J (6,7);
+	Eigen::MatrixXd Jlin = ee->getJacobianLinear().topRightCorner<3,7>();
+	Eigen::MatrixXd Jang = ee->getJacobianAngular().topRightCorner<3,7>();
+	Eigen::MatrixXd J (6,7);
 	J << Jlin, Jang;
 
 	// Compute the inverse of the Jacobian with dampening
-	MatrixXd Jt = J.transpose(), JJt = J * Jt;
+	Eigen::MatrixXd Jt = J.transpose(), JJt = J * Jt;
 	for (int i=0; i < JJt.rows(); i++) JJt(i,i) += dampGain;
 
 	// Compute the reference joint velocities for nullspace projection
-	VectorXd q = robot->getConfig(left_arm_ids);
-	VectorXd qDotRef = (q - qRef) * qdotRefDt;
+	Eigen::VectorXd q = robot->getConfig(Krang::left_arm_ids);
+	Eigen::VectorXd qDotRef = (q - qRef) * qdotRefDt;
 	
 	// Compute the qdot using the reference joint velocity and the reference position 
-	MatrixXd Jinv = Jt * JJt.inverse();
-	MatrixXd JinvJ = Jinv*J;
-	MatrixXd I = MatrixXd::Identity(7,7);
+	Eigen::MatrixXd Jinv = Jt * JJt.inverse();
+	Eigen::MatrixXd JinvJ = Jinv*J;
+	Eigen::MatrixXd I = Eigen::MatrixXd::Identity(7,7);
 	qdot = Jinv * xdot + (I - JinvJ) * qDotRef;
 }
 
@@ -194,7 +179,7 @@ void getQdot (const VectorXd& xdot, VectorXd& qdot) {
 /// end-effectors, places blue and green boxes for their locations and visualizes it all
 void Timer::Notify() {
 
-	cout << "\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << endl;
+	std::cout << "\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << std::endl;
 
 	// Get the liberty info
 	VectorXd liberty_input (6);
@@ -223,10 +208,10 @@ void Timer::Notify() {
 	DISPLAY_VECTOR(qdot);
 
 	// Apply the joint velocities
-	Eigen::VectorXd q = robot->getConfig(left_arm_ids);
+	Eigen::VectorXd q = robot->getConfig(Krang::left_arm_ids);
 	q += qdot * 0.03;
 	DISPLAY_VECTOR(q);
-	robot->setConfig(left_arm_ids, q);
+	robot->setConfig(Krang::left_arm_ids, q);
 
 	// Visualize the scene
 	viewer->DrawGLScene();
@@ -267,16 +252,12 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	somatic_d_channel_open(&daemon_cx, &liberty_chan, "liberty", NULL);
 
 	// Manually set the initial arm configuration for the left arm
-	for(int i = 11; i < 24; i+=2) left_arm_ids.push_back(i);
 	homeConfig <<  1.102, -0.589,  0.000, -1.339,  0.000, -0.959, -1.000;
-	robot->setConfig(left_arm_ids, homeConfig);
+	robot->setConfig(Krang::left_arm_ids, homeConfig);
 
 	// Also, set the imu and waist angles
-	vector <int> imuWaist_ids;
-	imuWaist_ids.push_back(5);
-	imuWaist_ids.push_back(8);
 	Vector2d imuWaist (3.45, 2.81);
-	robot->setConfig(imuWaist_ids, imuWaist);
+	robot->setConfig(Krang::imuWaist_ids, imuWaist);
 
 	// Initialize the "initial" reference configuration for the end-effector with current
 	Tref = robot->getNode("lGripper")->getWorldTransform();
