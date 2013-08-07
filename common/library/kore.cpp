@@ -30,7 +30,7 @@
  * @author Can Erdogan
  * @date July 24, 2013
  * @brief The main source file for the Krang support file which has the definition for the 
- * Hardware struct constructor.
+ * KHardware struct constructor.
  */
 
 #include "kore.h"
@@ -42,7 +42,7 @@ using namespace Eigen;
 namespace Krang {
 	
 /* ******************************************************************************************** */
-Hardware::Hardware (Mode mode_, somatic_d_t* daemon_cx_, dynamics::SkeletonDynamics* robot_) {
+KHardware::KHardware (Mode mode_, somatic_d_t* daemon_cx_, dynamics::SkeletonDynamics* robot_) {
 
 	// Set the local variables
 	daemon_cx = daemon_cx_;
@@ -101,7 +101,7 @@ Hardware::Hardware (Mode mode_, somatic_d_t* daemon_cx_, dynamics::SkeletonDynam
 }
 
 /* ******************************************************************************************** */
-Hardware::~Hardware () {
+KHardware::~KHardware () {
 
 	// Close imu channel and the filter
 	somatic_d_channel_close(daemon_cx, imu_chan);
@@ -163,7 +163,7 @@ Hardware::~Hardware () {
 }
 
 /* ******************************************************************************************** */
-void Hardware::initWaist () {
+void KHardware::initWaist () {
 
 	// Initialize the channel to the waist daemon
 	waistCmdChan = new ach_channel_t();
@@ -194,7 +194,7 @@ void Hardware::initWaist () {
 }
 
 /* ******************************************************************************************** */
-void Hardware::updateSensors (double dt) {
+void KHardware::updateSensors (double dt) {
 
 	// Update the lower body motors to get the current values
 	if(mode & MODE_AMC) somatic_motor_update(daemon_cx, amc);
@@ -217,7 +217,7 @@ void Hardware::updateSensors (double dt) {
 }
 
 /* ******************************************************************************************** */
-void Hardware::updateKinematics () {
+void KHardware::updateKinematics () {
 
 	// unify the id vectors so we only have to make a single call
 	// TODO: move this to an outside variable and initialize in the
@@ -249,7 +249,7 @@ void Hardware::updateKinematics () {
 }
 
 /* ******************************************************************************************** */
-void Hardware::initImu () {
+void KHardware::initImu () {
 
 	// Initialize the ach channel
 	imu_chan = new ach_channel_t();
@@ -273,7 +273,7 @@ void Hardware::initImu () {
 }
 
 /* ******************************************************************************************** */
-void Hardware::initWheels () {
+void KHardware::initWheels () {
 
 	// Initialize the motor group (do we need to set any limits?)
 	amc = new somatic_motor_t();
@@ -303,7 +303,7 @@ void Hardware::initWheels () {
 }
 
 /* ******************************************************************************************** */
-void Hardware::initMotorGroup (somatic_motor_t*& motors, const char* cmd_name, const char* 
+void KHardware::initMotorGroup (somatic_motor_t*& motors, const char* cmd_name, const char* 
 		state_name, VectorXd minPos, VectorXd maxPos, VectorXd minVel, VectorXd maxVel) {
 
 	// Initialize the somatic motor struct with the channel names and the number of modules
@@ -333,7 +333,7 @@ void Hardware::initMotorGroup (somatic_motor_t*& motors, const char* cmd_name, c
 }
 
 /* ******************************************************************************************** */
-void Hardware::printState () {
+void KHardware::printState () {
 	VectorXd s = robot->getPose();
 	printf("imu: %.3lf, waist: %.3lf, torso: %.3lf\n", s(imuWaist_ids[0]), s(imuWaist_ids[1]), s(9));
 	printf("left arm: (");
@@ -344,7 +344,7 @@ void Hardware::printState () {
 }
 
     /* ******************************************************************************************** */
-	void Hardware::printStateCurses(int row, int col) {
+	void KHardware::printStateCurses(int row, int col) {
 		VectorXd s = robot->getPose();
 		mvprintw(row, col, "Robot hardware state:");
 		mvprintw(row+1, col+1, "imu: %.3lf", s(imuWaist_ids[0]));

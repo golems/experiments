@@ -46,7 +46,7 @@ using namespace Krang;
 /* ********************************************************************************************* */
 somatic_d_t daemon_cx;
 simulation::World* world = NULL;
-Hardware* hw;
+KHardware* hw;
 
 /* ******************************************************************************************** */
 /// The continuous loop
@@ -99,7 +99,7 @@ void init () {
 	somatic_d_init( &daemon_cx, &dopt );
 
 	// Get the robot
-	hw = new Hardware((Hardware::Mode)(Hardware::MODE_ALL & ~Hardware::MODE_GRIPPERS), &daemon_cx, world->getSkeleton("Krang"));
+	hw = new KHardware((KHardware::Mode)(KHardware::MODE_ALL & ~KHardware::MODE_GRIPPERS), &daemon_cx, world->getSkeleton("Krang"));
 	cout << "Initialization done!" << endl;
 }
 

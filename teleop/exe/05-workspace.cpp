@@ -102,7 +102,7 @@ somatic_d_t daemon_cx;                          ///< daemon context
 std::map<Krang::Side, Krang::SpaceNav*> spnavs; ///< points to spacenavs
 std::map<Krang::Side, Krang::FT*> fts; ///< points to force-torque sensors
 
-Hardware* hw;                                   ///< connects to hardware
+Krang::KHardware* hw;                                   ///< connects to hardware
 bool sending_commands = false;
 
 // pointers to important DART objects
@@ -463,8 +463,8 @@ void init() {
 	somatic_d_init(&daemon_cx, &daemon_opt);
 
 	// Initialize the hardware
-	Hardware::Mode mode = (Hardware::Mode)(Hardware::MODE_ALL);
-	hw = new Hardware(mode, &daemon_cx, robot);
+	Krang::KHardware::Mode mode = (Krang::KHardware::Mode)(Krang::KHardware::MODE_ALL);
+	hw = new Krang::KHardware(mode, &daemon_cx, robot);
 
 	// fill out the convenient force-torque pointers
 	fts[Krang::LEFT] = hw->lft;
