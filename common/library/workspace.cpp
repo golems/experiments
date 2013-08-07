@@ -67,63 +67,64 @@ namespace Krang {
 	}
 
 	/* ******************************************************************************************** */
-	void WorkspaceControl::integrateWSVelocityInput(const VectorXd& xdot, const double dt) {
+	void WorkspaceControl::integrateWSVelocityInput(const Eigen::VectorXd& xdot, const double dt) {
 
 		// Represent the workspace velocity input as a 4x4 homogeneous matrix
-		Matrix4d xdotM = eulerToTransform(xdot * dt, math::XYZ);
+		Eigen::Matrix4d xdotM = eulerToTransform(xdot * dt, math::XYZ);
 	
 		// Compute the displacement in the end-effector frame with a similarity transform
-		Matrix4d R = Tref;
+		Eigen::Matrix4d R = Tref;
 		R.topRightCorner<3,1>().setZero();
-		Matrix4d Tdisp = R.inverse() * xdotM * R;
+		Eigen::Matrix4d Tdisp = R.inverse() * xdotM * R;
 
 		// Update the reference position for the end-effector with the given workspace velocity
 		Tref = Tref * Tdisp;
 	}
 
 	/* ******************************************************************************************** */
-	void WorkspaceControl::refWSVelocity(VectorXd& xdot) {
+	void WorkspaceControl::refWSVelocity(Eigen::VectorXd& xdot) {
 
 		// Get the current end-effector transform and also, just its orientation 
-		Matrix4d Tcur = endEffector->getWorldTransform();
-		Matrix4d Rcur = Tcur;
+		Eigen::Matrix4d Tcur = endEffector->getWorldTransform();
+		Eigen::Matrix4d Rcur = Tcur;
 		Rcur.topRightCorner<3,1>().setZero();
 
 		// Apply the similarity transform to the displacement between current transform and reference
-		Matrix4d Tdisp = Tcur.inverse() * Tref;
-		Matrix4d xdotM = Rcur * Tdisp * Rcur.inverse();
+		Eigen::Matrix4d Tdisp = Tcur.inverse() * Tref;
+		Eigen::Matrix4d xdotM = Rcur * Tdisp * Rcur.inverse();
 		xdot = transformToEuler(xdotM, math::XYZ) * K_posRef_p;
 	}
 
 	/* ******************************************************************************************** */
-	void WorkspaceControl::refJSVelocity(const VectorXd& xdot, const VectorXd& qdot_nullspace, VectorXd& qdot) {
+	void WorkspaceControl::refJSVelocity(const Eigen::VectorXd& xdot,
+	                                     const Eigen::VectorXd& qdot_nullspace, Eigen::VectorXd& qdot) {
 
 		// Get the Jacobian for the end-effector
-		MatrixXd Jlin = endEffector->getJacobianLinear().topRightCorner<3,7>();
-		MatrixXd Jang = endEffector->getJacobianAngular().topRightCorner<3,7>();
-		MatrixXd J (6,7);
+		Eigen::MatrixXd Jlin = endEffector->getJacobianLinear().topRightCorner<3,7>();
+		Eigen::MatrixXd Jang = endEffector->getJacobianAngular().topRightCorner<3,7>();
+		Eigen::MatrixXd J (6,7);
 		J << Jlin, Jang;
 
 		// Compute the inverse of the Jacobian with dampening
-		MatrixXd Jt = J.transpose();
-		MatrixXd JJt = J * Jt;
+		Eigen::MatrixXd Jt = J.transpose();
+		Eigen::MatrixXd JJt = J * Jt;
 		for(int i = 0; i < JJt.rows(); i++) JJt(i,i) += damping_gain;
-		MatrixXd JJtinv = JJt;
+		Eigen::MatrixXd JJtinv = JJt;
 		aa_la_inv(6, JJtinv.data());
-		MatrixXd Jinv = Jt * JJtinv;
+		Eigen::MatrixXd Jinv = Jt * JJtinv;
 
 		// Compute the joint velocities qdot using the input xdot and a qdot for the secondary goal 
 		// projected into the nullspace
-		MatrixXd JinvJ = Jinv*J;
-		MatrixXd I = MatrixXd::Identity(7,7);
-		VectorXd qdot_jacobian_pure = Jinv * xdot;
-		VectorXd qdot_jacobian_null = (I - JinvJ) * qdot_nullspace * nullspace_gain;
+		Eigen::MatrixXd JinvJ = Jinv*J;
+		Eigen::MatrixXd I = Eigen::MatrixXd::Identity(7,7);
+		Eigen::VectorXd qdot_jacobian_pure = Jinv * xdot;
+		Eigen::VectorXd qdot_jacobian_null = (I - JinvJ) * qdot_nullspace * nullspace_gain;
 		qdot = qdot_jacobian_pure + qdot_jacobian_null;
 	}
 
 	/* ******************************************************************************************** */
-	void WorkspaceControl::updateFromXdot (const VectorXd& xdot, const VectorXd& ft, 
-	                                       const VectorXd& qdot_secondary, double dt, VectorXd& qdot) {
+	void WorkspaceControl::updateFromXdot (const Eigen::VectorXd& xdot, const Eigen::VectorXd& ft, 
+	                                       const Eigen::VectorXd& qdot_secondary, double dt, Eigen::VectorXd& qdot) {
 
 		// Move the workspace references around from that ui input
 		integrateWSVelocityInput(xdot, dt);
@@ -162,8 +163,8 @@ namespace Krang {
 	}
 
 	/* ******************************************************************************************** */
-	void WorkspaceControl::updateFromUIVel(const VectorXd& ui, const VectorXd& ft, 
-	                                       const VectorXd& qdot_secondary, double dt, VectorXd& qdot) {
+	void WorkspaceControl::updateFromUIVel(const Eigen::VectorXd& ui, const Eigen::VectorXd& ft, 
+	                                       const Eigen::VectorXd& qdot_secondary, double dt, Eigen::VectorXd& qdot) {
 
 		// turn our ui velocity input into a real velocity in workspace
 		Eigen::VectorXd xdot_ui = this->uiInputVelToXdot(ui);
@@ -173,7 +174,7 @@ namespace Krang {
 	}
 
 	/* ******************************************************************************************** */
-	Eigen::VectorXd WorkspaceControl::uiInputVelToXdot(const VectorXd& ui_vel) {
+	Eigen::VectorXd WorkspaceControl::uiInputVelToXdot(const Eigen::VectorXd& ui_vel) {
 		// Scale the ui input to get a workspace velocity 
 		Eigen::VectorXd xdot_ui = ui_vel;
 		xdot_ui.topLeftCorner<3,1>() *= ui_translation_gain;
@@ -183,8 +184,8 @@ namespace Krang {
 
 
 	/* ******************************************************************************************** */
-	void WorkspaceControl::updateFromUIPos(const MatrixXd& xref, const VectorXd& ft,
-	                                       const VectorXd& qdot_secondary, VectorXd& qdot) {
+	void WorkspaceControl::updateFromUIPos(const Eigen::MatrixXd& xref, const Eigen::VectorXd& ft,
+	                                       const Eigen::VectorXd& qdot_secondary, Eigen::VectorXd& qdot) {
 		// update our workspace reference
 		this->Tref = xref;
 

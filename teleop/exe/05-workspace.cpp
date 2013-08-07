@@ -113,9 +113,9 @@ dynamics::SkeletonDynamics* robot;
 manip_mode_t ws_mode;
 manip_primary_t ws_primary;
 std::map<Krang::Side, Krang::WorkspaceControl*> wss; ///< does workspace control for the arms
-std::map<Krang::Side, Vector7d> nullspace_q_refs; ///< nullspace configurations for the arms
-std::map<Krang::Side, Vector7d> nullspace_q_masks; ///< nullspace configurations for the arms
-std::map<Krang::Side, Vector7d> nullspace_qdot_refs; ///< nullspace configurations for the arms
+std::map<Krang::Side, Krang::Vector7d> nullspace_q_refs; ///< nullspace configurations for the arms
+std::map<Krang::Side, Krang::Vector7d> nullspace_q_masks; ///< nullspace configurations for the arms
+std::map<Krang::Side, Krang::Vector7d> nullspace_qdot_refs; ///< nullspace configurations for the arms
 Eigen::MatrixXd Trel_left_to_right; ///< translation from the left hand to the right hand
 bool synch_mode;
 bool fixed_orientation_mode;
@@ -262,17 +262,17 @@ void run() {
 		if (debug_print_this_it) {
 			hw->printStateCurses(3, 1);
 
-			attron(COLOR_PAIR(sending_commands?COLOR_RED_BACKGROUND:COLOR_WHITE));
+			attron(COLOR_PAIR(sending_commands?Krang::COLOR_RED_BACKGROUND:COLOR_WHITE));
 			mvprintw(11, 1, "sendcmds mode: %s", sending_commands?"yes":"no ");
-			attroff(COLOR_PAIR(sending_commands?COLOR_RED_BACKGROUND:COLOR_WHITE));
+			attroff(COLOR_PAIR(sending_commands?Krang::COLOR_RED_BACKGROUND:COLOR_WHITE));
 			
-			attron(COLOR_PAIR(synch_mode?COLOR_RED_BACKGROUND:COLOR_WHITE));
+			attron(COLOR_PAIR(synch_mode?Krang::COLOR_RED_BACKGROUND:COLOR_WHITE));
 			mvprintw(12, 1, "synch mode: %s", synch_mode?"yes":"no ");
-			attroff(COLOR_PAIR(synch_mode?COLOR_RED_BACKGROUND:COLOR_WHITE));
+			attroff(COLOR_PAIR(synch_mode?Krang::COLOR_RED_BACKGROUND:COLOR_WHITE));
 
-			attron(COLOR_PAIR(hoh_mode?COLOR_RED_BACKGROUND:COLOR_WHITE));
+			attron(COLOR_PAIR(hoh_mode?Krang::COLOR_RED_BACKGROUND:COLOR_WHITE));
 			mvprintw(13, 1, "hand-over-hand mode: %s", hoh_mode?"yes":"no ");
-			attroff(COLOR_PAIR(hoh_mode?COLOR_RED_BACKGROUND:COLOR_WHITE));
+			attroff(COLOR_PAIR(hoh_mode?Krang::COLOR_RED_BACKGROUND:COLOR_WHITE));
 
 			mvprintw(14, 5, "hoh side: ");
 			if (hoh_side == Krang::LEFT) mvprintw(14, 16, "left       ");
@@ -286,7 +286,7 @@ void run() {
 		hw->updateSensors(time_delta);
 
 		// Check for too high currents
-		if(checkCurrentLimits(eig7(hw->larm->cur)) && checkCurrentLimits(eig7(hw->rarm->cur))) {
+		if(Krang::checkCurrentLimits(hw->larm->cur, 7) && Krang::checkCurrentLimits(hw->rarm->cur, 7)) {
 			if (sending_commands) {
 				sending_commands = false;
 				hoh_mode = false;
@@ -372,7 +372,7 @@ void run() {
 
 			// avoid joint limits
 			Eigen::VectorXd qdot_avoid(7);
-			computeQdotAvoidLimits(robot, *wss[sde]->arm_ids, q, qdot_avoid);
+			Krang::computeQdotAvoidLimits(robot, *wss[sde]->arm_ids, q, qdot_avoid);
 
 			// add qdots together to get the overall movement
 			Eigen::VectorXd qdot_apply = qdot_avoid + qdot_jacobian;
@@ -382,7 +382,7 @@ void run() {
 				somatic_motor_setvel(&daemon_cx, sde == Krang::LEFT ? hw->larm : hw->rarm, qdot_apply.data(), 7);
 
 			// store some internal state into the vis_msg so we can publish it
-			Eigen::VectorXd posref_euler = transformToEuler(wss[sde]->Tref, math::XYZ);
+			Eigen::VectorXd posref_euler = Krang::transformToEuler(wss[sde]->Tref, math::XYZ);
 			aa_fcpy(vis_msg.pos_ref[sde], posref_euler.data(), 6);
 			aa_fcpy(vis_msg.xdot_spacenav[sde], xdot_spacenav.data(), 6);
 			aa_fcpy(vis_msg.xdot_hoh[sde], xdot_hoh.data(), 6);
@@ -412,10 +412,10 @@ void run() {
 				}
 
 				if(largest_cur < .1) {
-					attron(COLOR_PAIR(COLOR_RED_BACKGROUND));
+					attron(COLOR_PAIR(Krang::COLOR_RED_BACKGROUND));
 					mvprintw(11, sde==Krang::LEFT ? 30 : 50,
 					         sde==Krang::LEFT ? "left halt?" : "right halt?");
-					attroff(COLOR_PAIR(COLOR_RED_BACKGROUND));
+					attroff(COLOR_PAIR(Krang::COLOR_RED_BACKGROUND));
 				} else {
 					mvprintw(11, sde==Krang::LEFT ? 30 : 50,
 					         sde==Krang::LEFT ? "          " : "           ");
@@ -473,12 +473,12 @@ void init() {
 	// Set up the workspace stuff
 	synch_mode = false;
 	fixed_orientation_mode = false;
-	wss[Krang::LEFT] = new WorkspaceControl(robot, LEFT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
-	                                        SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_TRANSLATION_GAIN,
-	                                        COMPLIANCE_ORIENTATION_GAIN);
-	wss[Krang::RIGHT] = new WorkspaceControl(robot, RIGHT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
-	                                         SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_TRANSLATION_GAIN,
-	                                         COMPLIANCE_ORIENTATION_GAIN);
+	wss[Krang::LEFT] = new Krang::WorkspaceControl(robot, Krang::LEFT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
+	                                               SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_TRANSLATION_GAIN,
+	                                               COMPLIANCE_ORIENTATION_GAIN);
+	wss[Krang::RIGHT] = new Krang::WorkspaceControl(robot, Krang::RIGHT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
+	                                                SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_TRANSLATION_GAIN,
+	                                                COMPLIANCE_ORIENTATION_GAIN);
 
 	// Initialize the spacenavs
 	spnavs[Krang::LEFT] = new Krang::SpaceNav(&daemon_cx, "spacenav-data-l", .5);
@@ -488,10 +488,10 @@ void init() {
 	Trel_left_to_right = wss[Krang::LEFT]->Tref.inverse() * wss[Krang::RIGHT]->Tref;
 
 	// set up nullspace stuff
-	nullspace_q_refs[Krang::LEFT] = (Vector7d()   << 0, -1.0, 0, -0.5, 0, -0.8, 0).finished();
-	nullspace_q_refs[Krang::RIGHT] = (Vector7d()  << 0,  1.0, 0,  0.5, 0,  0.8, 0).finished();
-	nullspace_q_masks[Krang::LEFT] = (Vector7d()  << 0,    0, 0,    1, 0,    0, 0).finished();
-	nullspace_q_masks[Krang::RIGHT] = (Vector7d() << 0,    0, 0,    1, 0,    0, 0).finished();
+	nullspace_q_refs[Krang::LEFT] = (Krang::Vector7d()   << 0, -1.0, 0, -0.5, 0, -0.8, 0).finished();
+	nullspace_q_refs[Krang::RIGHT] = (Krang::Vector7d()  << 0,  1.0, 0,  0.5, 0,  0.8, 0).finished();
+	nullspace_q_masks[Krang::LEFT] = (Krang::Vector7d()  << 0,    0, 0,    1, 0,    0, 0).finished();
+	nullspace_q_masks[Krang::RIGHT] = (Krang::Vector7d() << 0,    0, 0,    1, 0,    0, 0).finished();
 	// nullspace_q_refs[Krang::LEFT] = (Vector7d()   << 0, -1.0, 0, -0.5, 0, -0.8, 0).finished();
 	// nullspace_q_refs[Krang::RIGHT] = (Vector7d()  << 0,  1.0, 0,  0.5, 0,  0.8, 0).finished();
 	// nullspace_q_masks[Krang::LEFT] = (Vector7d()  << 1,    1, 1,    1, 1,    0, 1).finished();

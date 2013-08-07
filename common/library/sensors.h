@@ -64,7 +64,7 @@ public:
 	Vector6d offset;	
 	Vector6d lastExternal;			///< The last estimate for the external force/torque input
 	double gripperMass;					///< The mass of the objects after the f/t sensor
-	Vector3d gripperCoM;				///< The center of mass of the objects after the f/t sensor
+	Eigen::Vector3d gripperCoM;				///< The center of mass of the objects after the f/t sensor
 
 public:
 	// Variables to determine the kinematics that affect the compensation and the data channel

@@ -46,7 +46,7 @@ using namespace Krang;
 /* ********************************************************************************************* */
 somatic_d_t daemon_cx;
 simulation::World* world = NULL;
-KHardware* hw;
+Krang::KHardware* hw;
 
 /* ******************************************************************************************** */
 /// The continuous loop
@@ -73,7 +73,7 @@ void run() {
 		// Print the external f/t readings for the left arm
 		if(c % 10 == 1) {
 			hw->printState();
-			cout << "lft ext: " << hw->lft->lastExternal.transpose() << "\n" << endl;
+			std::cout << "lft ext: " << hw->lft->lastExternal.transpose() << "\n" << std::endl;
 		}
 		usleep(1e4);
 	}
@@ -99,8 +99,9 @@ void init () {
 	somatic_d_init( &daemon_cx, &dopt );
 
 	// Get the robot
-	hw = new KHardware((KHardware::Mode)(KHardware::MODE_ALL & ~KHardware::MODE_GRIPPERS), &daemon_cx, world->getSkeleton("Krang"));
-	cout << "Initialization done!" << endl;
+	hw = new Krang::KHardware((Krang::KHardware::Mode)(Krang::KHardware::MODE_ALL & ~Krang::KHardware::MODE_GRIPPERS),
+	                          &daemon_cx, world->getSkeleton("Krang"));
+	std::cout << "Initialization done!" << std::endl;
 }
 
 /* ******************************************************************************************** */

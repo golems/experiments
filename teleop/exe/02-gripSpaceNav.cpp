@@ -48,8 +48,8 @@ using namespace Eigen;
 using namespace dynamics;
 
 somatic_d_t daemon_cx;
-SkeletonDynamics* robot;
-std::map<Krang::Side, Vector7d> nullspace_qdot_refs;			///< nullspace configurations for the arms
+dynamics::SkeletonDynamics* robot;
+std::map<Krang::Side, Krang::Vector7d> nullspace_qdot_refs;			///< nullspace configurations for the arms
 
 std::map<Krang::Side, Krang::SpaceNav*> spnavs; ///< points to spacenavs
 
@@ -135,7 +135,7 @@ void Timer::Notify() {
 	// avoid joint limits
 	Eigen::VectorXd q_left = robot->getConfig(*wss[Krang::LEFT]->arm_ids);
 	Eigen::VectorXd qdot_avoid_L(7);
-	computeQdotAvoidLimits(robot, *wss[Krang::LEFT]->arm_ids, q_left, qdot_avoid_L);
+	Krang::computeQdotAvoidLimits(robot, *wss[Krang::LEFT]->arm_ids, q_left, qdot_avoid_L);
 	
 	// add qdots together to get the overall movement
 	Eigen::VectorXd qdot_apply_L = qdot_avoid_L + qdot_jacobian_L;
@@ -164,7 +164,7 @@ void Timer::Notify() {
 	// avoid joint limits
 	Eigen::VectorXd qdot_avoid_R(7);
 	Eigen::VectorXd q_right = robot->getConfig(*wss[Krang::RIGHT]->arm_ids);
-	computeQdotAvoidLimits(robot, *wss[Krang::RIGHT]->arm_ids, q_right, qdot_avoid_R);
+	Krang::computeQdotAvoidLimits(robot, *wss[Krang::RIGHT]->arm_ids, q_right, qdot_avoid_R);
 
 	// add qdots together to get the overall movement
 	Eigen::VectorXd qdot_apply_R = qdot_avoid_R + qdot_jacobian_R;
@@ -174,10 +174,10 @@ void Timer::Notify() {
 	robot->setConfig(*wss[Krang::RIGHT]->arm_ids, q_right);
 
 	// Visualize the reference positions
-	VectorXd refConfigL = transformToEuler(wss[Krang::LEFT]->Tref, math::XYZ);
-	mWorld->getSkeleton("g1")->setConfig(dart_root_dof_ids, refConfigL);
-	VectorXd refConfigR = transformToEuler(wss[Krang::RIGHT]->Tref, math::XYZ);
-	mWorld->getSkeleton("g2")->setConfig(dart_root_dof_ids, refConfigR);
+	VectorXd refConfigL = Krang::transformToEuler(wss[Krang::LEFT]->Tref, math::XYZ);
+	mWorld->getSkeleton("g1")->setConfig(Krang::dart_root_dof_ids, refConfigL);
+	VectorXd refConfigR = Krang::transformToEuler(wss[Krang::RIGHT]->Tref, math::XYZ);
+	mWorld->getSkeleton("g2")->setConfig(Krang::dart_root_dof_ids, refConfigR);
 
 	// Visualize the scene
 	viewer->DrawGLScene();
@@ -234,12 +234,12 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 	robot->setConfig(imuWaist_ids, imuWaist);
 
 	// Set up the workspace controllers
-	wss[Krang::LEFT] = new WorkspaceControl(robot, LEFT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
-	                                        SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_TRANSLATION_GAIN,
-	                                        COMPLIANCE_ORIENTATION_GAIN);
-	wss[Krang::RIGHT] = new WorkspaceControl(robot, RIGHT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
-	                                         SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_TRANSLATION_GAIN,
-	                                         COMPLIANCE_ORIENTATION_GAIN);
+	wss[Krang::LEFT] = new Krang::WorkspaceControl(robot, Krang::LEFT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
+	                                               SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_TRANSLATION_GAIN,
+	                                               COMPLIANCE_ORIENTATION_GAIN);
+	wss[Krang::RIGHT] = new Krang::WorkspaceControl(robot, Krang::RIGHT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
+	                                                SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_TRANSLATION_GAIN,
+	                                                COMPLIANCE_ORIENTATION_GAIN);
 
 	// Manually set the initial arm configuration for the arms
 	Eigen::VectorXd homeConfigsL(7);

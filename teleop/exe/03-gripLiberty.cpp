@@ -63,17 +63,17 @@ ach_channel_t liberty_chan;
 
 dynamics::SkeletonDynamics* robot;
 
-VectorXd homeConfig(7);			///< Home configuration for the left arm
-Matrix4d Tref;							///< The reference pos/ori for the left end-effector
-Matrix4d Tlst;              ///< The current configuration of the sensor in the liberty frame
-Matrix4d Twg0;							///< The initial configuration of the gripper in the world frame
-Matrix4d Tls0;							///< The initial configuration of the sensor in the liberty frame
+Eigen::VectorXd homeConfig(7);			///< Home configuration for the left arm
+Eigen::Matrix4d Tref;							///< The reference pos/ori for the left end-effector
+Eigen::Matrix4d Tlst;              ///< The current configuration of the sensor in the liberty frame
+Eigen::Matrix4d Twg0;							///< The initial configuration of the gripper in the world frame
+Eigen::Matrix4d Tls0;							///< The initial configuration of the sensor in the liberty frame
 
 bool debug_print_this_it;       ///< whether we print
 
 /* ********************************************************************************************* */
 /// Returns the values of the first liberty sensor
-bool getLiberty(VectorXd& config) {
+bool getLiberty(Eigen::VectorXd& config) {
 
 	// Get the data
 	int r = 0;
@@ -87,9 +87,9 @@ bool getLiberty(VectorXd& config) {
 	config << s1->data[0], -s1->data[1], -s1->data[2], 0.0, 0.0, 0.0;
 
 	// Convert from a quaternion to rpy representation
-	Quaternion <double> oriQ (s1->data[6], s1->data[3], s1->data[4], s1->data[5]);
-	Matrix3d oriM = oriQ.matrix();
-	Vector3d oriE = math::matrixToEuler(oriM, math::XYZ);
+	Eigen::Quaternion <double> oriQ (s1->data[6], s1->data[3], s1->data[4], s1->data[5]);
+	Eigen::Matrix3d oriM = oriQ.matrix();
+	Eigen::Vector3d oriE = math::matrixToEuler(oriM, math::XYZ);
 	config.bottomLeftCorner<3,1>() << -oriE[2], -oriE[1], oriE[0];
 	return true;
 }
@@ -97,20 +97,20 @@ bool getLiberty(VectorXd& config) {
 /* ********************************************************************************************* */
 /// Takes a position from the liberty and uses it to compute a new
 /// reference configuration.
-void updateReference(VectorXd& liberty_input) {
+void updateReference(Eigen::VectorXd& liberty_input) {
 
 	Tlst = Krang::eulerToTransform(liberty_input, math::XYZ);
 	DISPLAY_MATRIX(Tlst);
 //	Tref = Tlst * Tls0.inverse() * Twg0;
 	DISPLAY_MATRIX(Tref);
-	Vector3d disp = Tlst.topRightCorner<3,1>() - Tls0.topRightCorner<3,1>();
+	Eigen::Vector3d disp = Tlst.topRightCorner<3,1>() - Tls0.topRightCorner<3,1>();
 	Tref.topRightCorner<3,1>() = Twg0.topRightCorner<3,1>() + disp;
 	Tref.topLeftCorner<3,3>() = Twg0.topLeftCorner<3,3>();
 	Tref(3,3) = 1.0;
 
-	Matrix3d Rlst = Tlst.topLeftCorner<3,3>();
-	Matrix3d Rls0 = Tls0.topLeftCorner<3,3>();
-	Matrix3d Rwg0 = Twg0.topLeftCorner<3,3>();
+	Eigen::Matrix3d Rlst = Tlst.topLeftCorner<3,3>();
+	Eigen::Matrix3d Rls0 = Tls0.topLeftCorner<3,3>();
+	Eigen::Matrix3d Rwg0 = Twg0.topLeftCorner<3,3>();
 	Tref.topLeftCorner<3,3>() = Rlst * Rls0.inverse() * Rwg0;
 /*
 	// Compute the current configuration of the sensor in the liberty frame
@@ -131,24 +131,24 @@ void updateReference(VectorXd& liberty_input) {
 /* ********************************************************************************************* */
 /// Returns the workspace velocity, xdot, from the reference, Tref, using the current arm
 /// configuration
-void getXdotFromXref (VectorXd& xdot) {
+void getXdotFromXref (Eigen::VectorXd& xdot) {
 
 	// Get the current end-effector transform and also, just its orientation 
-	Matrix4d Tcur = robot->getNode("lGripper")->getWorldTransform();
+	Eigen::Matrix4d Tcur = robot->getNode("lGripper")->getWorldTransform();
 	DISPLAY_MATRIX(Tcur);
-	Matrix4d Rcur = Tcur;
+	Eigen::Matrix4d Rcur = Tcur;
 	Rcur.topRightCorner<3,1>().setZero();
 
 	// Apply the similarity transform to the displacement between current transform and reference
-	Matrix4d Tdisp = Tcur.inverse() * Tref;
-	Matrix4d xdotM = Rcur * Tdisp * Rcur.inverse();
+	Eigen::Matrix4d Tdisp = Tcur.inverse() * Tref;
+	Eigen::Matrix4d xdotM = Rcur * Tdisp * Rcur.inverse();
 	xdot = Krang::transformToEuler(xdotM, math::XYZ);
 }
 
 /* ********************************************************************************************* */
 /// Compute qdot with the dampened inverse Jacobian with nullspace projection
 /// Important constants are for the null space gain, the dampening gain and the second goal pos.
-void getQdot (const VectorXd& xdot, VectorXd& qdot) {
+void getQdot (const Eigen::VectorXd& xdot, Eigen::VectorXd& qdot) {
 
 	// Set the parameter constants
 	static const double dampGain = 0.005;
@@ -157,13 +157,13 @@ void getQdot (const VectorXd& xdot, VectorXd& qdot) {
 
 	// Get the Jacobian for the left end-effector
 	kinematics::BodyNode* ee = robot->getNode("lGripper");
-	MatrixXd Jlin = ee->getJacobianLinear().topRightCorner<3,7>();
-	MatrixXd Jang = ee->getJacobianAngular().topRightCorner<3,7>();
-	MatrixXd J (6,7);
+	Eigen::MatrixXd Jlin = ee->getJacobianLinear().topRightCorner<3,7>();
+	Eigen::MatrixXd Jang = ee->getJacobianAngular().topRightCorner<3,7>();
+	Eigen::MatrixXd J (6,7);
 	J << Jlin, Jang;
 
 	// Compute the inverse of the Jacobian with dampening
-	MatrixXd Jt = J.transpose(), JJt = J * Jt;
+	Eigen::MatrixXd Jt = J.transpose(), JJt = J * Jt;
 	for (int i=0; i < JJt.rows(); i++) JJt(i,i) += dampGain;
 
 	// Compute the reference joint velocities for nullspace projection
@@ -171,9 +171,9 @@ void getQdot (const VectorXd& xdot, VectorXd& qdot) {
 	Eigen::VectorXd qDotRef = (q - qRef) * qdotRefDt;
 	
 	// Compute the qdot using the reference joint velocity and the reference position 
-	MatrixXd Jinv = Jt * JJt.inverse();
-	MatrixXd JinvJ = Jinv*J;
-	MatrixXd I = MatrixXd::Identity(7,7);
+	Eigen::MatrixXd Jinv = Jt * JJt.inverse();
+	Eigen::MatrixXd JinvJ = Jinv*J;
+	Eigen::MatrixXd I = Eigen::MatrixXd::Identity(7,7);
 	qdot = Jinv * xdot + (I - JinvJ) * qDotRef;
 }
 
@@ -182,7 +182,7 @@ void getQdot (const VectorXd& xdot, VectorXd& qdot) {
 /// end-effectors, places blue and green boxes for their locations and visualizes it all
 void Timer::Notify() {
 
-	cout << "\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << endl;
+	std::cout << "\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << std::endl;
 
 	// Get the liberty info
 	VectorXd liberty_input (6);

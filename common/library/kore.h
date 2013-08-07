@@ -87,7 +87,8 @@ public:
 
 	/// Initializes a motor group that is represented with a somatic structure
 	void initMotorGroup (somatic_motor_t*& motors, const char* cmd_name, const char* state_name, 
-			VectorXd minPos, VectorXd maxPos, VectorXd minVel, VectorXd maxVel);
+	                     Eigen::VectorXd minPos, Eigen::VectorXd maxPos,
+	                     Eigen::VectorXd minVel, Eigen::VectorXd maxVel);
 
 	/// Initializes the amc wheels while using the average imu to create an offset (for absolute 
 	/// wheel positions)

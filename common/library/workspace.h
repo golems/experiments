@@ -51,27 +51,28 @@ public:
 
 	/// Integrates the input workspace velocity if one is given. This is for a user interface device
 	/// such as spacenav or joystick whose input is more natural to interpret as velocities.
-	void integrateWSVelocityInput(const VectorXd& xdot, const double dt);
+	void integrateWSVelocityInput(const Eigen::VectorXd& xdot, const double dt);
 
 	/// Returns a reference workspace velocity towards the integrated reference configuration from the
 	/// current end-effector configuration
-	void refWSVelocity(VectorXd& xdot);
+	void refWSVelocity(Eigen::VectorXd& xdot);
 
 	/// Returns a reference jointspace velocity from the given workspace velocity, biasing towards the
 	/// the given jointspace velocity
-	void refJSVelocity(const VectorXd& xdot, const VectorXd& qdot_nullspace, VectorXd& qdot);
+	void refJSVelocity(const Eigen::VectorXd& xdot, const Eigen::VectorXd& qdot_nullspace, Eigen::VectorXd& qdot);
 
 	/// Returns the reference jointspace velocity incorporating the ui device and f/t sensor values
-	void updateFromUIVel(const VectorXd& ui, const VectorXd& ft, const VectorXd& qdot_secondary, double dt, 
-			VectorXd& qdot);
+	void updateFromUIVel(const Eigen::VectorXd& ui, const Eigen::VectorXd& ft,
+	                     const Eigen::VectorXd& qdot_secondary, double dt, Eigen::VectorXd& qdot);
 
 	/// Returns the reference jointspace velocity incorporating the ui device and f/t sensor values
-	void updateFromXdot (const VectorXd& xdot, const VectorXd& ft, const VectorXd& qdot_secondary, double dt, 
-			VectorXd& qdot);
+	void updateFromXdot (const Eigen::VectorXd& xdot, const Eigen::VectorXd& ft,
+	                     const Eigen::VectorXd& qdot_secondary, double dt, Eigen::VectorXd& qdot);
 
 	// Returns the reference jointspace velocity incorporating
 	// position input from teh ui device and f/t sensor values
-	void updateFromUIPos(const MatrixXd& xref, const VectorXd& ft, const VectorXd& qdot_secondary, VectorXd& qdot);
+	void updateFromUIPos(const Eigen::MatrixXd& xref, const Eigen::VectorXd& ft,
+	                     const Eigen::VectorXd& qdot_secondary, Eigen::VectorXd& qdot);
 
 	/// Sets the workspace controller's goal to the current end
 	/// effector position
@@ -79,12 +80,12 @@ public:
 
 	/// Transforms a velocity-space user interface inptu into a
 	/// workspace velocity
-	Eigen::VectorXd uiInputVelToXdot(const VectorXd& ui_vel);
+	Eigen::VectorXd uiInputVelToXdot(const Eigen::VectorXd& ui_vel);
 
 public:
 	// Variables that represent the state of the end-effector or how we can control it
 
-	Matrix4d Tref;														///< The integrated or set configuration reference
+	Eigen::Matrix4d Tref;														///< The integrated or set configuration reference
 	kinematics::BodyNode* endEffector;				///< The end-effector whose configuration we control
 	std::vector<int>* arm_ids;								///< The arm indices that the controller can manipulate
 	bool debug_to_cout;							///< Verbosity for printing debug to standard output
