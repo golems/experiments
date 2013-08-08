@@ -257,7 +257,7 @@ void run() {
 			attroff(COLOR_PAIR(hoh_mode?Krang::COLOR_RED_BACKGROUND:COLOR_WHITE));
 
 			mvprintw(14, 5, "hoh side: ");
-			if (hoh_side == Krang::LEFT) mvprintw(14, 16, "left       ");
+			if (primary_hand == Krang::LEFT) mvprintw(14, 16, "left       ");
 			else mvprintw(14, 16, "      right");
 			mvprintw(15, 5, " hoh dir: ");
 			if (hoh_moving_right) mvprintw(15, 16, "      right");
