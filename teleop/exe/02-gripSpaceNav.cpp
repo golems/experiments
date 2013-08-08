@@ -110,7 +110,7 @@ public:
 	void OnCheckbox_hoh_direction_right(wxCommandEvent& evt);
 
 	/// updates the primary and off hand refs and the transform between the primary and off hands
-	void update_handedness();
+	void update_hand_relative_transform();
 	
 public:
 	DECLARE_DYNAMIC_CLASS(SimTab)
@@ -295,7 +295,7 @@ GripSpaceNavTab::GripSpaceNavTab(wxWindow *parent, const wxWindowID id, const wx
 	nullspace_q_masks[Krang::RIGHT] = (Krang::Vector7d() << 0,    0, 0,    1, 0,    0, 0).finished();
 
 	// set up the relative transform between the hands
-	update_handedness();
+	update_hand_relative_transform();
 
 	// Send a message; set the event code and the priority
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
@@ -332,7 +332,7 @@ GripSpaceNavTab::~GripSpaceNavTab() {
 
 /* ********************************************************************************************* */
 /// updates the primary and off hand refs and the transform between the primary and off hands
-void GripSpaceNavTab::update_handedness() {
+void GripSpaceNavTab::update_hand_relative_transform() {
 	Krang::Side primary_hand = checkbox_primary_hand_left->IsChecked() ? Krang::LEFT : Krang::RIGHT;
 	Krang::Side off_hand = checkbox_primary_hand_left->IsChecked() ? Krang::RIGHT : Krang::LEFT;
 	Trel_pri_to_off = wss[primary_hand]->Tref.inverse() * wss[off_hand]->Tref;
@@ -341,7 +341,7 @@ void GripSpaceNavTab::update_handedness() {
 /* ********************************************************************************************* */
 /// handles changing the synch mode on and off
 void GripSpaceNavTab::OnCheckbox_synch_mode(wxCommandEvent& evt) {
-	update_handedness();
+	update_hand_relative_transform();
 }
 
 /* ********************************************************************************************* */
@@ -355,11 +355,11 @@ void GripSpaceNavTab::OnCheckbox_hoh_mode(wxCommandEvent& evt) {
 /// handles changing which hand is being controlled
 void GripSpaceNavTab::OnCheckbox_primary_hand_left(wxCommandEvent& evt) {
 	checkbox_primary_hand_right->SetValue(!checkbox_primary_hand_right->IsChecked());
-	update_handedness();
+	update_hand_relative_transform();
 }
 void GripSpaceNavTab::OnCheckbox_primary_hand_right(wxCommandEvent& evt) {
 	checkbox_primary_hand_left->SetValue(!checkbox_primary_hand_left->IsChecked());
-	update_handedness();
+	update_hand_relative_transform();
 }
 
 /* ********************************************************************************************* */
