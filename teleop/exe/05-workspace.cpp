@@ -37,7 +37,6 @@
 #include <kore.hpp>
 #include <kore/workspace.hpp>
 #include <kore/display.hpp>
-#include <kore/visualization.hpp>
 #include <kore/util.hpp>
 
 #include <iostream>
@@ -45,6 +44,8 @@
 
 #include <robotics/parser/dart_parser/DartLoader.h>
 #include <simulation/World.h>
+
+#include <somatic/msg.h>
 
 /* ********************************************************************************************* */
 // Type declarations
@@ -88,6 +89,7 @@ std::map<Krang::Side, Krang::SpaceNav*> spnavs; ///< points to spacenavs
 
 // process state
 somatic_d_t daemon_cx;                          ///< daemon context
+Somatic__VisualizeData* vis_msg;
 
 // pointers to important DART objects
 simulation::World* world;
@@ -115,8 +117,6 @@ bool debug_print_this_it;       ///< whether we print
 
 // stuff for visualization
 ach_channel_t vis_chan;
-Krang::teleop_05_workspace_vis_t vis_msg;
-
 
 /* ******************************************************************************************** */
 /// Clean up
@@ -367,10 +367,10 @@ void run() {
 
 			// store some internal state into the vis_msg so we can publish it
 			Eigen::VectorXd posref_euler = Krang::transformToEuler(wss[sde]->Tref, math::XYZ);
-			aa_fcpy(vis_msg.pos_ref[sde], posref_euler.data(), 6);
-			aa_fcpy(vis_msg.xdot_spacenav[sde], xdot_spacenav.data(), 6);
-			aa_fcpy(vis_msg.xdot_hoh[sde], xdot_hoh.data(), 6);
-			aa_fcpy(vis_msg.ft_external[sde], hw->fts[sde]->lastExternal.data(), 6);
+			for(int i = 0; i < 6; i++) vis_msg->vecs[0 + (4*sint)]->data[i] = posref_euler[i];
+			for(int i = 0; i < 6; i++) vis_msg->vecs[1 + (4*sint)]->data[i] = xdot_spacenav[i];
+			for(int i = 0; i < 6; i++) vis_msg->vecs[2 + (4*sint)]->data[i] = xdot_hoh[i];
+			for(int i = 0; i < 6; i++) vis_msg->vecs[3 + (4*sint)]->data[i] = hw->fts[sde]->lastExternal[i];
 
 			// do some debug output by printing to curses
 			if (debug_print_this_it) {
@@ -410,7 +410,7 @@ void run() {
 			}
 
 			// publish our visualization data
-			ach_put(&vis_chan, &vis_msg, sizeof(vis_msg));
+			SOMATIC_PACK_SEND(&vis_chan, somatic__visualize_data, vis_msg);
 		}
 
 		// display everything curses has done
@@ -471,10 +471,12 @@ void init() {
 	nullspace_q_masks[Krang::LEFT] = (Krang::Vector7d()  << 0,    0, 0,    1, 0,    0, 0).finished();
 	nullspace_q_masks[Krang::RIGHT] = (Krang::Vector7d() << 0,    0, 0,    1, 0,    0, 0).finished();
 
-	// open the ach channel we'll use for visualizing things
+	// initialize visualization
+	size_t vecsizes[] = {6, 6, 6, 6, 6, 6, 6, 6};
+	vis_msg = somatic__visualize_data__alloc(8, vecsizes, 0);
 	somatic_d_channel_open(&daemon_cx, &vis_chan, "teleop-05-workspace-vis", NULL);
 
-	// Start the daemon running
+	// Start the daemon_cx running
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
 	                SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
 }

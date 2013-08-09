@@ -39,7 +39,6 @@
 
 #include "krang-vis-tab.hpp"
 #include <math/UtilsRotation.h>
-#include <robotics/parser/dart_parser/DartLoader.h>
 #include <simulation/World.h>
 #include <yui/GLFuncs.h>
 
@@ -139,9 +138,7 @@ KrangVisTab::KrangVisTab(wxWindow* parent, wxWindowID id, const wxPoint& pos, co
 
 	// Initalize dart. Do this before we initialize the daemon because initalizing the daemon
 	// changes our current directory to somewhere in /var/run.
-	DartLoader dl;
-	mWorld = dl.parseWorld("../../scenes/01-World-Robot.urdf");
-	assert((mWorld != NULL) && "Could not find the world");
+	frame->DoLoad("../../scenes/05-World-Teleop.urdf");
 	robot = mWorld->getSkeleton("Krang");
 
 	// grab the goal skeletons for visualization
