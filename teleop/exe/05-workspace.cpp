@@ -474,6 +474,7 @@ void init() {
 	// initialize visualization
 	size_t vecsizes[] = {6, 6, 6, 6, 6, 6, 6, 6};
 	vis_msg = somatic__visualize_data__alloc(8, vecsizes, 0);
+	vis_msg->msg = "teleop/05-workspace";
 	somatic_d_channel_open(&daemon_cx, &vis_chan, "teleop-05-workspace-vis", NULL);
 
 	// Start the daemon_cx running
