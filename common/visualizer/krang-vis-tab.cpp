@@ -44,7 +44,8 @@
 
 #include <kore.hpp>
 #include <kore/display.hpp>
-#include <kore/visualization.hpp>
+
+#include <somatic/msg.h>
 
 /* ############################################################################################# */
 /* ############################################################################################# */
@@ -70,6 +71,7 @@ enum KrangVisTabEvents {
 somatic_d_t daemon_cx; ///< daemon context
 ach_channel_t vis_chan; ///< ach channel we use for getting data to be visualized
 Krang::Hardware* hw; ///< hardware object that we use to talk to krang's general body state
+Somatic__VisualizeData* vis_msg_cached; ///< hang on to this because sometimes we don't get a message
 
 // timing information
 double time_last;
@@ -82,17 +84,6 @@ std::map<Krang::Side, kinematics::BodyNode*> end_effs;
 // user interface
 wxCheckBox* checkbox_vis_krang_body; ///< pointer to the checkbox for visaulizing krang's body
 wxCheckBox* checkbox_vis_05_workspace_teleop; ///< pointer to the checkbox for visualizng workspace teleop
-
-// junk from display
-int Krang::curses_display_row = 30;
-int Krang::curses_display_precision = 15;
-bool Krang::doing_curses = false;
-
-int Krang::COLOR_RED_BACKGROUND = 11;
-int Krang::COLOR_YELLOW_BACKGROUND = 12;
-int Krang::COLOR_GREEN_BACKGROUND = 13;
-int Krang::COLOR_WHITE_BACKGROUND = 14;
-
 
 /* ############################################################################################# */
 /* ############################################################################################# */
@@ -220,60 +211,77 @@ void KrangVisTab::OnCheckbox_vis_05_workspace_teleop(wxCommandEvent& evt) {
 /// Called regularly by the timer object so that it happens DISPLAY_FREQUENCY times per second. We
 /// use this function to update and visulize state; it's basically the inside of our main loop.
 void KrangVisUpdateTimer::Notify() {
-	// util variablese
-	int ret;
-	size_t recv_bytes;
-
 	// Update times
 	double time_now = aa_tm_timespec2sec(aa_tm_now());
 	double time_delta = time_now - time_last;
 	time_last = time_now;
 
+	// we update the hardware on our own clock to maintain consistency
 	if(checkbox_vis_krang_body->IsChecked()) {
 		// Update the robot
 		hw->updateSensors(time_delta);
 	}
+
+	// and tell grip to update its rendering of the world
+	viewer->DrawGLScene();
+}
+
+/* ********************************************************************************************* */
+// If we're visualizing anything, display it
+void KrangVisTab::GRIPEventRender() {
+	// util variablese
+	int ret;
+	ach_status_t rach;
+	size_t recv_bytes;
+
+	// since the visualization data isn't doing anything with dynamics, we just grab it as it comes
 	if(checkbox_vis_05_workspace_teleop->IsChecked()) {
-		// the struct we use to hang on to visualization data for this tick
-		Krang::teleop_05_workspace_vis_t vis_msg;
-
-		// get the most recent ach message and stick it into the vis_msg struct
-		struct timespec abstimeout = aa_tm_future(aa_tm_sec2timespec(.001));
-		ret = ach_get(&vis_chan, &vis_msg, sizeof(vis_msg), &recv_bytes, NULL, ACH_O_LAST | ACH_O_COPY);
-
-		// if we got something, use it!
-		if (ret == ACH_OK && recv_bytes == sizeof(vis_msg)) {
+		// try to grab a new visualization message
+		Somatic__VisualizeData* vis_msg = SOMATIC_GET_LAST_UNPACK(rach, somatic__visualize_data,
+		                                                          &protobuf_c_system_allocator, 4096, &vis_chan);
+		// if we got one, throw out the old one and store the new one
+		if (vis_msg != NULL) {
+			if (vis_msg_cached != NULL)
+				somatic__visualize_data__free_unpacked(vis_msg_cached, &protobuf_c_system_allocator);
+			vis_msg_cached = vis_msg;
+		}
+		
+		// either way, we almost certainly have something we can use, so use it!
+		if (vis_msg_cached != NULL) {
 			for(int sint = Krang::LEFT; sint-1 < Krang::RIGHT; sint++) {
 				// Get the side
 				Krang::Side sde = static_cast<Krang::Side>(sint);
+				std::cout << "Side: " << (sde == Krang::LEFT ? "LEFT " : "RIGHT") << std::endl;
 
 				// unpack the position reference and copy it over to the goal skeleton
-				Krang::Vector6d pos_ref(vis_msg.ft_external[sint]);
+				Krang::Vector6d pos_ref(vis_msg_cached->vecs[0 + (4 * sint)]->data);
 				goal_skels[sde]->setConfig(Krang::dart_root_dof_ids, pos_ref);
 
 				// grab the current end-effector position so we can draw arrows from it
 				Eigen::Vector3d ee_pos_linear = end_effs[sde]->getWorldTransform().topRightCorner<3,1>();
 
 				// draw an arrow showing the last estimation of the external force
-				Krang::Vector6d ft_external(vis_msg.ft_external[sint]);
+				Krang::Vector6d ft_external(vis_msg_cached->vecs[3 + (4 * sint)]->data);
 				Eigen::Vector3d ft_external_linear = ft_external.topRightCorner<3,1>();
-				glColor4d(1, 0, 0, .9); // red
+				glColor4d(1.0, 0, 0, 0.5); // red
 				yui::drawArrow3D(ee_pos_linear, ft_external_linear,
 				                 ft_external_linear.norm() / 300.0, .01, .02);
 
 				// draw an arrow showing the last ordered spacenav velocity
-				Krang::Vector6d xdot_spacenav(vis_msg.xdot_spacenav[sint]);
+				Krang::Vector6d xdot_spacenav(vis_msg_cached->vecs[1 + (4 * sint)]->data);
 				Eigen::Vector3d xdot_spacenav_linear = xdot_spacenav.topRightCorner<3,1>();
-				glColor4d(0, 1, 0, .9); // green
-				yui::drawArrow3D(xdot_spacenav_linear, xdot_spacenav_linear,
+				glColor4d(0, 1.0, 0, 0.5); // green
+				yui::drawArrow3D(ee_pos_linear, xdot_spacenav_linear,
 				                 xdot_spacenav_linear.norm(), .01, .02);
+
+				DISPLAY_VECTOR(pos_ref);
+				DISPLAY_VECTOR(ee_pos_linear);
+				DISPLAY_VECTOR(xdot_spacenav_linear);
 			}
 		}
 	}
-
-	// and visualize everything we've updated
-	viewer->DrawGLScene();
 }
+
 
 /* ############################################################################################# */
 /* ############################################################################################# */

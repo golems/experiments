@@ -77,6 +77,11 @@ public:
 	            const wxSize& size = wxDefaultSize, long style = wxTAB_TRAVERSAL);
 	virtual ~KrangVisTab();				///< Destructor
 
+    // *************************************
+	// GRIP event handlers
+	virtual void GRIPEventRender(); ///< Called when GRIP is rendering - do visalization in here
+    // *************************************  
+
 	/// Visualizes general krang state, things like the waist and arm angles and the IMU angle
 	void OnCheckbox_vis_krang_body(wxCommandEvent& evt);
 
