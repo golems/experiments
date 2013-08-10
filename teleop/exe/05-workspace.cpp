@@ -217,11 +217,13 @@ void run() {
 			// select the left hand for hand-over-hand movement
 			primary_hand = Krang::LEFT;
 			off_hand = Krang::RIGHT;
+			Trel_pri_to_off = wss[primary_hand]->Tref.inverse() * wss[off_hand]->Tref;
 		} break;
 		case '6': {
 			// select the right hand for hand-over-hand movement
 			primary_hand = Krang::RIGHT;
 			off_hand = Krang::LEFT;
+			Trel_pri_to_off = wss[primary_hand]->Tref.inverse() * wss[off_hand]->Tref;
 		} break;
 		}
 		Krang::curses_display_row = CURSES_DEBUG_DISPLAY_START;
