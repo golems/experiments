@@ -19,7 +19,7 @@ include(simulation.cmake)
 # Link to somatic, amino and ach
 # NOTE: Ideally we would like to 'find' these packages but for now, we assume they are either 
 # in /usr/lib or /usr/local/lib
-link_libraries(amino protobuf-c ach ntcan ntcanopen filter pcio somatic ssdmu stdc++)
+link_libraries(amino protobuf-c ach ntcan ntcanopen filter pcio somatic ncurses kore ssdmu stdc++)
 
 # Include Eigen
 include_directories(/usr/include/eigen3)
@@ -28,10 +28,9 @@ include_directories(/usr/local/include/eigen3)
 # Include the project files and the common helpers for all the experiments
 include_directories(src)
 include_directories(../common)
-include_directories(../common/library)
 
 # Collect the source, script and fortran files
-file(GLOB main_source "src/*.cpp" "src/*.c" "../common/library/*.cpp")
+file(GLOB main_source "src/*.cpp" "src/*.c")
 message(${main_source})
 file(GLOB scripts_source "exe/*.cpp")
 LIST(SORT scripts_source)

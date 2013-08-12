@@ -34,9 +34,10 @@
  * demonstrations.
  */
 
-#include "kore.h"
-#include "workspace.h"
-#include "display.hpp"
+#include <kore.hpp>
+#include <kore/workspace.hpp>
+#include <kore/display.hpp>
+#include <kore/util.hpp>
 
 #include <iostream>
 #include <iomanip>
@@ -44,25 +45,10 @@
 #include <robotics/parser/dart_parser/DartLoader.h>
 #include <simulation/World.h>
 
-#include "util.h"
-
-using namespace Krang;
+#include <somatic/msg.h>
 
 /* ********************************************************************************************* */
-// Declarations
-typedef enum {
-	MANIP_MODE_OFF,
-	MANIP_MODE_SPNAV,
-	MANIP_MODE_SPNAV_NOROT,
-	MANIP_MODE_SYNCH,
-	MANIP_MODE_HAND_OVER_HAND,
-} manip_mode_t;
-
-typedef enum {
-	MANIP_PRIMARY_LEFT = Krang::LEFT,
-	MANIP_PRIMARY_RIGHT = Krang::RIGHT,
-	MANIP_BOTH,
-} manip_primary_t;
+// Type declarations
 
 /* ********************************************************************************************* */
 // Constants
@@ -96,45 +82,41 @@ double GRIPPER_POSITION_PARTIAL[] = {70, 70, 70, 128};
 /* ********************************************************************************************* */
 // State variables
 
-// hardware object
-somatic_d_t daemon_cx;                          ///< daemon context
-std::map<Krang::Side, Krang::SpaceNav*> spnavs; ///< points to spacenavs
-std::map<Krang::Side, Krang::FT*> fts; ///< points to force-torque sensors
-
-Hardware* hw;                                   ///< connects to hardware
+// hardware objects
+Krang::Hardware* hw;                                   ///< connects to hardware
 bool sending_commands = false;
+std::map<Krang::Side, Krang::SpaceNav*> spnavs; ///< points to spacenavs
+
+// process state
+somatic_d_t daemon_cx;                          ///< daemon context
+Somatic__VisualizeData* vis_msg;
 
 // pointers to important DART objects
 simulation::World* world;
 dynamics::SkeletonDynamics* robot;
 
 // workspace stuff
-manip_mode_t ws_mode;
-manip_primary_t ws_primary;
 std::map<Krang::Side, Krang::WorkspaceControl*> wss; ///< does workspace control for the arms
-std::map<Krang::Side, Vector7d> nullspace_q_refs; ///< nullspace configurations for the arms
-std::map<Krang::Side, Vector7d> nullspace_q_masks; ///< nullspace configurations for the arms
-std::map<Krang::Side, Vector7d> nullspace_qdot_refs; ///< nullspace configurations for the arms
-Eigen::MatrixXd Trel_left_to_right; ///< translation from the left hand to the right hand
-bool synch_mode;
-bool fixed_orientation_mode;
+std::map<Krang::Side, Krang::Vector7d> nullspace_q_refs; ///< nullspace configurations for the arms
+std::map<Krang::Side, Krang::Vector7d> nullspace_q_masks; ///< nullspace configurations for the arms
+std::map<Krang::Side, Krang::Vector7d> nullspace_qdot_refs; ///< nullspace configurations for the arms
+Eigen::MatrixXd Trel_pri_to_off; ///< translation from the primary hand to the off hand
+
+// mode stuff
+bool synch_mode = false;
+bool hoh_mode = false;
+Krang::Side primary_hand = Krang::LEFT;
+Krang::Side off_hand = Krang::RIGHT;
+bool hoh_moving_right = false;
 
 // hand-over-hand stuff
 std::map<Krang::Side, Eigen::Vector3d> hoh_initpos;
-bool hoh_mode = false;
-Krang::Side hoh_side = Krang::LEFT;
-bool hoh_moving_right = false;
 
-// debug stuff
+// debug information
 bool debug_print_this_it;       ///< whether we print
-int Krang::curses_display_row = 30;
-int Krang::curses_display_precision = 15;
-bool Krang::doing_curses = false;
 
-int Krang::COLOR_RED_BACKGROUND = 11;
-int Krang::COLOR_YELLOW_BACKGROUND = 12;
-int Krang::COLOR_GREEN_BACKGROUND = 13;
-int Krang::COLOR_WHITE_BACKGROUND = 14;
+// stuff for visualization
+ach_channel_t vis_chan;
 
 /* ******************************************************************************************** */
 /// Clean up
@@ -146,6 +128,9 @@ void destroy() {
 	// Stop the daemon
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
 	                SOMATIC__EVENT__CODES__PROC_STOPPING, NULL, NULL);
+	
+	// close the channel we use for publishing visualization data
+	somatic_d_channel_close(&daemon_cx, &vis_chan);
 
 	// Clean up the workspace stuff
 	delete wss[Krang::LEFT];
@@ -180,43 +165,39 @@ void run() {
 		switch (ch) {
 		case 'q': somatic_sig_received = true; break;
 		case 'r': {
-			somatic_motor_reset(&daemon_cx, hw->larm);
-			somatic_motor_reset(&daemon_cx, hw->rarm);
+			somatic_motor_reset(&daemon_cx, hw->arms[Krang::LEFT]);
+			somatic_motor_reset(&daemon_cx, hw->arms[Krang::RIGHT]);
 		} break;
 		case 'h': {
-			ws_mode = MANIP_MODE_OFF;
 			hoh_mode = false;
 			sending_commands = false;
-			somatic_motor_halt(&daemon_cx, hw->larm);
-			somatic_motor_halt(&daemon_cx, hw->rarm);
+			somatic_motor_halt(&daemon_cx, hw->arms[Krang::LEFT]);
+			somatic_motor_halt(&daemon_cx, hw->arms[Krang::RIGHT]);
 		} break;
 		case 'u': {
-			somatic_motor_setpos(&daemon_cx, hw->lgripper, GRIPPER_POSITION_PARTIAL, 4);
+			somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::LEFT], GRIPPER_POSITION_PARTIAL, 4);
 		} break;
 		case 'i': {
-			somatic_motor_setpos(&daemon_cx, hw->rgripper, GRIPPER_POSITION_PARTIAL, 4);
+			somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::RIGHT], GRIPPER_POSITION_PARTIAL, 4);
 		} break;
 		case ' ': {
 			sending_commands = !sending_commands;
+			hoh_mode = false;
+			wss[Krang::LEFT]->resetReferenceTransform();
+			wss[Krang::RIGHT]->resetReferenceTransform();
+			Trel_pri_to_off = wss[primary_hand]->Tref.inverse() * wss[off_hand]->Tref;
 			if (sending_commands) {
-				hoh_mode = false;
-				somatic_motor_reset(&daemon_cx, hw->larm);
-				somatic_motor_reset(&daemon_cx, hw->rarm);
-				wss[Krang::LEFT]->resetReferenceTransform();
-				wss[Krang::RIGHT]->resetReferenceTransform();
-				Trel_left_to_right = wss[Krang::LEFT]->Tref.inverse() * wss[Krang::RIGHT]->Tref;
+				somatic_motor_reset(&daemon_cx, hw->arms[Krang::LEFT]);
+				somatic_motor_reset(&daemon_cx, hw->arms[Krang::RIGHT]);
 			} else {
 				Eigen::VectorXd z = Eigen::VectorXd::Zero(7);
-				hoh_mode = false;
-				somatic_motor_setvel(&daemon_cx, hw->larm, z.data(), 7);
-				somatic_motor_setvel(&daemon_cx, hw->rarm, z.data(), 7);
+				somatic_motor_setvel(&daemon_cx, hw->arms[Krang::LEFT], z.data(), 7);
+				somatic_motor_setvel(&daemon_cx, hw->arms[Krang::RIGHT], z.data(), 7);
 			}
 		} break;
 		case 's': {
 			synch_mode = !synch_mode;
-			if (synch_mode) {
-				Trel_left_to_right = wss[Krang::LEFT]->Tref.inverse() * wss[Krang::RIGHT]->Tref;
-			}
+			Trel_pri_to_off = wss[primary_hand]->Tref.inverse() * wss[off_hand]->Tref;
 		} break;
 		case '5': {
 			// start or stop moving hand-over-hand
@@ -234,11 +215,15 @@ void run() {
 		} break;
 		case '4': {
 			// select the left hand for hand-over-hand movement
-			hoh_side = Krang::LEFT;
+			primary_hand = Krang::LEFT;
+			off_hand = Krang::RIGHT;
+			Trel_pri_to_off = wss[primary_hand]->Tref.inverse() * wss[off_hand]->Tref;
 		} break;
 		case '6': {
-			// select the left hand for hand-over-hand movement
-			hoh_side = Krang::RIGHT;
+			// select the right hand for hand-over-hand movement
+			primary_hand = Krang::RIGHT;
+			off_hand = Krang::LEFT;
+			Trel_pri_to_off = wss[primary_hand]->Tref.inverse() * wss[off_hand]->Tref;
 		} break;
 		}
 		Krang::curses_display_row = CURSES_DEBUG_DISPLAY_START;
@@ -261,20 +246,20 @@ void run() {
 		if (debug_print_this_it) {
 			hw->printStateCurses(3, 1);
 
-			attron(COLOR_PAIR(sending_commands?COLOR_RED_BACKGROUND:COLOR_WHITE));
+			attron(COLOR_PAIR(sending_commands?Krang::COLOR_RED_BACKGROUND:COLOR_WHITE));
 			mvprintw(11, 1, "sendcmds mode: %s", sending_commands?"yes":"no ");
-			attroff(COLOR_PAIR(sending_commands?COLOR_RED_BACKGROUND:COLOR_WHITE));
+			attroff(COLOR_PAIR(sending_commands?Krang::COLOR_RED_BACKGROUND:COLOR_WHITE));
 			
-			attron(COLOR_PAIR(synch_mode?COLOR_RED_BACKGROUND:COLOR_WHITE));
+			attron(COLOR_PAIR(synch_mode?Krang::COLOR_RED_BACKGROUND:COLOR_WHITE));
 			mvprintw(12, 1, "synch mode: %s", synch_mode?"yes":"no ");
-			attroff(COLOR_PAIR(synch_mode?COLOR_RED_BACKGROUND:COLOR_WHITE));
+			attroff(COLOR_PAIR(synch_mode?Krang::COLOR_RED_BACKGROUND:COLOR_WHITE));
 
-			attron(COLOR_PAIR(hoh_mode?COLOR_RED_BACKGROUND:COLOR_WHITE));
+			attron(COLOR_PAIR(hoh_mode?Krang::COLOR_RED_BACKGROUND:COLOR_WHITE));
 			mvprintw(13, 1, "hand-over-hand mode: %s", hoh_mode?"yes":"no ");
-			attroff(COLOR_PAIR(hoh_mode?COLOR_RED_BACKGROUND:COLOR_WHITE));
+			attroff(COLOR_PAIR(hoh_mode?Krang::COLOR_RED_BACKGROUND:COLOR_WHITE));
 
 			mvprintw(14, 5, "hoh side: ");
-			if (hoh_side == Krang::LEFT) mvprintw(14, 16, "left       ");
+			if (primary_hand == Krang::LEFT) mvprintw(14, 16, "left       ");
 			else mvprintw(14, 16, "      right");
 			mvprintw(15, 5, " hoh dir: ");
 			if (hoh_moving_right) mvprintw(15, 16, "      right");
@@ -285,12 +270,13 @@ void run() {
 		hw->updateSensors(time_delta);
 
 		// Check for too high currents
-		if(checkCurrentLimits(eig7(hw->larm->cur)) && checkCurrentLimits(eig7(hw->rarm->cur))) {
+		if(Krang::checkCurrentLimits(hw->arms[Krang::LEFT]->cur, 7)
+		   && Krang::checkCurrentLimits(hw->arms[Krang::RIGHT]->cur, 7)) {
 			if (sending_commands) {
 				sending_commands = false;
 				hoh_mode = false;
-				somatic_motor_halt(&daemon_cx, hw->larm);
-				somatic_motor_halt(&daemon_cx, hw->rarm);
+				somatic_motor_halt(&daemon_cx, hw->arms[Krang::LEFT]);
+				somatic_motor_halt(&daemon_cx, hw->arms[Krang::RIGHT]);
 			}
 
 			// // TODO: handle this more nicely
@@ -315,7 +301,7 @@ void run() {
 			}
 
 			// Create variables
-			Eigen::MatrixXd Tref_R_sync;
+			Eigen::MatrixXd Tref_off_sync;
 			Eigen::VectorXd spacenav_input;
 			Eigen::VectorXd xdot_spacenav = Eigen::VectorXd::Zero(6);
 			Eigen::VectorXd xdot_hoh = Eigen::VectorXd::Zero(6);
@@ -328,21 +314,20 @@ void run() {
 			spacenav_input = spnavs[sde]->updateSpaceNav();
 
 			// Close the gripper if button 0 is pressed, open it if button 1.
-			somatic_motor_t* gripper = (sde == Krang::LEFT) ? hw->lgripper : hw->rgripper;
 			if(spnavs[sde]->buttons[sint] == 1) {
-				somatic_motor_setpos(&daemon_cx, gripper, GRIPPER_POSITION_OPEN, 4);
+				somatic_motor_setpos(&daemon_cx, hw->grippers[sde], GRIPPER_POSITION_OPEN, 4);
 			}
 			if(spnavs[sde]->buttons[(sint + 1) % 2] == 1) {
-				somatic_motor_setpos(&daemon_cx, gripper, GRIPPER_POSITION_CLOSE, 4);
+				somatic_motor_setpos(&daemon_cx, hw->grippers[sde], GRIPPER_POSITION_CLOSE, 4);
 			}
 
 			// depending on the synch mode, get a workspace velocity either from the spacenav or
 			// from the other arm
-			if(synch_mode && (sde == Krang::RIGHT)) {
-				Tref_R_sync = wss[Krang::LEFT]->Tref * Trel_left_to_right;
+			if(synch_mode && sde == off_hand) {
+				Tref_off_sync = wss[primary_hand]->Tref * Trel_pri_to_off;
 			} else if (!hoh_mode) {
 				xdot_spacenav = wss[sde]->uiInputVelToXdot(spacenav_input);
-			} else if (hoh_mode && (hoh_side == sde)) {
+			} else if (hoh_mode && sde == primary_hand) {
 				Eigen::Vector3d dx_hoh = hoh_initpos[Krang::RIGHT] - hoh_initpos[Krang::LEFT];
 				if (!hoh_moving_right)
 					dx_hoh *= -1;
@@ -355,12 +340,12 @@ void run() {
 
 			// Jacobian: compute the desired jointspace velocity from the inputs and sensors
 			Eigen::VectorXd qdot_jacobian;
-			if(synch_mode && (sde == Krang::RIGHT)) {
-				wss[Krang::RIGHT]->updateFromUIPos(Tref_R_sync, fts[Krang::RIGHT]->lastExternal,
-				                                   nullspace_qdot_refs[Krang::RIGHT], qdot_jacobian);
+			if(synch_mode && sde == off_hand) {
+				wss[sde]->updateFromUIPos(Tref_off_sync, hw->fts[sde]->lastExternal,
+				                          nullspace_qdot_refs[sde], qdot_jacobian);
 			}
 			else {
-				wss[sde]->updateFromXdot(xdot_ws_goal, fts[sde]->lastExternal,
+				wss[sde]->updateFromXdot(xdot_ws_goal, hw->fts[sde]->lastExternal,
 				                         nullspace_qdot_refs[sde], time_delta, qdot_jacobian);
 			}
 
@@ -371,22 +356,30 @@ void run() {
 
 			// avoid joint limits
 			Eigen::VectorXd qdot_avoid(7);
-			computeQdotAvoidLimits(robot, *wss[sde]->arm_ids, q, qdot_avoid);
+			Krang::computeQdotAvoidLimits(robot, *wss[sde]->arm_ids, q, qdot_avoid);
 
 			// add qdots together to get the overall movement
 			Eigen::VectorXd qdot_apply = qdot_avoid + qdot_jacobian;
 
 			// and apply that to the arm
 			if(sending_commands)
-				somatic_motor_setvel(&daemon_cx, sde == Krang::LEFT ? hw->larm : hw->rarm, qdot_apply.data(), 7);
+				somatic_motor_setvel(&daemon_cx, hw->arms[sde], qdot_apply.data(), 7);
 
+			// store some internal state into the vis_msg so we can publish it
+			Eigen::VectorXd posref_euler = Krang::transformToEuler(wss[sde]->Tref, math::XYZ);
+			for(int i = 0; i < 6; i++) vis_msg->vecs[0 + (4*sint)]->data[i] = posref_euler[i];
+			for(int i = 0; i < 6; i++) vis_msg->vecs[1 + (4*sint)]->data[i] = xdot_spacenav[i];
+			for(int i = 0; i < 6; i++) vis_msg->vecs[2 + (4*sint)]->data[i] = xdot_hoh[i];
+			for(int i = 0; i < 6; i++) vis_msg->vecs[3 + (4*sint)]->data[i] = hw->fts[sde]->lastExternal[i];
+
+			// do some debug output by printing to curses
 			if (debug_print_this_it) {
 				// if(synch_mode && (sde == Krang::RIGHT)) 
 				// 	Krang::curses_display_matrix(Tref_R_sync);
 				Eigen::MatrixXd ee_trans = wss[sde]->endEffector->getWorldTransform();
 				Eigen::VectorXd ee_pos = Krang::transformToEuler(ee_trans, math::XYZ);
 
-				Krang::curses_display_vector(fts[sde]->lastExternal,   "ft                                  ");
+				Krang::curses_display_vector(hw->fts[sde]->lastExternal,   "ft                                  ");
 				Krang::curses_display_vector(xdot_spacenav,            "xdot_spacenav                       ");
 				Krang::curses_display_vector(xdot_hoh,                 "xdot_hoh                            ");
 				Krang::curses_display_vector(xdot_ws_goal,             "xdot_ws_goal                        ");
@@ -398,15 +391,15 @@ void run() {
 				Eigen::VectorXd cur(7);
 				double largest_cur = 0;
 				for (int i = 0; i < 7; i++) {
-					cur[i] = (sde == Krang::LEFT ? hw->larm->cur[i] : hw->rarm->cur[i]);
+					cur[i] = hw->arms[sde]->cur[i];
 					largest_cur = std::max(largest_cur, cur[i]);
 				}
 
 				if(largest_cur < .1) {
-					attron(COLOR_PAIR(COLOR_RED_BACKGROUND));
+					attron(COLOR_PAIR(Krang::COLOR_RED_BACKGROUND));
 					mvprintw(11, sde==Krang::LEFT ? 30 : 50,
 					         sde==Krang::LEFT ? "left halt?" : "right halt?");
-					attroff(COLOR_PAIR(COLOR_RED_BACKGROUND));
+					attroff(COLOR_PAIR(Krang::COLOR_RED_BACKGROUND));
 				} else {
 					mvprintw(11, sde==Krang::LEFT ? 30 : 50,
 					         sde==Krang::LEFT ? "          " : "           ");
@@ -415,6 +408,9 @@ void run() {
 				Krang::curses_display_vector(cur, "measured_current                    ",
 				                             0, largest_cur < 8 ? COLOR_WHITE : COLOR_YELLOW);
 			}
+
+			// publish our visualization data
+			SOMATIC_PACK_SEND(&vis_chan, somatic__visualize_data, vis_msg);
 		}
 
 		// display everything curses has done
@@ -451,41 +447,37 @@ void init() {
 	somatic_d_init(&daemon_cx, &daemon_opt);
 
 	// Initialize the hardware
-	Hardware::Mode mode = (Hardware::Mode)(Hardware::MODE_ALL);
-	hw = new Hardware(mode, &daemon_cx, robot);
-
-	// fill out the convenient force-torque pointers
-	fts[Krang::LEFT] = hw->lft;
-	fts[Krang::RIGHT] = hw->rft;
-
-	// Set up the workspace stuff
-	synch_mode = false;
-	fixed_orientation_mode = false;
-	wss[Krang::LEFT] = new WorkspaceControl(robot, LEFT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
-	                                        SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_TRANSLATION_GAIN,
-	                                        COMPLIANCE_ORIENTATION_GAIN);
-	wss[Krang::RIGHT] = new WorkspaceControl(robot, RIGHT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
-	                                         SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_TRANSLATION_GAIN,
-	                                         COMPLIANCE_ORIENTATION_GAIN);
+	Krang::Hardware::Mode mode = (Krang::Hardware::Mode)(Krang::Hardware::MODE_ALL);
+	hw = new Krang::Hardware(mode, &daemon_cx, robot);
 
 	// Initialize the spacenavs
 	spnavs[Krang::LEFT] = new Krang::SpaceNav(&daemon_cx, "spacenav-data-l", .5);
 	spnavs[Krang::RIGHT] = new Krang::SpaceNav(&daemon_cx, "spacenav-data-r", .5);
 
+	// Set up the workspace stuff
+	wss[Krang::LEFT] = new Krang::WorkspaceControl(robot, Krang::LEFT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
+	                                               SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN,
+	                                               COMPLIANCE_TRANSLATION_GAIN, COMPLIANCE_ORIENTATION_GAIN);
+	wss[Krang::RIGHT] = new Krang::WorkspaceControl(robot, Krang::RIGHT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
+	                                                SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN,
+	                                                COMPLIANCE_TRANSLATION_GAIN, COMPLIANCE_ORIENTATION_GAIN);
+
 	// set up the relative transform between the hands
-	Trel_left_to_right = wss[Krang::LEFT]->Tref.inverse() * wss[Krang::RIGHT]->Tref;
+	Trel_pri_to_off = wss[primary_hand]->Tref.inverse() * wss[off_hand]->Tref;
 
 	// set up nullspace stuff
-	nullspace_q_refs[Krang::LEFT] = (Vector7d()   << 0, -1.0, 0, -0.5, 0, -0.8, 0).finished();
-	nullspace_q_refs[Krang::RIGHT] = (Vector7d()  << 0,  1.0, 0,  0.5, 0,  0.8, 0).finished();
-	nullspace_q_masks[Krang::LEFT] = (Vector7d()  << 0,    0, 0,    1, 0,    0, 0).finished();
-	nullspace_q_masks[Krang::RIGHT] = (Vector7d() << 0,    0, 0,    1, 0,    0, 0).finished();
-	// nullspace_q_refs[Krang::LEFT] = (Vector7d()   << 0, -1.0, 0, -0.5, 0, -0.8, 0).finished();
-	// nullspace_q_refs[Krang::RIGHT] = (Vector7d()  << 0,  1.0, 0,  0.5, 0,  0.8, 0).finished();
-	// nullspace_q_masks[Krang::LEFT] = (Vector7d()  << 1,    1, 1,    1, 1,    0, 1).finished();
-	// nullspace_q_masks[Krang::RIGHT] = (Vector7d() << 1,    1, 1,    1, 1,    0, 1).finished();
+	nullspace_q_refs[Krang::LEFT] = (Krang::Vector7d()   << 0, -1.0, 0, -0.5, 0, -0.8, 0).finished();
+	nullspace_q_refs[Krang::RIGHT] = (Krang::Vector7d()  << 0,  1.0, 0,  0.5, 0,  0.8, 0).finished();
+	nullspace_q_masks[Krang::LEFT] = (Krang::Vector7d()  << 0,    0, 0,    1, 0,    0, 0).finished();
+	nullspace_q_masks[Krang::RIGHT] = (Krang::Vector7d() << 0,    0, 0,    1, 0,    0, 0).finished();
 
-	// Start the daemon running
+	// initialize visualization
+	size_t vecsizes[] = {6, 6, 6, 6, 6, 6, 6, 6};
+	vis_msg = somatic__visualize_data__alloc(8, vecsizes, 0);
+	vis_msg->msg = "teleop/05-workspace";
+	somatic_d_channel_open(&daemon_cx, &vis_chan, "teleop-05-workspace-vis", NULL);
+
+	// Start the daemon_cx running
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
 	                SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
 }
