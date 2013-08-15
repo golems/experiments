@@ -20,6 +20,7 @@ using namespace dynamics;
 
 bool rightArm = 0;
 bool bothArms = 1;
+dynamics::SkeletonDynamics* robot = NULL;
 
 /* ********************************************************************************************* */
 /// Returns the IK goals for turning a lever to lift a box. The green arrow is at the fulcrum
@@ -127,7 +128,6 @@ void Timer::Notify() {
 
 	// Perform I.K. either for a single arm or both arms
 	bool success = false;
-	SkeletonDynamics* robot = mWorld->getSkeleton(2);
 	if(bothArms) success = bothArmsIK(robot, Twee.matrix());
 	else success = singleArmIK (mWorld, robot, Twee.matrix(), rightArm);
 
@@ -160,13 +160,13 @@ SimTab::SimTab(wxWindow *parent, const wxWindowID id, const wxPoint& pos, const 
 
 	// Load the schunk scene automatically
 	frame->DoLoad("../../common/scenes/03-World-IK.urdf");
+	robot = mWorld->getSkeleton("Krang");
 
 	// Set the imu and waist values
 	vector <int> imuWaist_ids; 
 	imuWaist_ids.push_back(5);	
 	imuWaist_ids.push_back(8);	
-	mWorld->getSkeleton(2)->setConfig(imuWaist_ids, 
-		Vector2d(1.857 - 3.0 * M_PI_2, (150.0 / 180.0) * M_PI));
+	robot->setConfig(imuWaist_ids, Vector2d(1.857 - 3.0 * M_PI_2, (150.0 / 180.0) * M_PI));
 
 	// Create the timer to notify the function that draws the robot at multiple configurations
 	timer = new Timer();

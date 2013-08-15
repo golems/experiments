@@ -238,7 +238,8 @@ void lever_constraint (const Matrix4d& left, Matrix4d& right) {
 }
 
 /* ********************************************************************************************** */
-/// Computes I.K. for a given node and phi value
+/// Given the joint values for the left arm and the phi value for the right arm, attempts to 
+/// I.K. for the right arm with the hardcoded constraint between the left and right hands
 bool computeIK (Node& node, double phi) {
 
 	// Perform forward kinematics and determine where the right frame should be
@@ -249,7 +250,7 @@ bool computeIK (Node& node, double phi) {
 
 	pv(node.left);
 	pmr(leftFrame);
-	lever_constraint(leftFrame, rightFrame);
+	stick_constraint(leftFrame, rightFrame);
 	pmr(rightFrame);
 
 	// Get the relative goal
@@ -306,7 +307,7 @@ int main (int argc, char* argv[]) {
 	world = loader.parseWorld("../../common/scenes/01-World-Robot.urdf");
 	
 	// Setup the start and goal nodes
-	const size_t case_id = 2;
+	const size_t case_id = 0;
 	Node start, goal;
 	for(size_t i = 0; i < 7; i++) {
 		start.left(i) = start_goals[2*case_id][i];
@@ -314,8 +315,8 @@ int main (int argc, char* argv[]) {
 	}
 	
 	// Perform I.K. for the start/goal nodes
-	assert((computeIK(start, 1.22173)) && "Could not compute I.K. for the start node");
-	assert((computeIK(goal, 0.174533)) && "Could not compute I.K. for the goal node");
+	assert((computeIK(start, 0.0)) && "Could not compute I.K. for the start node");
+	assert((computeIK(goal, 0.0)) && "Could not compute I.K. for the goal node");
 
 	// Create the fr-rrt planner
 	planner = new fr (world, krang_id, start, goal, boxLift_err_ground, lever_constraint);
