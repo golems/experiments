@@ -14,6 +14,7 @@ if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
 endif()
 
 # Include Dart and Grip stuff
+include_directories(/usr/include/grip)
 include(simulation.cmake)
 
 # Link to the timing library

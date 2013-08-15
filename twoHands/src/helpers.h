@@ -26,7 +26,6 @@
 
 #include <imud.h>
 
-#include "kinematics.h"
 #include "initModules.h"
 #include "motion.h"
 #include <iostream>

@@ -54,7 +54,7 @@ static const Matrix4d B = (MatrixXd(4,4) << 1,0,0,0,0,0,-1,L6,0,1,0,0,0,0,0,1).f
 /// Returns the 6d vector from 4d matrix
 inline Matrix<double, 6, 1> matToVec (const Matrix4d& M) {
 	Matrix3d rot = M.topLeftCorner<3,3>();
-	Vector3d rotv = math::matrixToEuler(rot, math::XYZ) / M_PI * 180.0;
+	Vector3d rotv = dart_math::matrixToEuler(rot, dart_math::XYZ) / M_PI * 180.0;
 	Matrix<double, 6, 1> res;
 	res << M.topRightCorner<3,1>(), rotv;	
 	return res;

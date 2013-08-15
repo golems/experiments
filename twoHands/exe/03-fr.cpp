@@ -20,6 +20,7 @@ using namespace kinematics;
 using namespace Eigen;
 using namespace std;
 
+size_t krang_id = 0;
 vector <int> left_idx;
 vector <int> imuWaist_ids; 
 World* world;
@@ -78,13 +79,13 @@ void circle_err (const Vector7d& node, Vector6d& error) {
 	
 	// Get the orientation constraint
 	Vector3d constRPY (-1.57, 0.0, 1.57);
-	Matrix3d constOriM = math::eulerToMatrix(constRPY, math::XYZ);
+	Matrix3d constOriM = dart_math::eulerToMatrix(constRPY, dart_math::XYZ);
 	Quaternion <double> constOri (constOriM); 
  
 	// Find the orientation error and express it in RPY representation
 	Quaternion <double> errOriQ = constOri * eeOri.inverse();
 	Matrix3d errOriM = errOriM = errOriQ.matrix();
-	Vector3d errOri = math::matrixToEuler(errOriM, math::XYZ);
+	Vector3d errOri = dart_math::matrixToEuler(errOriM, dart_math::XYZ);
 
 	// Set the total error with the x-axis being free
 	error << errPos, errOri;
@@ -126,13 +127,13 @@ void line_err_ground (const Vector7d& node, Vector6d& error) {
 	
 	// Get the orientation constraint
 	Vector3d constRPY (0.0, M_PI_2, 0.0);
-	Matrix3d constOriM = math::eulerToMatrix(constRPY, math::XYZ);
+	Matrix3d constOriM = dart_math::eulerToMatrix(constRPY, dart_math::XYZ);
 	Quaternion <double> constOri (constOriM); 
  
 	// Find the orientation error and express it in RPY representation
 	Quaternion <double> errOriQ = constOri * eeOri.inverse();
 	Matrix3d errOriM = errOriM = errOriQ.matrix();
-	Vector3d errOri = math::matrixToEuler(errOriM, math::XYZ);
+	Vector3d errOri = dart_math::matrixToEuler(errOriM, dart_math::XYZ);
 
 	// Set the total error with the x-axis being free
 	error << errPos, errOri; 
@@ -160,13 +161,13 @@ void boxLift_err_ground (const Vector7d& node, Vector6d& error) {
 	
 	// Get the orientation constraint
 	Vector3d constRPY (-M_PI_2, angle-M_PI_2, -M_PI_2);
-	Matrix3d constOriM = math::eulerToMatrix(constRPY, math::XYZ);
+	Matrix3d constOriM = dart_math::eulerToMatrix(constRPY, dart_math::XYZ);
 	Quaternion <double> constOri (constOriM); 
  
 	// Find the orientation error and express it in RPY representation
 	Quaternion <double> errOriQ = constOri * eeOri.inverse();
 	Matrix3d errOriM = errOriM = errOriQ.matrix();
-	Vector3d errOri = math::matrixToEuler(errOriM, math::XYZ);
+	Vector3d errOri = dart_math::matrixToEuler(errOriM, dart_math::XYZ);
 
 	// Set the total error with the x-axis being free
 	error << errPos, errOri; 
@@ -190,13 +191,13 @@ void circle_err_ground (const Vector7d& node, Vector6d& error) {
 	
 	// Get the orientation constraint
 	Vector3d constRPY (M_PI, 0.0, angle - M_PI_2);
-	Matrix3d constOriM = math::eulerToMatrix(constRPY, math::XYZ);
+	Matrix3d constOriM = dart_math::eulerToMatrix(constRPY, dart_math::XYZ);
 	Quaternion <double> constOri (constOriM); 
  
 	// Find the orientation error and express it in RPY representation
 	Quaternion <double> errOriQ = constOri * eeOri.inverse();
 	Matrix3d errOriM = errOriM = errOriQ.matrix();
-	Vector3d errOri = math::matrixToEuler(errOriM, math::XYZ);
+	Vector3d errOri = dart_math::matrixToEuler(errOriM, dart_math::XYZ);
 
 	// Set the total error with the x-axis being free
 	error << errPos, errOri; 

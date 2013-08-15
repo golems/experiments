@@ -119,7 +119,7 @@ void Timer::Notify() {
 	// Create the end-effector frame transformation
 	Transform <double, 3, Affine> Twee;
 	Vector3d euler (goal(5), goal(4), goal(3));
-	Twee.linear() = math::eulerToMatrix(euler, math::XYZ);
+	Twee.linear() = dart_math::eulerToMatrix(euler, dart_math::XYZ);
 	Twee.translation() = goal.segment(0,3);
 
 	// =======================================================================
