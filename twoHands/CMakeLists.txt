@@ -15,7 +15,7 @@ endif()
 
 # Include Dart and Grip stuff
 include_directories(/usr/include/grip)
-include(simulation.cmake)
+include(cmake/simulation.cmake)
 
 # Link to the timing library
 link_libraries(timing)

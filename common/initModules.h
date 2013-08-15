@@ -20,7 +20,7 @@
 
 /* ********************************************************************************************* */
 /// Initializes a daemon with the given name
-void initDaemon (somatic_d_t& daemon_cx, char* name) {
+static void initDaemon (somatic_d_t& daemon_cx, char* name) {
 	somatic_d_opts_t dopt;
 	memset(&dopt, 0, sizeof(dopt)); // zero initialize
 	dopt.ident = "bal-hack";
@@ -29,7 +29,7 @@ void initDaemon (somatic_d_t& daemon_cx, char* name) {
 
 /* ********************************************************************************************* */
 /// Initializes the gripper with the given name: either "lgripper" or "rgripper"
-void initGripper (somatic_d_t& daemon_cx, somatic_motor_t& gripper, const char* name) {	
+static void initGripper (somatic_d_t& daemon_cx, somatic_motor_t& gripper, const char* name) {	
 
 	// Get the channel names
 	char cmd_name [16], state_name [16];
@@ -58,7 +58,7 @@ void initGripper (somatic_d_t& daemon_cx, somatic_motor_t& gripper, const char* 
 
 /* ********************************************************************************************* */
 /// Initializes the torso motor
-void initTorso (somatic_d_t& daemon_cx, somatic_motor_t& torso) {
+static void initTorso (somatic_d_t& daemon_cx, somatic_motor_t& torso) {
 
 	// Initialize the arm with the daemon context, channel names and # of motors
 	somatic_motor_init(&daemon_cx, &torso, 1, "torso-cmd", "torso-state");
@@ -79,7 +79,7 @@ void initTorso (somatic_d_t& daemon_cx, somatic_motor_t& torso) {
 }
 
 /// Initializes the waist motor
-void initWaist(somatic_d_t& daemon_cx, somatic_motor_t& waist) {
+static void initWaist(somatic_d_t& daemon_cx, somatic_motor_t& waist) {
 
 	// Initialize the arm with the daemon context, channel names and # of motors
 	somatic_motor_init(&daemon_cx, &waist, 2, "waist-cmd", "waist-state");
@@ -101,7 +101,7 @@ void initWaist(somatic_d_t& daemon_cx, somatic_motor_t& waist) {
 
 /* ********************************************************************************************* */
 /// Initializes the arm with the given name: either "llwa" or "rlwa".
-void initArm (somatic_d_t& daemon_cx, somatic_motor_t& arm, const char* armName) {	
+static void initArm (somatic_d_t& daemon_cx, somatic_motor_t& arm, const char* armName) {	
 
 	// Get the channel names
 	char cmd_name [16], state_name [16];
@@ -130,14 +130,14 @@ void initArm (somatic_d_t& daemon_cx, somatic_motor_t& arm, const char* armName)
 /*
  * Sets zero velocities to the arm and halts it.   No destroying happens here
  */
-void haltArm(somatic_d_t &daemon_cx, somatic_motor_t &arm) {
+static void haltArm(somatic_d_t &daemon_cx, somatic_motor_t &arm) {
 	double dq [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 	somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, dq, 7, NULL);
 	somatic_motor_cmd(&daemon_cx, &arm, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7, NULL);
 }
 
 /* ********************************************************************************************* */
-void initIMU(somatic_d_t& daemon_cx, ach_channel_t &imu_chan) {
+static void initIMU(somatic_d_t& daemon_cx, ach_channel_t &imu_chan) {
 	somatic_d_channel_open(&daemon_cx, &imu_chan, "imu-data", NULL);
 }
 

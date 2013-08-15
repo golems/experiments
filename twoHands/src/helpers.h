@@ -66,9 +66,9 @@ struct Arm {
 
 /* ******************************************************************************************** */
 static const double eeMass = 1.6 + 0.169 + 0.000;			///< The mass of the end-effector
-simulation::World *world = NULL;									///< The dart environment loaded for kinematics
-std::vector <int> left_arm_ids;				///< The index vector to set config of arms
-std::vector <int> right_arm_ids;				///< The index vector to set config of arms
+static simulation::World *world = NULL;						///< The dart environment loaded for kinematics
+static std::vector <int> left_arm_ids;				///< The index vector to set config of arms
+static std::vector <int> right_arm_ids;				///< The index vector to set config of arms
 
 /* ******************************************************************************************** */
 /// Set the vector from the sensor origin to the gripper center of mass (m)
@@ -104,9 +104,10 @@ void getImu(double* imu, ach_channel_t& imuChan);
 
 /// Reads waist channel 
 bool getWaist(double* waist, ach_channel_t& waistChan);
+
 /* ******************************************************************************************** */
 /// Given a wrench, computes the joint space velocities so that wrench is minimized 
-void wrenchToJointVels (const Vector6d& wrench, Vector7d& dq, bool left) {
+static void wrenchToJointVels (const Vector6d& wrench, Vector7d& dq, bool left) {
 
 	// Get the Jacobian towards computing joint-space velocities
 	const char* nodeName = left ? "lGripper" : "rGripper";
