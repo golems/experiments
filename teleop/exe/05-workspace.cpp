@@ -108,6 +108,7 @@ bool hoh_mode = false;
 Krang::Side primary_hand = Krang::LEFT;
 Krang::Side off_hand = Krang::RIGHT;
 bool hoh_moving_right = false;
+bool spacenavs_flipped = false;
 
 // hand-over-hand stuff
 std::map<Krang::Side, Eigen::Vector3d> hoh_initpos;
@@ -179,6 +180,10 @@ void run() {
 		} break;
 		case 'i': {
 			somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::RIGHT], GRIPPER_POSITION_PARTIAL, 4);
+		} break;
+		case 'f': {
+			spacenavs_flipped = !spacenavs_flipped;
+			hoh_mode = false;
 		} break;
 		case ' ': {
 			sending_commands = !sending_commands;
@@ -264,6 +269,11 @@ void run() {
 			mvprintw(15, 5, " hoh dir: ");
 			if (hoh_moving_right) mvprintw(15, 16, "      right");
 			else mvprintw(15, 16, "left       ");
+
+
+			attron(COLOR_PAIR(spacenavs_flipped?Krang::COLOR_RED_BACKGROUND:COLOR_WHITE));
+			mvprintw(17, 1, "Input flipped: %s", spacenavs_flipped?"yes":"no ");
+			attroff(COLOR_PAIR(spacenavs_flipped?Krang::COLOR_RED_BACKGROUND:COLOR_WHITE));
 		}
 
 		// Update the robot
@@ -290,6 +300,7 @@ void run() {
 		for(int sint = Krang::LEFT; sint-1 < Krang::RIGHT; sint++) {
 			// Get the arm side and the joint angles
 			Krang::Side sde = static_cast<Krang::Side>(sint);
+			Krang::Side sde_other = (sde==Krang::LEFT) ? Krang::RIGHT : Krang::LEFT;
 			Eigen::VectorXd q = robot->getConfig(*wss[sde]->arm_ids);
 
 			// some debugs
@@ -311,7 +322,10 @@ void run() {
 			nullspace_qdot_refs[sde] = (nullspace_q_refs[sde] - q).cwiseProduct(nullspace_q_masks[sde]);
 
 			// update spacenav, because we use it for grippers regardless of the mode
-			spacenav_input = spnavs[sde]->updateSpaceNav();
+			if (spacenavs_flipped)
+				spacenav_input = spnavs[sde_other]->updateSpaceNav();
+			else
+				spacenav_input = spnavs[sde]->updateSpaceNav();
 
 			// Close the gripper if button 0 is pressed, open it if button 1.
 			if(spnavs[sde]->buttons[sint] == 1) {
