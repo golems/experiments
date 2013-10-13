@@ -20,6 +20,7 @@ using namespace kinematics;
 using namespace Eigen;
 using namespace std;
 
+size_t krang_id = 0;
 vector <int> left_idx;
 vector <int> imuWaist_ids; 
 World* world;
@@ -78,13 +79,13 @@ void circle_err (const Vector7d& node, Vector6d& error) {
 	
 	// Get the orientation constraint
 	Vector3d constRPY (-1.57, 0.0, 1.57);
-	Matrix3d constOriM = math::eulerToMatrix(constRPY, math::XYZ);
+	Matrix3d constOriM = dart_math::eulerToMatrix(constRPY, dart_math::XYZ);
 	Quaternion <double> constOri (constOriM); 
  
 	// Find the orientation error and express it in RPY representation
 	Quaternion <double> errOriQ = constOri * eeOri.inverse();
 	Matrix3d errOriM = errOriM = errOriQ.matrix();
-	Vector3d errOri = math::matrixToEuler(errOriM, math::XYZ);
+	Vector3d errOri = dart_math::matrixToEuler(errOriM, dart_math::XYZ);
 
 	// Set the total error with the x-axis being free
 	error << errPos, errOri;
@@ -126,13 +127,13 @@ void line_err_ground (const Vector7d& node, Vector6d& error) {
 	
 	// Get the orientation constraint
 	Vector3d constRPY (0.0, M_PI_2, 0.0);
-	Matrix3d constOriM = math::eulerToMatrix(constRPY, math::XYZ);
+	Matrix3d constOriM = dart_math::eulerToMatrix(constRPY, dart_math::XYZ);
 	Quaternion <double> constOri (constOriM); 
  
 	// Find the orientation error and express it in RPY representation
 	Quaternion <double> errOriQ = constOri * eeOri.inverse();
 	Matrix3d errOriM = errOriM = errOriQ.matrix();
-	Vector3d errOri = math::matrixToEuler(errOriM, math::XYZ);
+	Vector3d errOri = dart_math::matrixToEuler(errOriM, dart_math::XYZ);
 
 	// Set the total error with the x-axis being free
 	error << errPos, errOri; 
@@ -160,13 +161,13 @@ void boxLift_err_ground (const Vector7d& node, Vector6d& error) {
 	
 	// Get the orientation constraint
 	Vector3d constRPY (-M_PI_2, angle-M_PI_2, -M_PI_2);
-	Matrix3d constOriM = math::eulerToMatrix(constRPY, math::XYZ);
+	Matrix3d constOriM = dart_math::eulerToMatrix(constRPY, dart_math::XYZ);
 	Quaternion <double> constOri (constOriM); 
  
 	// Find the orientation error and express it in RPY representation
 	Quaternion <double> errOriQ = constOri * eeOri.inverse();
 	Matrix3d errOriM = errOriM = errOriQ.matrix();
-	Vector3d errOri = math::matrixToEuler(errOriM, math::XYZ);
+	Vector3d errOri = dart_math::matrixToEuler(errOriM, dart_math::XYZ);
 
 	// Set the total error with the x-axis being free
 	error << errPos, errOri; 
@@ -190,13 +191,13 @@ void circle_err_ground (const Vector7d& node, Vector6d& error) {
 	
 	// Get the orientation constraint
 	Vector3d constRPY (M_PI, 0.0, angle - M_PI_2);
-	Matrix3d constOriM = math::eulerToMatrix(constRPY, math::XYZ);
+	Matrix3d constOriM = dart_math::eulerToMatrix(constRPY, dart_math::XYZ);
 	Quaternion <double> constOri (constOriM); 
  
 	// Find the orientation error and express it in RPY representation
 	Quaternion <double> errOriQ = constOri * eeOri.inverse();
 	Matrix3d errOriM = errOriM = errOriQ.matrix();
-	Vector3d errOri = math::matrixToEuler(errOriM, math::XYZ);
+	Vector3d errOri = dart_math::matrixToEuler(errOriM, dart_math::XYZ);
 
 	// Set the total error with the x-axis being free
 	error << errPos, errOri; 
@@ -237,7 +238,8 @@ void lever_constraint (const Matrix4d& left, Matrix4d& right) {
 }
 
 /* ********************************************************************************************** */
-/// Computes I.K. for a given node and phi value
+/// Given the joint values for the left arm and the phi value for the right arm, attempts to 
+/// I.K. for the right arm with the hardcoded constraint between the left and right hands
 bool computeIK (Node& node, double phi) {
 
 	// Perform forward kinematics and determine where the right frame should be
@@ -248,7 +250,7 @@ bool computeIK (Node& node, double phi) {
 
 	pv(node.left);
 	pmr(leftFrame);
-	lever_constraint(leftFrame, rightFrame);
+	stick_constraint(leftFrame, rightFrame);
 	pmr(rightFrame);
 
 	// Get the relative goal
@@ -305,7 +307,7 @@ int main (int argc, char* argv[]) {
 	world = loader.parseWorld("../../common/scenes/01-World-Robot.urdf");
 	
 	// Setup the start and goal nodes
-	const size_t case_id = 2;
+	const size_t case_id = 0;
 	Node start, goal;
 	for(size_t i = 0; i < 7; i++) {
 		start.left(i) = start_goals[2*case_id][i];
@@ -313,8 +315,8 @@ int main (int argc, char* argv[]) {
 	}
 	
 	// Perform I.K. for the start/goal nodes
-	assert((computeIK(start, 1.22173)) && "Could not compute I.K. for the start node");
-	assert((computeIK(goal, 0.174533)) && "Could not compute I.K. for the goal node");
+	assert((computeIK(start, 0.0)) && "Could not compute I.K. for the start node");
+	assert((computeIK(goal, 0.0)) && "Could not compute I.K. for the goal node");
 
 	// Create the fr-rrt planner
 	planner = new fr (world, krang_id, start, goal, boxLift_err_ground, lever_constraint);

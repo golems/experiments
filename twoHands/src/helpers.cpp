@@ -152,8 +152,8 @@ void init (somatic_d_t& daemon_cx, ach_channel_t& js_chan, ach_channel_t& imuCha
 	imuWaist_ids.push_back(8);	
 
 	// Set up the arm index vectors
-	int left_arm_ids_a [] = 	{10, 12, 14, 16, 18, 20, 22};
-	int right_arm_ids_a [] = {11, 13, 15, 17, 19, 21, 23};
+	int left_arm_ids_a [] = {11, 13, 15, 17, 19, 21, 23};
+	int right_arm_ids_a [] = 	{12, 14, 16, 18, 20, 22, 24};
 	for(size_t i = 0; i < 7; i++) left_arm_ids.push_back(left_arm_ids_a[i]);
 	for(size_t i = 0; i < 7; i++) right_arm_ids.push_back(right_arm_ids_a[i]);
 

@@ -19,8 +19,10 @@ bool singleArmIK (World* mWorld, SkeletonDynamics* robot, const Matrix4d& Twee, 
 
 	// Get the initial arm configuration to set back
 	vector <int> arm_ids;
-	for(size_t i = 4; i < 17; i+=2) arm_ids.push_back(i + 6 + (rightArm ? 1 : 0));  
+	for(size_t i = 11; i < 25; i+=2) 
+		arm_ids.push_back(i + (rightArm ? 1 : 0));
 	VectorXd init_conf = robot->getConfig(arm_ids);
+	for(size_t i = 0; i < 7; i++) printf("%d: %d\n", i, arm_ids[i]);
 
 	// Compute the inverse kinematics taking into account collisions
 	Matrix <double, 7, 1> theta;	
@@ -32,30 +34,33 @@ bool singleArmIK (World* mWorld, SkeletonDynamics* robot, const Matrix4d& Twee, 
 		// Get an IK solution with this phi angle
 		// phi = 0.0;
 //		pm(relGoal);
-		//cout << "Trying phi: " << phi << endl;
+		cout << "Trying phi: " << phi << endl;
 		bool result = ik(relGoal, phi, theta);
-		//cout << "Found possible result: " << theta.transpose() << endl;
 
 		// Check for collision by setting the arm angles and making the call
 		if(result) {
+
+			cout << "Found possible result: " << theta.transpose() << endl;
 
 			// Set the arm angles
 			robot->setConfig(arm_ids,  theta);
 
 			// Check for joint limits
+			/*
 			for(size_t i = 0; i < arm_ids.size(); i++) {
 				kinematics::Dof* dof = robot->getDof(arm_ids[i]);
 				if((theta(i) < dof->getMin()) || (theta(i) > dof->getMax())) {
-			//		printf("\t ... found solution but joint %lu (%lf) out of bounds [%lf, %lf]\n",	i + 1,
-			//			theta(i), dof->getMin(), dof->getMax());
+					printf("\t ... found solution but joint %lu (%lf) out of bounds [%lf, %lf]\n",	i + 1,
+						theta(i), dof->getMin(), dof->getMax());
 					continue;
 				}
 			}
+			*/
 			
 			// Check for collisions
-			bool collision = mWorld->checkCollision(false);
+			bool collision = false && mWorld->checkCollision(false);
 			if(collision) {
-				//cout << "\t ... found solution but collision..." << endl;
+				cout << "\t ... found solution but collision..." << endl;
 				continue;
 			}
 
@@ -66,7 +71,7 @@ bool singleArmIK (World* mWorld, SkeletonDynamics* robot, const Matrix4d& Twee, 
 				printf("%s: ", rightArm ? "Right" : "Left");
 				pmr((robot->getNode(rightArm ? "rGripper" : "lGripper")->getWorldTransform()));
 				cout << "at phi : " << phi << endl;
-				//pv(theta);
+				pv(theta);
 				break;
 			}
 		}
