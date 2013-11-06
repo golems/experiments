@@ -71,6 +71,9 @@ ach_channel_t waistChan;			///< the state channel for the waist module
 ach_channel_t leftArmChan;		///< the state channel for the left arm modules
 ach_channel_t rightArmChan;		///< the state channel for the right arm modules
 
+filter_kalman_t* kf;					///< kalman filter for the imu
+bool debugGlobal = false;
+
 /* ********************************************************************************************* */
 /// Gets the data from the channels
 void getData (filter_kalman_t* kf, double dt) {

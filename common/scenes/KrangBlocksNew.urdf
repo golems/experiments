@@ -168,9 +168,10 @@
 
 	<link name = "R1"> 
     <inertial>
-      <mass value="3.836"/>
+      <mass value="3.952"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0.0063626 -0.00725706 0"/>
+      <!--origin xyz="0.0063626 -0.00725706 0"/-->
+     <origin xyz="0.006575 -0.160104 0"/>
     </inertial>
 		<visual> <origin xyz="0.015 -0.080866 0.0"/> <geometry> <box size="0.16 0.29367 0.13188"/> </geometry> </visual> 
 		<collision> <origin xyz="0.015 -0.080866 0.0"/> <geometry> <box size="0.16 0.29367 0.13188"/> </geometry> </collision> 
@@ -178,9 +179,10 @@
 
 	<link name = "R2"> 
     <inertial>
-      <mass value="2.385"/>
+      <mass value="3.925"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0.0101136 -0.15332 0"/>
+      <!--origin xyz="0.0101136 -0.15332 0"/-->
+      <origin xyz="0.006895 -0.006745 0"/>
     </inertial>
 		<visual> <origin xyz="0.017042 -0.058309 0.0"/> <geometry> <box size="0.14591 0.24658 0.13"/> </geometry> </visual> 
 		<collision> <origin xyz="0.017042 -0.058309 0.0"/> <geometry> <box size="0.14591 0.24658 0.13"/> </geometry> </collision> 
@@ -188,9 +190,10 @@
 
 	<link name = "R3"> 
     <inertial>
-      <mass value="2.306"/>
+      <mass value="2.373"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0.0071222 -0.00803823 0"/>
+      <!--origin xyz="0.0071222 -0.00803823 0"/-->
+      <origin xyz="0.006855 -0.138146 0"/>
     </inertial>
 		<visual> <origin xyz="0.014000 -0.075113 0.0"/> <geometry> <box size="0.13800 0.26217 0.11189"/> </geometry> </visual> 
 		<collision> <origin xyz="0.014000 -0.075113 0.0"/> <geometry> <box size="0.13800 0.26217 0.11189"/> </geometry> </collision> 
@@ -198,9 +201,10 @@
 
 	<link name = "R4"> 
     <inertial>
-      <mass value="1.477"/>
+      <mass value="2.373"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0.0115211 -0.1255 0"/>
+      <!--origin xyz="0.0115211 -0.1255 0"/-->
+      <origin xyz="0.007691 -0.007366 0"/>
     </inertial>
 		<visual> <origin xyz="0.018200 -0.052050 0.0"/> <geometry> <box size="0.12960 0.2141 0.11"/> </geometry> </visual> 
 		<collision> <origin xyz="0.018200 -0.052050 0.0"/> <geometry> <box size="0.12960 0.2141 0.11"/> </geometry> </collision> 
@@ -208,9 +212,10 @@
 
 	<link name = "R5"> 
     <inertial>
-      <mass value="1.369"/>
+      <mass value="1.41334"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0.00705037 -0.00747172 0"/>
+      <!--origin xyz="0.00705037 -0.00747172 0"/-->
+      <origin xyz="0.006777 -0.109824 0"/>
     </inertial>
 		<visual> <origin xyz="0.0145115 -0.0571105 0.0000425"/> <geometry> <box size="0.117977 0.204179 0.089915"/> </geometry> </visual> 
 		<collision> <origin xyz="0.0145115 -0.0571105 0.0000425"/> <geometry> <box size="0.117977 0.204179 0.089915"/> </geometry> </collision> 
@@ -218,9 +223,10 @@
 
 	<link name = "R6"> 
     <inertial>
-      <mass value="1.47"/>
+      <mass value="2.64634"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
-      <origin xyz="0.0105523 -0.117163 0"/>
+      <!--origin xyz="0.0105523 -0.117163 0"/-->
+      <origin xyz="0.005684 -0.071438 0"/>
     </inertial>
 		<visual> <origin xyz="0.0175015 -0.0481615 0.0"/> <geometry> <box size="0.111977 0.185277 0.089"/> </geometry> </visual> 
 		<collision> <origin xyz="0.0175015 -0.0481615 0.0"/> <geometry> <box size="0.111977 0.185277 0.089"/> </geometry> </collision> 
@@ -231,7 +237,8 @@
       <mass value="2.3"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
 			<!-- An addition of 4.05 cms from the end of Schunk gripper to space between two halves of ft -->
-      <origin xyz="0 0 0.1055"/>
+      <!--origin xyz="0 0 0.1055"/-->
+      <origin xyz="0.008 0 0.065"/>
     </inertial>
 		<visual> <origin xyz="0.0 -0.0 0.02615" rpy="0.0 0.0 1.5708"/> <geometry> <box size="0.08 0.112 0.2025"/> </geometry> </visual> 
 		<collision> <origin xyz="0.0 -0.0 0.02615" rpy="0.0 0.0 1.5708"/> <geometry> <box size="0.08 0.112 0.2025"/> </geometry> </collision> 
