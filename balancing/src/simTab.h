@@ -27,15 +27,16 @@
 #include <kinematics/Joint.h>
 #include <iostream>
 #include <fstream>
+#include <vector>
 #include <Eigen/Dense>
 #include <simulation/World.h>
 
 /* ********************************************************************************************* */
 // Definitions for the left and right arm indices
 int left_idx_a [] = {10, 12, 14, 16, 18, 20, 22};
-vector <int> left_idx (left_idx_a, left_idx_a + sizeof(left_idx_a) / sizeof(int));
+std::vector <int> left_idx (left_idx_a, left_idx_a + sizeof(left_idx_a) / sizeof(int));
 int right_idx_a [] = {11, 13, 15, 17, 19, 21, 23};
-vector <int> right_idx (right_idx_a, right_idx_a + sizeof(right_idx_a) / sizeof(int));
+std::vector <int> right_idx (right_idx_a, right_idx_a + sizeof(right_idx_a) / sizeof(int));
 
 /* ********************************************************************************************* */
 /// Timer to display the center of mass measurements and control the robot
