@@ -27,22 +27,26 @@
 #include <kinematics/Joint.h>
 #include <iostream>
 #include <fstream>
-#include <vector>
 #include <Eigen/Dense>
 #include <simulation/World.h>
 
 /* ********************************************************************************************* */
 // Definitions for the left and right arm indices
 int left_idx_a [] = {10, 12, 14, 16, 18, 20, 22};
-std::vector <int> left_idx (left_idx_a, left_idx_a + sizeof(left_idx_a) / sizeof(int));
+vector <int> left_idx (left_idx_a, left_idx_a + sizeof(left_idx_a) / sizeof(int));
 int right_idx_a [] = {11, 13, 15, 17, 19, 21, 23};
-std::vector <int> right_idx (right_idx_a, right_idx_a + sizeof(right_idx_a) / sizeof(int));
+vector <int> right_idx (right_idx_a, right_idx_a + sizeof(right_idx_a) / sizeof(int));
 
 /* ********************************************************************************************* */
 /// Timer to display the center of mass measurements and control the robot
 class Timer : public wxTimer {
 public:
+	simulation::World* world;
+	dynamics::ContactDynamics* mCollisionHandle;
+	
 	void Notify ();								
+	double randomInRange(double min, double max); 	///< Returns a random # in given range
+	Eigen::VectorXd getRandomConfig (const vector <int>& dofs, size_t r_idx); 	///< Random config
 };
 
 /* ********************************************************************************************* */
@@ -74,4 +78,23 @@ public:
   DECLARE_DYNAMIC_CLASS(SimTab)
 	DECLARE_EVENT_TABLE()
 };
+
+/* ********************************************************************************************* */
+inline double Timer::randomInRange(double min, double max) {
+	if(min == max) return min;
+	return min + ((max-min) * ((double)rand() / ((double)RAND_MAX + 1)));
+}
+
+/* ********************************************************************************************* */
+VectorXd Timer::getRandomConfig(const vector <int>& dofs, size_t r_idx) {
+	// Samples a random point for qtmp in the configuration space, bounded by the provided 
+	// configuration vectors (and returns ref to it)
+	VectorXd config(dofs.size());
+	for (int i = 0; i < dofs.size(); ++i) {
+		config[i] = randomInRange(mWorld->getSkeleton(r_idx)->getDof(dofs[i])->getMin(), 
+			mWorld->getSkeleton(r_idx)->getDof(dofs[i])->getMax());
+	}
+	return config;
+}
+
 

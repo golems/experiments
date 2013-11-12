@@ -9,11 +9,9 @@
 <world name="schunk_with_desktop">
 	
 	<!-- Include the models by including either the complete urdf or referencing the file name -->
-	<include filename="Krang.urdf" model_name="krang"/>
-	<include filename="greenArrow.urdf" model_name="greenArrow"/>
+	<include filename="~/../../etc/kore/model/Krang.urdf" model_name="krang"/>
 	<include filename="redPoint.urdf" model_name="obstacle"/>
 
 	<entity model="krang" name="Krang"> <origin xyz="0.0 0.0 0.30" rpy="1.5708 0 -1.5708"/> </entity>  
-	<entity model="greenArrow" name="g1"> <origin xyz="0.45 0.15 0.50" rpy="1.5708 2.355 -1.5708"/> </entity>
 	<entity model="obstacle" name="Obstacle"> <origin xyz="2.45 0.27 1.13" rpy="1.5708 0 1.5708 "/> </entity>
 </world> 

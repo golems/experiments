@@ -1,4 +1,4 @@
-<object name="greenArrow">
+<robot name="greenArrow">
 
 	<!-- Link 0 -->
 	<link name="link_0">

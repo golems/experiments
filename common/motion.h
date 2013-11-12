@@ -18,7 +18,7 @@
 
 /* ********************************************************************************************* */
 /// Sets motor values with joystick input
-void setJoystickInput (somatic_d_t& daemon_cx, ach_channel_t& js_chan, somatic_motor_t& llwa, 
+static void setJoystickInput (somatic_d_t& daemon_cx, ach_channel_t& js_chan, somatic_motor_t& llwa, 
 		somatic_motor_t& rlwa) {
 
 	static const bool debug = 0;
