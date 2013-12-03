@@ -53,14 +53,13 @@
       <!-- origin xyz="-0.02937 0.285314 0.0974926"/ -->
       <origin xyz="-0.000345 0.080526 0.051222"/>
     </inertial>
-		<!-- visual> <origin xyz="-0.026 0.230150 0.053887"/> <geometry> <box size="0.2340 0.59430 0.24097"/> </geometry> </visual --> 
+		<visual> <origin xyz="-0.026 0.230150 0.053887"/> <geometry> <box size="0.2340 0.59430 0.24097"/> </geometry> </visual> 
 		<collision> <origin xyz="-0.026 0.230150 0.053887"/> <geometry> <box size="0.2340 0.59430 0.24097"/> </geometry> </collision> 
 	</link>
 
-
 	<link name = "Bracket"> 
     <inertial>
-      <mass value="6.533"/>
+      <mass value="0.17"/>
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
 			<!-- offseted with 0.0827 because the origin of the bracket is at the bottom (Munzir: New values don't do this as I don't know what this means) -->
       <!-- origin xyz="0 0.080606 -0.00314267"/-->
@@ -82,7 +81,7 @@
 
 	<link name = "L1"> 
     <inertial>
-      <mass value="3.952"/>
+      <mass value="3.952">
       <inertia ixx="0.102019" ixy="2.45462e-05" ixz="0.00713022" iyy="0.0832724" iyz="-0.00131733" izz="0.086493"/>
       <!-- origin xyz="0.0063626 -0.00725706 0"/-->
       <origin xyz="0.006575 -0.160104 0"/>
@@ -378,4 +377,3 @@
 	</joint>
 
 </robot>
-
