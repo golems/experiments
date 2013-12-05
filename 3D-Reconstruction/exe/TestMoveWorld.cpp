@@ -455,8 +455,11 @@ void LogCPDFT(ostream &logfile, bool contact, int direction)
 
 	// Center of ball position
 	Eigen::MatrixXd curr_trans = wss->endEffector->getWorldTransform();
-	Eigen::VectorXd curr = curr_trans.block<3,1>(0,3);
-	curr[2] = curr[2] + BALLOFFSET;
+	Eigen::Vector4d ballCenterEE(0, 0, BALLOFFSET, 1);
+	Eigen::Vector4d ballCenterWorld;
+	ballCenterWorld = curr_trans * ballCenterEE;
+	Eigen::Vector3d curr = ballCenterWorld.head<3>();
+
 	logfile << curr.transpose() << "  ";
 
 	// FT
