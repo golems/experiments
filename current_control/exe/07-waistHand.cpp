@@ -29,8 +29,7 @@ dynamics::SkeletonDynamics* robot;			///< the robot representation in dart
 Somatic__WaistCmd *waistDaemonCmd = somatic_waist_cmd_alloc();		///< The waist command
 
 double kp = 0.050;
-double kd = 0.0;
-double ki = 0.0;
+double ki = 0.003;
 double goal = -10.0;
 
 double initWaistAngle;
@@ -49,8 +48,6 @@ void init() {
 	Eigen::Vector2d imuWaist = robot->getConfig(Krang::imuWaist_ids);
 	initWaistAngle = imuWaist(1);
 	cout << "initWaistAngle: " << initWaistAngle << endl;
-	sleep(1);
-
 }
 
 /* ******************************************************************************************** */
@@ -74,9 +71,10 @@ void run () {
 	size_t c_ = 0;
 	struct timespec t_now, t_prev = aa_tm_now();
 	bool debug = 1; // (c_++ % 20 == 0);
-	double lastError = 0.0, totalError = 0.0, firstError = 0.0;
+	vector <double> errors;
+	size_t numErrors = 20;
+	for(size_t i = 0; i < numErrors; i++) errors.push_back(0);
 	while(!somatic_sig_received) {
-
 
 		// Get the current time and compute the time difference and update the prev. time
 		t_now = aa_tm_now();						
@@ -88,15 +86,30 @@ void run () {
 		if(debug) cout << "\nrft: " << krang->fts[Krang::RIGHT]->lastExternal.transpose() << endl;
 		double curr = krang->fts[Krang::RIGHT]->lastExternal(2);
 
-		// Compute the proportional error
-		error = (goal - curr);
+		// Compute the 
+		double error = (goal - curr);
+		if(debug) cout << "error: " << error << endl;
+		errors[c_++ % numErrors] = error;
 
-		// Compute the current that is needed to apply the 
-		if(debug) cout << "error: " << lastError << endl;
-		double input = -kp * lastError  - 0.6;
-		totalError += lastError;
-		double integralinput = -ki * totalError;
+		// Compute the proportional input
+		double input_p = -kp * error - 0.6;
+		if(debug) cout << "\tinput_p: " << input_p << endl;
+
+		// Compute the integral input
+		double totalError = 0.0;
+		for(size_t i = 0; i < numErrors ; i++) totalError += errors[i];
+		if(debug) cout << "\ttotal error: " << totalError << endl;
+		double input_i = -ki * totalError;
+		if(debug) cout << "\t\tinput_i: " << input_i << endl;
+
+		// Compute the total input
+		double input = input_p + input_i;
 		if(debug) cout << "\tinput: " << input << endl;
+		
+		// Cap the input
+		if(input > 1.0) input = 1.0;
+		else if(input < -5.0) input = -5.0;
+		if(debug) cout << "\tcapped input: " << input << endl;
 
 		// Apply the current
 		somatic_waist_cmd_set(waistDaemonCmd, SOMATIC__WAIST_MODE__REAL_CURRENT_MODE);
@@ -126,6 +139,10 @@ void run () {
 /* ******************************************************************************************** */
 /// The main thread
 int main(int argc, char* argv[]) {
+
+	// Get the goal force from the arguments
+	if(argc > 1) goal = atof(argv[1]);
+	assert(goal < 0.1 && "The goal input should be nonpositive");
 
 	// Load the world and the robot
 	DartLoader dl;
