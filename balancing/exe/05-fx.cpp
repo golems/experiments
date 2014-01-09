@@ -37,9 +37,21 @@ Krang::Hardware* krang;				///< Interface for the motor and sensors on the hardw
 simulation::World* world;			///< the world representation in dart
 dynamics::SkeletonDynamics* robot;			///< the robot representation in dart
 
-double torque;								///< the torque applied by the wheels
+double torque = 0.0;					///< the torque applied by the wheels
 double totalMass;							///< the total mass of the robot
 bool debugGlobal = false;
+bool dbg = false;
+
+/* ********************************************************************************************* */
+/// Get the torque input
+void *kbhit(void *) {
+	char input;
+	while(true){ 
+		input=cin.get(); 
+		if(input=='k') torque += 0.5;
+		else if(input=='j') torque -= 0.5;
+	}
+}
 
 /* ******************************************************************************************** */
 void init() {
@@ -56,17 +68,10 @@ void init() {
 	// Compute the total mass based on the urdf file
 	totalMass = 0.0;
 	for(size_t i = 0; i < robot->getNumNodes(); i++) totalMass += robot->getNode(i)->getMass();
-}
 
-/* ********************************************************************************************* */
-/// Get the torque input
-void *kbhit(void *) {
-	char input;
-	while(true){ 
-		input=cin.get(); 
-		if(input=='k') torque += 0.1;
-		else if(input=='j') torque -= 0.1;
-	}
+	// Create a thread to wait for user input to begin balancing
+	pthread_t kbhitThread;
+	pthread_create(&kbhitThread, NULL, &kbhit, NULL);
 }
 
 /* ******************************************************************************************** */
@@ -74,7 +79,7 @@ void *kbhit(void *) {
 double updateRef (const Eigen::Vector3d& com) {
 
 	// Compute the x component of the desired com
-	double com_x = torque / (totalMass * 9.81);
+	double com_x = -torque / (totalMass * 9.81);
 
 	// Compute the z component of the desired com by first computing the norm (which is fixed)
 	// and then computing the z from x component
@@ -95,21 +100,27 @@ void getState (Eigen::Vector2d& state, double dt, Eigen::Vector3d& com) {
 	// Calculate the COM and make adjustments
 	com = robot->getWorldCOM();
 	com(2) -= 0.264;
+	com(0) += 0.0076;
 
 	// Update the state (note for amc we are reversing the effect of the motion of the upper body)
 	state(0) = atan2(com(0), com(2));
 	state(1) = krang->imuSpeed;
-
-	// Making adjustment in com to make it consistent with the hack above for state(0)
-	com(0) = com(2) * tan(state(0));
 }
 
 /* ******************************************************************************************** */
 double computeTorques(const Eigen::Vector2d& refState, const Eigen::Vector2d& state) {
 
+	// Compute the input to control the balancing angle
 	static const double kp = 250, kd = 40; 
-	double u = kp * (state(0) - refState(0)) + kd * (state(1) - refState(1));
-	return u + torque;
+	double u_th = kp * (state(0) - refState(0)) + kd * (state(1) - refState(1));
+	if(dbg) cout << "th err: " << state(0) - refState(0) << endl;
+
+	// Compute the input to cause the desired torque
+	double u_torque = torque / 1.7;
+
+	// Return total!
+	if(dbg) cout << "u_th: " << u_th << ", u_torque: " << u_torque << endl;
+	return u_th + u_torque;
 }
 
 /* ******************************************************************************************** */
@@ -127,6 +138,9 @@ void run () {
 	refState(1) = 0.0;
 	while(!somatic_sig_received) {
 
+		dbg = (c_++ % 20 == 0);
+		if(dbg) cout << "\ntorque: " << torque << endl;
+
 		// Get the current time and compute the time difference and update the prev. time
 		t_now = aa_tm_now();						
 		double dt = (double)aa_tm_timespec2sec(aa_tm_sub(t_now, t_prev));	
@@ -134,16 +148,21 @@ void run () {
 
 		// Get the state
 		getState(state, dt, com);
+		if(dbg) cout << "com: " << com.transpose() << endl;
 
 		// Compute the balancing angle reference based on the commanded torque 
 		refState(0) = updateRef(com);
+		if(dbg) cout << "th ref: "<< refState(0) << endl;
 
 		// Compute the torques based on the state and the desired torque
 		double u = computeTorques(refState, state);
+		if(u > 20.0) u = 20.0;
+		if(u < -20.0) u = -20.0;
 
 		// Apply the torque
 		double input [2] = {u, u};
-		// somatic_motor_cmd(&daemon_cx, krang->amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
+		if(dbg) cout << "u: " << u << endl;
+		somatic_motor_cmd(&daemon_cx, krang->amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
 	}
 
 	// Send the stopping event
@@ -165,7 +184,6 @@ int main(int argc, char* argv[]) {
 	init();
 	
 	// Print the f/t values
-	assert(false && "Checking that deleting krang stops running wheels");
 	run();
 
 	// Destroy the daemon and the robot
