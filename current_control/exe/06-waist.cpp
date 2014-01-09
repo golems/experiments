@@ -134,6 +134,9 @@ void init(const int argc, char** argv) {
 		assert(argc > 2 && "Need to give a current value with the 'current' mode");
 		current = atof(argv[2]);	
 	}
+
+	printf("Sleeping for a second!\n");
+	usleep(1e6);
 }
 
 /* ********************************************************************************************* */

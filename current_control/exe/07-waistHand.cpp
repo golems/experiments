@@ -40,7 +40,7 @@ void init() {
 	// Initialize the daemon
 	somatic_d_opts_t dopt;
 	memset(&dopt, 0, sizeof(dopt)); 
-	dopt.ident = "01-balance";
+	dopt.ident = "07-waistHand";
 	somatic_d_init(&daemon_cx, &dopt);
 
 	// Initialize the motors and sensors on the hardware and update the kinematics in dart
@@ -48,6 +48,7 @@ void init() {
 	Eigen::Vector2d imuWaist = robot->getConfig(Krang::imuWaist_ids);
 	initWaistAngle = imuWaist(1);
 	cout << "initWaistAngle: " << initWaistAngle << endl;
+	getchar();
 }
 
 /* ******************************************************************************************** */
@@ -83,8 +84,8 @@ void run () {
 
 		// Read motor encoders, imu and ft and update dart skeleton
 		krang->updateSensors(dt);
-		if(debug) cout << "\nrft: " << krang->fts[Krang::RIGHT]->lastExternal.transpose() << endl;
-		double curr = krang->fts[Krang::RIGHT]->lastExternal(2);
+		if(debug) cout << "\nrft: " << krang->fts[Krang::LEFT]->lastExternal.transpose() << endl;
+		double curr = krang->fts[Krang::LEFT]->lastExternal(2);
 
 		// Compute the 
 		double error = (goal - curr);
