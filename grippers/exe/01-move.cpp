@@ -43,7 +43,7 @@ int main () {
 	
 	// Update and reset them
 	somatic_motor_update(&daemon_cx, &lgripper);
-	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 1);
+	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 1, NULL);
 
 	// Get the motor value
 	somatic_motor_update(&daemon_cx, &lgripper);
@@ -51,10 +51,10 @@ int main () {
 
 	// Command the gripper to move
 	double dq = -0.1;
-	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, &dq, 1);
+	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, &dq, 1, NULL);
 	usleep(0.1 * 1e6);
 
 	// Command the gripper to stop
 	dq = 0.0;
-	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, &dq, 1);
+	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, &dq, 1, NULL);
 }

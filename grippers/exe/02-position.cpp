@@ -40,7 +40,7 @@ void run() {
 
 		// Set the velocity mode
 		double q = goals[currGoal];
-		somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_POSITION, &q, 1);
+		somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_POSITION, &q, 1, NULL);
 
 		// Get the gripper position
 		somatic_motor_update(&daemon_cx, &lgripper);
@@ -75,14 +75,11 @@ void init () {
 
 	// Initialize the gripper
 	initGripper(daemon_cx, lgripper, "lgripper");
-
-	// Open the state channel
-	somatic_d_channel_open(&daemon_cx, &state_chan, "position-state", NULL);
 }
 
 /* ********************************************************************************************* */
 void destroy() {
-	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 1);
+	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 1, NULL);
 	somatic_d_destroy(&daemon_cx);
 }
 

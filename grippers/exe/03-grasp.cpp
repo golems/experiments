@@ -39,7 +39,7 @@ void run() {
 		// Set the velocity mode
 		static int i = 0;
 		double dq = grasped ? 0.0 : -0.005;
-		somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, &dq, 1);
+		somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_VELOCITY, &dq, 1, NULL);
 
 		// Get the gripper position
 		somatic_motor_update(&daemon_cx, &lgripper);
@@ -89,17 +89,17 @@ void init () {
 
 	// Update and reset them
 	somatic_motor_update(&daemon_cx, &lgripper);
-	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 1);
+	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_RESET, NULL, 1, NULL);
 	lastPos = lgripper.pos[0];
 	usleep(1e5);
 
 	// Open the state channel
-	somatic_d_channel_open(&daemon_cx, &state_chan, "position-state", NULL);
+//	somatic_d_channel_open(&daemon_cx, &state_chan, "position-state", NULL);
 }
 
 /* ********************************************************************************************* */
 void destroy() {
-	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 7);
+	somatic_motor_cmd(&daemon_cx, &lgripper, SOMATIC__MOTOR_PARAM__MOTOR_HALT, NULL, 1, NULL);
 	somatic_d_destroy(&daemon_cx);
 }
 
