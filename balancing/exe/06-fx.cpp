@@ -1,20 +1,24 @@
 /**
- * @file 05-fx.cpp
+ * @file 06-fx.cpp
  * @author Can Erdogan, Munzir Zafar
  * @date Jan 09, 2014
  * @brief Assuming that the front of the robot faces the +x direction, we'd like to control the
  * force it exerts in that direction. However, we do not want to use the mass of the robot!
  * 
+ * Assume fx_external is towards the robot.
+ *
  * The idea is the following two equations:
- * (1) fx_net = (2*tau/wheelRadius) + fx_external
- * (2) torq_y_net = mgrsin(th) + l*fx_external*cos(th + k) + l*fx_external*cos(th + k) + 2*tau
+ * (1) fx_net = (2*tau/wheelRadius) - fx_external = 0
+ * (2) torq_y_net = mgrsin(th) + l*fx_external*cos(th + k) + l*fx_external*cos(th + k) - 2*tau = 0
  * where r and l are the distances of COM and contact point to wheel axis, k is the angle
  * between the com line and the contact line through the axis, and m is the robot mass.
  * 
- * For this application, we assume no external contact and just want to see the robot accelerate
- * and decelerate in the +x direction using wheel torques, tau, with the torque around the y-axis
- * preserved around 0. That is the robot needs to shift its weight to counter the reaction torque
- * and not use it to move.
+ * For this application, we assume external contact. The goal is to provide goal fx and fz values
+ * and see if the robot can achieve them. We first compute tau from the first equation and 
+ * then compute th from the second. Hopefully, the system can converge to the desired values.
+ * Note that we assume that the robot can change its pose while in contact - we have seen that
+ * due to friction forces with the contact, it might not reach its goal theta. If that's so,
+ * we might play with the kp and kd - and even add some ki.
  */ 
 
 #include <iostream>
@@ -37,9 +41,11 @@ Krang::Hardware* krang;				///< Interface for the motor and sensors on the hardw
 simulation::World* world;			///< the world representation in dart
 dynamics::SkeletonDynamics* robot;			///< the robot representation in dart
 
-double torque = 0.0;					///< the torque applied by the wheels
+static const double wheelRadius = 0.264;
+double fx = 0.0, fz = 0.0;
 double totalMass;							///< the total mass of the robot
 bool debugGlobal = false;
+bool respond = true;
 bool dbg = false;
 
 /* ********************************************************************************************* */
@@ -48,8 +54,11 @@ void *kbhit(void *) {
 	char input;
 	while(true){ 
 		input=cin.get(); 
-		if(input=='k') torque += 0.5;
-		else if(input=='j') torque -= 0.5;
+		if(input=='k') fx += 0.5;
+		else if(input=='j') fx -= 0.5;
+		else if(input=='h') fz += 0.5;
+		else if(input=='l') fz -= 0.5;
+		else if(input=='r') respond = !respond;
 	}
 }
 
@@ -59,11 +68,13 @@ void init() {
 	// Initialize the daemon
 	somatic_d_opts_t dopt;
 	memset(&dopt, 0, sizeof(dopt)); 
-	dopt.ident = "05-fx";
+	dopt.ident = "06-fx";
 	somatic_d_init(&daemon_cx, &dopt);
 
 	// Initialize the motors and sensors on the hardware and update the kinematics in dart
 	krang = new Krang::Hardware(Krang::Hardware::MODE_ALL_GRIPSCH, &daemon_cx, robot); 
+	cout << "Created Krang representation" << endl;
+	usleep(1e6);
 
 	// Compute the total mass based on the urdf file
 	totalMass = 0.0;
@@ -75,11 +86,35 @@ void init() {
 }
 
 /* ******************************************************************************************** */
+/// Computes the torque around the wheel axis due to the external force at current frame
+double computeExternalTorque () {
+
+	// Get the position of the gripper and remove the height of the wheel
+	Eigen::Vector3d contact = robot->getNode("lGripper")->getWorldTransform().topRightCorner<3,1>();
+	contact(2) -= wheelRadius;
+
+	// Project the contact-axis vector to the x and z axes
+	double xproj = contact.dot(Eigen::Vector3d(1.0, 0.0, 0.0));
+	double zproj = contact.dot(Eigen::Vector3d(0.0, 0.0, 1.0));
+
+	// Compute the torque due to each axes
+	double xtorque = fx * xproj;	
+	double ztorque = fz * zproj;	
+	
+	// Return the sum
+	return xtorque + ztorque;
+}
+
+/* ******************************************************************************************** */
 /// Updates the balancing angle reference based on the input torque
-double updateRef (const Eigen::Vector3d& com) {
+pair <double, double> updateRef (const Eigen::Vector3d& com, double externalTorque) {
+
+	// Compute the torque necessary to achieve fx - the reaction torque from the hweels
+	double tau = fx * wheelRadius;
+	if(!respond) tau = 0;
 
 	// Compute the x component of the desired com
-	double com_x = -torque / (totalMass * 9.81);
+	double com_x = (externalTorque - tau) / (totalMass * 9.81);
 
 	// Compute the z component of the desired com by first computing the norm (which is fixed)
 	// and then computing the z from x component
@@ -87,7 +122,7 @@ double updateRef (const Eigen::Vector3d& com) {
 	double com_z = sqrt(normSq - com_x * com_x);
 
 	// Compute the expected balancing angle	
-	return atan2(-com_x, com_z);
+	return make_pair(atan2(-com_x, com_z), -tau);
 }
 
 /* ******************************************************************************************** */
@@ -99,8 +134,8 @@ void getState (Eigen::Vector2d& state, double dt, Eigen::Vector3d& com) {
 
 	// Calculate the COM and make adjustments
 	com = robot->getWorldCOM();
-	com(2) -= 0.264;
-	com(0) += 0.0076;
+	com(2) -= wheelRadius;
+	com(0) += 0.0070;
 
 	// Update the state (note for amc we are reversing the effect of the motion of the upper body)
 	state(0) = atan2(com(0), com(2));
@@ -108,7 +143,8 @@ void getState (Eigen::Vector2d& state, double dt, Eigen::Vector3d& com) {
 }
 
 /* ******************************************************************************************** */
-double computeTorques(const Eigen::Vector2d& refState, const Eigen::Vector2d& state) {
+double computeTorques(const Eigen::Vector2d& refState, const Eigen::Vector2d& state, 
+		double torque) {
 
 	// Compute the input to control the balancing angle
 	static const double kp = 250, kd = 40; 
@@ -130,6 +166,11 @@ void run () {
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
 			SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
 
+	// Prepare the vector to average the forces to respond
+	size_t kNumTorques = 100;
+	vector <double> externalTorques;
+	for(size_t i = 0; i < kNumTorques; i++) externalTorques.push_back(0.0);
+
 	// Continue processing data until stop received
 	size_t c_ = 0;
 	struct timespec t_now, t_prev = aa_tm_now();
@@ -138,24 +179,41 @@ void run () {
 	refState(1) = 0.0;
 	while(!somatic_sig_received) {
 
-		dbg = (c_++ % 20 == 0);
-		if(dbg) cout << "\ntorque: " << torque << endl;
+		dbg = (c_++ % 50 == 0);
+
+		fx = fz = 0.0;
+		if(fabs(krang->fts[Krang::LEFT]->lastExternal(0)) > 3.0)
+			fx = krang->fts[Krang::LEFT]->lastExternal(0);
+		if(fabs(krang->fts[Krang::LEFT]->lastExternal(2)) > 3.0)
+			fz = krang->fts[Krang::LEFT]->lastExternal(2);
+
+		if(dbg) cout << "\nrespond: " << respond << endl;
+		if(dbg) cout << "requested fx: " << fx << ", fz: " << fz << endl;
+		if(dbg) cout << "real      fx: " << krang->fts[Krang::LEFT]->lastExternal(0) << ", fz: " << 
+			krang->fts[Krang::LEFT]->lastExternal(2) << endl;
 
 		// Get the current time and compute the time difference and update the prev. time
 		t_now = aa_tm_now();						
 		double dt = (double)aa_tm_timespec2sec(aa_tm_sub(t_now, t_prev));	
 		t_prev = t_now;
 
-		// Get the state
+		// Get the state 
 		getState(state, dt, com);
 		if(dbg) cout << "com: " << com.transpose() << endl;
 
+		// Compute the average torque
+		externalTorques[c_ % kNumTorques] = computeExternalTorque();
+		double averageTorque = 0.0;
+		for(size_t i = 0; i < kNumTorques; i++) averageTorque += externalTorques [i];
+		averageTorque /= kNumTorques;
+
 		// Compute the balancing angle reference based on the commanded torque 
-		refState(0) = updateRef(com);
+		pair <double, double> refs = updateRef(com, averageTorque);
+		refState(0) = refs.first;
 		if(dbg) cout << "th ref: "<< refState(0) << endl;
 
 		// Compute the torques based on the state and the desired torque
-		double u = computeTorques(refState, state);
+		double u = computeTorques(refState, state, refs.second);
 		if(u > 20.0) u = 20.0;
 		if(u < -20.0) u = -20.0;
 
