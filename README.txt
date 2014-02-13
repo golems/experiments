@@ -13,3 +13,5 @@ Krang. The following experiments have taken place so far:
    closure problems and must be handled with task constraints or compliance.
 7) Teleop: The development code for using liberty and having a full interface
    with the Logitech joystick. Once done, we will move to demos.
+8) Navigation: Development of autonomous navigation using encoder values and
+   vision data.
