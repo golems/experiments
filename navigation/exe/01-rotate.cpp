@@ -42,6 +42,7 @@ Vector6d state0;	///< in the beginning of entering mode 2
 bool start = false;
 bool dbg = false;
 bool shouldRead = false;
+double extraSpin = 0.0;
 
 size_t mode = 0;		// 0 sitting, 1 standing up, 2 stable, 3 turning, 4 sitting down
 
@@ -78,6 +79,8 @@ void *kbhit(void *) {
 		else if(input=='3') mode = 3;
 		else if(input=='4') mode = 4;
 		else if(input=='5') mode = 5;
+		else if(input=='k') extraSpin += 1.0;
+		else if(input=='j') extraSpin += -1.0;
 		else if(input=='s') start = !start;
 		else if(input=='r') shouldRead = true;
 	}
@@ -174,7 +177,8 @@ void computeTorques (const Vector6d& state, double& ul, double& ur) {
 	double u_x = K(2)*error(2) + K(3)*error(3);
 	double u_spin = K.bottomLeftCorner<2,1>().dot(error.bottomLeftCorner<2,1>());
 	if(dbg) printf("u_theta: %lf, u_x: %lf, u_spin: %lf\n", u_theta, u_x, u_spin);
-	u_spin = max(-30.0, min(30.0, u_spin));
+	u_spin += extraSpin;
+	u_spin = max(-10.0, min(10.0, u_spin));
 	// u_spin = 0.0;
 	ul = u_theta + u_x + u_spin;
 	ur = u_theta + u_x - u_spin;
@@ -198,6 +202,7 @@ void run () {
 
 		dbg = (c_++ % 20 == 0);
 		if(dbg) cout << "\nmode: " << mode << endl;
+		if(dbg) cout << "extra spin: " << extraSpin << endl;
 
 		// Read the gains if requested by user
 		if(shouldRead) {
