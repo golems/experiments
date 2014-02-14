@@ -116,7 +116,7 @@ void init() {
 	krang = new Krang::Hardware(Krang::Hardware::MODE_ALL_GRIPSCH, &daemon_cx, robot); 
 
 	// Check that the waist is at the expected angle
-	assert(fabs(krang->waist->pos[0] - 2.86) < 0.05 && "The gains and offsets are set for 164 deg");
+	// assert(fabs(krang->waist->pos[0] - 2.86) < 0.05 && "The gains and offsets are set for 164 deg");
 	
 	// Create a thread to wait for user input to begin balancing
 	pthread_t kbhitThread;
@@ -133,7 +133,8 @@ void getState(Vector6d& state, double dt) {
 	// Calculate the COM	
 	Eigen::Vector3d com = robot->getWorldCOM();
 	com(2) -= 0.264;
-	com(0) += 0.0052;
+	com(0) += 0.0052;  // for 164 waist
+	com(0) += 0.0094;  // for weird left arm and 156 waist
 	if(dbg) cout << "com: " << com.transpose() << endl;
 
 	// Update the state (note for amc we are reversing the effect of the motion of the upper body)
@@ -212,7 +213,7 @@ void forwardTorques (const Vector6d& state, double time, double dt, double& ul, 
 	static const double accelerationTime = 15.0;	// seconds
 	static const double deceleration = 0.008;		// m/s
 	static const double decelerationTime = 15.0;	// seconds
-	static const double cruiseTime = 10.0;
+	static const double cruiseTime = 30.0;
 
 //	cout << "state: " << state.transpose() << endl;
 
@@ -293,6 +294,7 @@ void forwardTorques (const Vector6d& state, double time, double dt, double& ul, 
 	ur = u_theta - u_x - u_spin;
 	ul = max(-50.0, min(50.0, ul));
 	ur = max(-50.0, min(50.0, ur));
+	ul *= intErrorLimit;
 }
 
 /* ******************************************************************************************** */
