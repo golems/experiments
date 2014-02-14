@@ -45,6 +45,7 @@ bool shouldRead = false;
 double extraSpin = 0.0;
 size_t integralWindow = 0;
 double Ksint, intErrorLimit;
+double offsetAngle = 0.0;
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 size_t mode = 0;		// 0 sitting, 1 standing up, 2 stable, 3 turning, 4 sitting down
@@ -101,6 +102,8 @@ void *kbhit(void *) {
 		else if(input=='j') extraSpin += -1.0;
 		else if(input=='s') start = !start;
 		else if(input=='r') shouldRead = true;
+		else if(input=='h') offsetAngle += 0.1;
+		else if(input=='l') offsetAngle -= 0.1;
 		pthread_mutex_unlock(&mutex);
 	}
 }
@@ -175,8 +178,8 @@ void computeTorques (const Vector6d& state, double& ul, double& ur) {
 	// Set reference based on the mode
 	Vector6d refState;
 	if(mode == 1 || mode == 2) refState << 0.0, 0.0, state0(2), 0.0, state0(4), 0.0;
-	else if(mode == 3) refState << 0.0, 0.0, state0(2), 0.0, state0(4) + M_PI / 3.0, 0.0;
-	else if(mode == 4) refState << 0.0, 0.0, state0(2), 0.0, state0(4) - M_PI / 3.0, 0.0;
+	else if(mode == 3) refState << 0.0, 0.0, state0(2), 0.0, state0(4) + offsetAngle, 0.0;
+	else if(mode == 4) refState << 0.0, 0.0, state0(2), 0.0, state0(4) - offsetAngle, 0.0;
 	else if(mode == 5) {
 		ul = ur = 15.0;
 		return;
@@ -256,6 +259,8 @@ void run () {
 		dbg = (c_++ % 20 == 0);
 		if(dbg) cout << "\nmode: " << mode << endl;
 		if(dbg) cout << "extra spin: " << extraSpin << endl;
+		if(dbg) cout << "offset angle: " << offsetAngle << ", deg: " <<
+			offsetAngle * (180.0 / M_PI) << endl;
 
 		// Read the gains if requested by user
 		if(shouldRead) {
