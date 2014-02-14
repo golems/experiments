@@ -203,50 +203,71 @@ void computeTorques (const Vector6d& state, double& ul, double& ur) {
 }
 
 /* ******************************************************************************************** */
-void forwardTorques (const Vector6d& state, double time, double& ul, double& ur) {
+void forwardTorques (const Vector6d& state, double time, double dt, double& ul, double& ur) {
+
+	bool localDbg = 0;
 
 	// Define the profile
-	static const double acceleration = 0.05;		// m/s
-	static const double accelerationTime = 5.0;	// seconds
-	static const double deceleration = 0.10;		// m/s
-	static const double decelerationTime = 2.5;	// seconds
+	static const double acceleration = 0.008;		// m/s
+	static const double accelerationTime = 15.0;	// seconds
+	static const double deceleration = 0.008;		// m/s
+	static const double decelerationTime = 15.0;	// seconds
+	static const double cruiseTime = 10.0;
+
+//	cout << "state: " << state.transpose() << endl;
 
 	// Get the current reference velocity
 	double refVel = 0.0;
 	if(time < accelerationTime) refVel = time * acceleration;
-	else if(time < (accelerationTime + decelerationTime))
-		refVel = accelerationTime * acceleration - (time - accelerationTime) * deceleration;
+	else if(time < (accelerationTime + cruiseTime)) refVel = accelerationTime * acceleration;
+	else if(time < (accelerationTime + cruiseTime + decelerationTime))
+		refVel = accelerationTime * acceleration - (time - accelerationTime - cruiseTime) * deceleration;
 	else refVel = 0.0;
 	
 	// Get the position from the reference velocities
 	double refPos = 0.0;
 	if(time < accelerationTime) refPos = (time * (time * acceleration)) / 2.0;
-	else if(time < (accelerationTime + decelerationTime))
+	else if(time < (accelerationTime + cruiseTime))
 		refPos = (accelerationTime * (accelerationTime * acceleration)) / 2.0 + 
-						 (refVel * (time - accelerationTime)) + 
-						 (time - accelerationTime) * (acceleration * accelerationTime - refVel) / 2.0;
+							(time - accelerationTime) * (accelerationTime * acceleration);
+	else if(time < (accelerationTime + cruiseTime + decelerationTime))
+		refPos = (accelerationTime * (accelerationTime * acceleration)) / 2.0 + 
+						 (cruiseTime * (accelerationTime * acceleration)) + 
+						 (refVel * (time - accelerationTime - cruiseTime)) + 
+						 (time - accelerationTime - cruiseTime) * (acceleration * accelerationTime - refVel) / 2.0;
 	else refPos = (accelerationTime * (acceleration * accelerationTime)) / 2.0 + 
+							  (cruiseTime * (accelerationTime * acceleration)) + 
 								(decelerationTime * (deceleration * decelerationTime)) / 2.0;
+	refPos += state0(2);
 
+	// Determine acceleration
+	static vector <double> accs;
+	static int c_ = 0;
+	c_++;
+	if(accs.empty()) for(size_t i = 0; i < 150; i++) accs.push_back(0.0);
+	static double lastVel = state(3);
+	double lastAcc = (state(3) - lastVel) / dt;
+	accs[c_ % 150] = lastAcc;
+	double stateAcc = 0.0;
+	for(size_t i = 0; i < 150; i++) stateAcc += accs[i];
+	stateAcc /= 150;
+	double refAcc = (time > accelerationTime) ? -deceleration : acceleration;
+	lastVel = state(3);
+	printf("%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n", time, refPos, refVel, refAcc, state(2), state(3), stateAcc);
 
-	
-	
-/*
+	// Create the reference state
+	Vector6d refState;
+	refState << 0.0, 0.0, refPos, refVel, state(4), 0.0;
+	if(localDbg) cout << "refState: " << refState.transpose() << endl;
+
+	// Set the torques based on the current state and the reference velocity and position values
+	double errPos = refPos - state(2), errVel = refVel - state(3), errAcc = refAcc - stateAcc;
+	double u_x = K_forw(2) * errPos + K_forw(3) * errVel + Kfint * errAcc;
+
+	// Extra stuff
 	u_x += extraForw;
-	if(dbg) printf("u_x before cap: %lf\n", u_x);
-
-	// Place limits on u_x
-	u_x = max(-5.0, min(5.0, u_x));
-	double deltaUx = u_x - lastUx;
-	static const double maxIncDelta = 0.1;
-	static const double maxDecDelta = 0.2;
-	if(u_x > lastUx)
-		deltaUx = min(maxIncDelta, max(-maxIncDelta, deltaUx));
-	else
-		deltaUx = min(maxDecDelta, max(-maxDecDelta, deltaUx));
-
-	u_x = lastUx += deltaUx;
-	lastUx = u_x;
+	if(localDbg) printf("u_x before cap: %lf\n", u_x);
+	u_x = max(-10.0, min(10.0, u_x));
 
 	// Update the reference balancing angle
 	static const double totalMass = 140.00;
@@ -254,24 +275,24 @@ void forwardTorques (const Vector6d& state, double time, double& ul, double& ur)
 	double com_x = -(u_x / 1.7) / (totalMass * 9.81);
 	double normSq = com(0) * com(0) + com(2) * com(2);
 	double com_z = sqrt(normSq - com_x * com_x);
-	error(0) = state(0) - atan2(-com_x, com_z);
+	refState(0) = atan2(-com_x, com_z);
+//	refState(0) = 0.0;
+	
+	// Compute the error
+	Vector6d error = state - refState;
+	if(localDbg) cout << "error: " << error.transpose() << endl;
 
-	// Compute the balancing torque
-	double u_theta = K.topLeftCorner<2,1>().dot(error.topLeftCorner<2,1>());
+	// Compute the balancing and spin inputs
+	double u_spin = K_forw.bottomLeftCorner<2,1>().dot(error.bottomLeftCorner<2,1>());
+	double u_theta = K_forw.topLeftCorner<2,1>().dot(error.topLeftCorner<2,1>());
 
 	// Limit the output torques
-	if(dbg) printf("u_theta: %lf, u_x: %lf, u_spin: %lf\n", u_theta, u_x, u_spin);
+	if(localDbg) printf("u_theta: %lf, u_x: %lf, u_spin: %lf\n", u_theta, u_x, u_spin);
 	u_spin = max(-10.0, min(10.0, u_spin));
-	ul = u_theta + u_x + u_spin;
-	ur = u_theta + u_x - u_spin;
+	ul = u_theta - u_x + u_spin;
+	ur = u_theta - u_x - u_spin;
 	ul = max(-50.0, min(50.0, ul));
 	ur = max(-50.0, min(50.0, ur));
-	if((mode == 3) || (mode == 4)) {
-		ul = max(-12.0, min(12.0, ul));
-		ur = max(-12.0, min(12.0, ur));
-	}
-*/
-	
 }
 
 /* ******************************************************************************************** */
@@ -290,8 +311,8 @@ void run () {
 	while(!somatic_sig_received) {
 
 		pthread_mutex_lock(&mutex);
-		dbg = (c_++ % 20 == 0);
-		dbg = false;
+		if(mode == 3) dbg = false;
+		else dbg = (c_++ % 20 == 0);
 		if(dbg) cout << "\nmode: " << mode << endl;
 		if(dbg) cout << "extra forw: " << extraForw << endl;
 		if(dbg) cout << "offset dist: " << offsetDist << endl;
@@ -328,7 +349,7 @@ void run () {
 		if(mode != 3 && mode != 4) computeTorques(state, ul, ur);
 		else {
 			double profileTime = (double)aa_tm_timespec2sec(aa_tm_sub(t_now, t_forwStart));
-			forwardTorques(state, profileTime, ul, ur);
+			forwardTorques(state, profileTime, dt, ul, ur);
 		}
 
 		// Apply the torque
