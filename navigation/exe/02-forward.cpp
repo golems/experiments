@@ -164,19 +164,9 @@ void computeTorques (const Vector6d& state, double& ul, double& ur) {
 
 	static double lastUx = 0.0;
 
-	// Initialize the integral controller
-	static vector <double> forwErrors;
-	static int forwIdx = 0;
-	if((forwIdx == 0) && ((mode == 3) || (mode == 4))) {
-		for(size_t i = 0; i < integralWindow; i++)
-			forwErrors.push_back(0.0);
-	}
-
 	// Set reference based on the mode
 	Vector6d refState;
 	if(mode == 1 || mode == 2) refState << 0.0, 0.0, state0(2), 0.0, state0(4), 0.0;
-	else if(mode == 3) refState << 0.0, 0.0, state0(2) + offsetDist, 0.0, state0(4), 0.0;
-	else if(mode == 4) refState << 0.0, 0.0, state0(2) - offsetDist, 0.0, state0(4), 0.0;
 	else if(mode == 5) {
 		ul = ur = 15.0;
 		return;
@@ -187,18 +177,10 @@ void computeTorques (const Vector6d& state, double& ul, double& ur) {
 	}
 	if(dbg) cout << "refState: " << refState.transpose() << endl;
 
-	// Reset the integral based on the mode
-	if((mode != 3) && (mode != 4)) {
-		forwErrors.clear();
-		forwIdx = 0;
-	}
-
 	// Set the gains
 	Vector6d K;
 	if(mode == 1) K = K_stand;
 	else if(mode == 2) K = K_bal;
-	else if(mode == 3) K = K_forw;
-	else if(mode == 4) K = K_forw;
 	else assert(false);
 
 	// Compute the error
@@ -208,25 +190,48 @@ void computeTorques (const Vector6d& state, double& ul, double& ur) {
 	// Compute the forward and spin torques 
 	double u_x = K(2)*error(2) + K(3)*error(3);
 	double u_spin = K.bottomLeftCorner<2,1>().dot(error.bottomLeftCorner<2,1>());
+	double u_theta = K.topLeftCorner<2,1>().dot(error.topLeftCorner<2,1>());
 
-	// Add integral
-	if(((mode == 3) || (mode == 4)) && (error(4) < intErrorLimit) && (integralWindow > 0)) {
-		
-		// Update the errors
-		forwErrors[forwIdx % integralWindow] = error(2);
-		forwIdx++;
+	// Limit the output torques
+	if(dbg) printf("u_theta: %lf, u_x: %lf, u_spin: %lf\n", u_theta, u_x, u_spin);
+	u_spin = max(-10.0, min(10.0, u_spin));
+	ul = u_theta + u_x + u_spin;
+	ur = u_theta + u_x - u_spin;
+	ul = max(-50.0, min(50.0, ul));
+	ur = max(-50.0, min(50.0, ur));
+	if(dbg) printf("ul: %lf, ur: %lf\n", ul, ur);
+}
 
-		// Compute the total error
-		double totalError = 0.0;
-		for(size_t i = 0; i < integralWindow; i++)
-			totalError += forwErrors[i];
+/* ******************************************************************************************** */
+void forwardTorques (const Vector6d& state, double time, double& ul, double& ur) {
 
-		// Compute the addition
-		double u_forw_int = totalError * Kfint;
-		if(dbg) printf("u_forw_int: %lf, totalError: %lf, Kfint: %lf\n", 
-			u_forw_int, totalError, Kfint);
-		u_x += u_forw_int;
-	}
+	// Define the profile
+	static const double acceleration = 0.05;		// m/s
+	static const double accelerationTime = 5.0;	// seconds
+	static const double deceleration = 0.10;		// m/s
+	static const double decelerationTime = 2.5;	// seconds
+
+	// Get the current reference velocity
+	double refVel = 0.0;
+	if(time < accelerationTime) refVel = time * acceleration;
+	else if(time < (accelerationTime + decelerationTime))
+		refVel = accelerationTime * acceleration - (time - accelerationTime) * deceleration;
+	else refVel = 0.0;
+	
+	// Get the position from the reference velocities
+	double refPos = 0.0;
+	if(time < accelerationTime) refPos = (time * (time * acceleration)) / 2.0;
+	else if(time < (accelerationTime + decelerationTime))
+		refPos = (accelerationTime * (accelerationTime * acceleration)) / 2.0 + 
+						 (refVel * (time - accelerationTime)) + 
+						 (time - accelerationTime) * (acceleration * accelerationTime - refVel) / 2.0;
+	else refPos = (accelerationTime * (acceleration * accelerationTime)) / 2.0 + 
+								(decelerationTime * (deceleration * decelerationTime)) / 2.0;
+
+
+	
+	
+/*
 	u_x += extraForw;
 	if(dbg) printf("u_x before cap: %lf\n", u_x);
 
@@ -265,7 +270,8 @@ void computeTorques (const Vector6d& state, double& ul, double& ur) {
 		ul = max(-12.0, min(12.0, ul));
 		ur = max(-12.0, min(12.0, ur));
 	}
-	if(dbg) printf("ul: %lf, ur: %lf\n", ul, ur);
+*/
+	
 }
 
 /* ******************************************************************************************** */
@@ -280,14 +286,21 @@ void run () {
 	struct timespec t_now, t_prev = aa_tm_now();
 	Vector6d state;
 	int lastMode = mode;
+	struct timespec t_forwStart;
 	while(!somatic_sig_received) {
 
 		pthread_mutex_lock(&mutex);
 		dbg = (c_++ % 20 == 0);
+		dbg = false;
 		if(dbg) cout << "\nmode: " << mode << endl;
 		if(dbg) cout << "extra forw: " << extraForw << endl;
 		if(dbg) cout << "offset dist: " << offsetDist << endl;
 
+		// Keep track of the starting time to follow the velocity profile
+		if((lastMode != 3) && (mode == 3)) {
+			t_forwStart = aa_tm_now();
+		}
+		
 		// Read the gains if requested by user
 		if(shouldRead) {
 			readGains();
@@ -310,16 +323,20 @@ void run () {
 		// Switch the mode if necessary
 		switchModes(state);
 
-		// Compute the torques based on the state and the desired torque
+		// Compute the torques based on the state and the mode
 		double ul, ur;
-		computeTorques(state, ul, ur);
-		pthread_mutex_unlock(&mutex);
+		if(mode != 3 && mode != 4) computeTorques(state, ul, ur);
+		else {
+			double profileTime = (double)aa_tm_timespec2sec(aa_tm_sub(t_now, t_forwStart));
+			forwardTorques(state, profileTime, ul, ur);
+		}
 
 		// Apply the torque
 		double input [2] = {ul, ur};
 		if(dbg) cout << "u: {" << ul << ", " << ur << "}" << endl;
 		if(start) somatic_motor_cmd(&daemon_cx, krang->amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
 		lastMode = mode;
+		pthread_mutex_unlock(&mutex);
 	}
 
 	// Send the stopping event
