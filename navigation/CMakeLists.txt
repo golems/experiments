@@ -9,7 +9,6 @@ add_definitions(-DTOP_LEVEL_PATH="${CMAKE_SOURCE_DIR}" -g)
 
 # Set the C99 standard for the C files
 set(CMAKE_INSTALL_PREFIX /usr)
-set(CMAKE_CXX_FLAGS --std=gnu99)
 
 # Guard against in-source builds
 if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
