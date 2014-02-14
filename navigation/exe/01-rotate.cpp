@@ -43,13 +43,17 @@ bool start = false;
 bool dbg = false;
 bool shouldRead = false;
 double extraSpin = 0.0;
+size_t integralWindow = 0;
+double Ksint, intErrorLimit;
 
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 size_t mode = 0;		// 0 sitting, 1 standing up, 2 stable, 3 turning, 4 sitting down
 
 /* ******************************************************************************************** */
 /// Read file for gains
 void readGains () {
 
+	// Get the gains
 	Vector6d* kgains [] = {&K_stand, &K_bal, &K_turn};
 	ifstream file ("/home/cerdogan/Documents/Software/project/krang/experiments/navigation/data/gains-01.txt");
 	assert(file.is_open());
@@ -62,9 +66,22 @@ void readGains () {
 		double newDouble;
 		while ((i < 6) && (stream >> newDouble)) (*kgains[k_idx])(i++) = newDouble;
 	}
+
+	// Get the integral control options
+	file.getline(line, 1024);
+	std::stringstream stream(line, std::stringstream::in);
+	stream >> integralWindow;
+	file.getline(line, 1024);
+	std::stringstream stream2(line, std::stringstream::in);
+	stream2 >> Ksint;
+	file.getline(line, 1024);
+	std::stringstream stream3(line, std::stringstream::in);
+	stream3 >> intErrorLimit;
 	file.close();
 	printf("READ GAINS!\n");
 	pv(K_turn);
+	printf("integralWindow: %d, Ksint: %lf, intErrorLimit: %lf\n", 
+		integralWindow, Ksint, intErrorLimit);
 }
 
 /* ********************************************************************************************* */
@@ -73,6 +90,7 @@ void *kbhit(void *) {
 	char input;
 	while(true){ 
 		input=cin.get(); 
+		pthread_mutex_lock(&mutex);
 		if(input=='0') mode = 0;
 		else if(input=='1') mode = 1;
 		else if(input=='2') mode = 2;
@@ -83,6 +101,7 @@ void *kbhit(void *) {
 		else if(input=='j') extraSpin += -1.0;
 		else if(input=='s') start = !start;
 		else if(input=='r') shouldRead = true;
+		pthread_mutex_unlock(&mutex);
 	}
 }
 
@@ -133,7 +152,7 @@ void switchModes (const Vector6d& state) {
 	static int balancedCounter = 0;
 	if((mode == 5) && (krang->imu < -1.82)) mode = 0;
 	else if(mode == 1) {
-		if(fabs(state(0)) < 0.034) balancedCounter++;
+		if(fabs(state(0)) < 0.054) balancedCounter++;
 		if(balancedCounter > 100) {
 			mode = 2;
 			balancedCounter = 0;
@@ -144,6 +163,14 @@ void switchModes (const Vector6d& state) {
 
 /* ******************************************************************************************** */
 void computeTorques (const Vector6d& state, double& ul, double& ur) {
+
+	// Initialize the integral controller
+	static vector <double> spinErrors;
+	static int spinIdx = 0;
+	if((spinIdx == 0) && ((mode == 3) || (mode == 4))) {
+		for(size_t i = 0; i < integralWindow; i++)
+			spinErrors.push_back(0.0);
+	}
 
 	// Set reference based on the mode
 	Vector6d refState;
@@ -159,6 +186,12 @@ void computeTorques (const Vector6d& state, double& ul, double& ur) {
 		return;
 	}
 	if(dbg) cout << "refState: " << refState.transpose() << endl;
+
+	// Reset the integral based on the mode
+	if((mode != 3) && (mode != 4)) {
+		spinErrors.clear();
+		spinIdx = 0;
+	}
 
 	// Set the gains
 	Vector6d K;
@@ -176,10 +209,29 @@ void computeTorques (const Vector6d& state, double& ul, double& ur) {
 	double u_theta = K.topLeftCorner<2,1>().dot(error.topLeftCorner<2,1>());
 	double u_x = K(2)*error(2) + K(3)*error(3);
 	double u_spin = K.bottomLeftCorner<2,1>().dot(error.bottomLeftCorner<2,1>());
+
+	// Add integral
+	if(((mode == 3) || (mode == 4)) && (error(4) < intErrorLimit)) {
+		
+		// Update the errors
+		spinErrors[spinIdx % integralWindow] = error(4);
+		spinIdx++;
+
+		// Compute the total error
+		double totalError = 0.0;
+		for(size_t i = 0; i < integralWindow; i++)
+			totalError += spinErrors[i];
+
+		// Compute the addition
+		double u_spin_int = totalError * Ksint;
+		if(dbg) printf("u_spin_int: %lf\n", u_spin_int);
+		u_spin += u_spin_int;
+	}
+
+	// Limit the output torques
 	if(dbg) printf("u_theta: %lf, u_x: %lf, u_spin: %lf\n", u_theta, u_x, u_spin);
 	u_spin += extraSpin;
 	u_spin = max(-10.0, min(10.0, u_spin));
-	// u_spin = 0.0;
 	ul = u_theta + u_x + u_spin;
 	ur = u_theta + u_x - u_spin;
 	ul = max(-50.0, min(50.0, ul));
@@ -200,6 +252,7 @@ void run () {
 	int lastMode = mode;
 	while(!somatic_sig_received) {
 
+		pthread_mutex_lock(&mutex);
 		dbg = (c_++ % 20 == 0);
 		if(dbg) cout << "\nmode: " << mode << endl;
 		if(dbg) cout << "extra spin: " << extraSpin << endl;
@@ -229,6 +282,7 @@ void run () {
 		// Compute the torques based on the state and the desired torque
 		double ul, ur;
 		computeTorques(state, ul, ur);
+		pthread_mutex_unlock(&mutex);
 
 		// Apply the torque
 		double input [2] = {ul, ur};

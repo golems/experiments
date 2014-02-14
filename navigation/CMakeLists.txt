@@ -5,11 +5,11 @@ cmake_minimum_required(VERSION 2.6)
 project(balancing)
 
 # Set the top level directory for use in the code
-add_definitions(-DTOP_LEVEL_PATH="${CMAKE_SOURCE_DIR}")
+add_definitions(-DTOP_LEVEL_PATH="${CMAKE_SOURCE_DIR}" -g)
 
 # Set the C99 standard for the C files
 set(CMAKE_INSTALL_PREFIX /usr)
-set(CMAKE_C_FLAGS --std=gnu99 -g)
+set(CMAKE_CXX_FLAGS --std=gnu99)
 
 # Guard against in-source builds
 if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
