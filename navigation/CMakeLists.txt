@@ -33,6 +33,7 @@ include(simulation.cmake)
 link_libraries(amino ntcan protobuf-c ach somatic stdc++ filter pcio pthread kore)
 
 # Include Eigen
+include_directories(/usr/include/kore)
 include_directories(/usr/include/eigen3)
 include_directories(/usr/local/include/eigen3)
 

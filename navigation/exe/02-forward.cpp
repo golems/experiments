@@ -135,6 +135,7 @@ void getState(Vector6d& state, double dt) {
 	com(2) -= 0.264;
 	com(0) += 0.0052;  // for 164 waist
 	com(0) += 0.0094;  // for weird left arm and 156 waist
+	com(0) += 0.0051;  // for cinder weight
 	if(dbg) cout << "com: " << com.transpose() << endl;
 
 	// Update the state (note for amc we are reversing the effect of the motion of the upper body)

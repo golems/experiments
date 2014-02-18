@@ -14,6 +14,8 @@
 
 #include <Eigen/Dense>
 
+#include <kore.hpp>
+
 #include <dynamics/SkeletonDynamics.h>
 #include <robotics/parser/dart_parser/DartLoader.h>
 #include <simulation/World.h>
@@ -21,8 +23,7 @@
 #include <kinematics/BodyNode.h>
 #include <math/UtilsRotation.h>
 
-#include <kore.hpp>
-
+ 
 
 Eigen::MatrixXd fix (const Eigen::MatrixXd& mat) { return mat; }
 
@@ -138,7 +139,7 @@ void getState(Vector6d& state, double dt) {
 	// Calculate the COM	
 	Eigen::Vector3d com = robot->getWorldCOM();
 	com(2) -= 0.264;
-	com(0) += 0.0052;
+	com(0) -= 0.0018;
 	if(dbg) cout << "com: " << com.transpose() << endl;
 
 	// Update the state (note for amc we are reversing the effect of the motion of the upper body)
@@ -159,7 +160,7 @@ void switchModes (const Vector6d& state) {
 		if(balancedCounter > 100) {
 			mode = 2;
 			balancedCounter = 0;
-			state0 = state;
+			// state0 = state;
 		}	
 	}
 }
@@ -279,6 +280,7 @@ void run () {
 
 		// Update state0 if the mode has been changed by user from 3-4 to 2
 		if((lastMode == 3 || lastMode == 4) && (mode == 2)) state0 = state;
+		if((lastMode == 0) && (mode == 1)) state0 = state;
 		if(dbg) cout << "state0: " << state0.transpose() << endl;
 
 		// Switch the mode if necessary
