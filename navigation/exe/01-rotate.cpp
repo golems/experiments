@@ -38,7 +38,7 @@ dynamics::SkeletonDynamics* robot;			///< the robot representation in dart
 
 static const double wheelRadius = 0.264;	// r, cm
 static const double rotationRadius = 0.350837; // R, cm
-Vector6d K_stand, K_bal, K_turn;
+Vector6d K_stand, K_bal, K_turn_left, K_turn_right;
 Vector6d state0;	///< in the beginning of entering mode 2
 bool start = false;
 bool dbg = false;
@@ -56,11 +56,11 @@ size_t mode = 0;		// 0 sitting, 1 standing up, 2 stable, 3 turning, 4 sitting do
 void readGains () {
 
 	// Get the gains
-	Vector6d* kgains [] = {&K_stand, &K_bal, &K_turn};
+	Vector6d* kgains [] = {&K_stand, &K_bal, &K_turn_left, &K_turn_right};
 	ifstream file ("/home/cerdogan/Documents/Software/project/krang/experiments/navigation/data/gains-01.txt");
 	assert(file.is_open());
 	char line [1024];
-	for(size_t k_idx = 0; k_idx < 3; k_idx++) {
+	for(size_t k_idx = 0; k_idx < 4; k_idx++) {
 		*kgains[k_idx] = Vector6d::Zero();
 		file.getline(line, 1024);
 		std::stringstream stream(line, std::stringstream::in);
@@ -81,7 +81,6 @@ void readGains () {
 	stream3 >> intErrorLimit;
 	file.close();
 	printf("READ GAINS!\n");
-	pv(K_turn);
 	printf("integralWindow: %d, Ksint: %lf, intErrorLimit: %lf\n", 
 		integralWindow, Ksint, intErrorLimit);
 }
@@ -103,8 +102,8 @@ void *kbhit(void *) {
 		else if(input=='j') extraSpin += -1.0;
 		else if(input=='s') start = !start;
 		else if(input=='r') shouldRead = true;
-		else if(input=='h') offsetAngle += 0.1;
-		else if(input=='l') offsetAngle -= 0.1;
+		else if(input=='h') offsetAngle += 0.3;
+		else if(input=='l') offsetAngle -= 0.3;
 		pthread_mutex_unlock(&mutex);
 	}
 }
@@ -189,7 +188,7 @@ void computeTorques (const Vector6d& state, double& ul, double& ur) {
 		ul = ur = 0.0;
 		return;
 	}
-	if(dbg) cout << "refState: " << refState.transpose() << endl;
+	if(dbg) DISPLAY_VECTOR(refState);
 
 	// Reset the integral based on the mode
 	if((mode != 3) && (mode != 4)) {
@@ -201,13 +200,13 @@ void computeTorques (const Vector6d& state, double& ul, double& ur) {
 	Vector6d K;
 	if(mode == 1) K = K_stand;
 	else if(mode == 2) K = K_bal;
-	else if(mode == 3) K = K_turn;
-	else if(mode == 4) K = K_turn;
+	else if(mode == 3) K = K_turn_left;
+	else if(mode == 4) K = K_turn_right;
 	else assert(false);
 
 	// Compute the error
 	Vector6d error = state - refState;
-	if(dbg) cout << "error: " << error.transpose() << endl;
+	if(dbg) DISPLAY_VECTOR(error);
 
 	// Compute the torques 
 	double u_theta = K.topLeftCorner<2,1>().dot(error.topLeftCorner<2,1>());
@@ -235,7 +234,7 @@ void computeTorques (const Vector6d& state, double& ul, double& ur) {
 	// Limit the output torques
 	if(dbg) printf("u_theta: %lf, u_x: %lf, u_spin: %lf\n", u_theta, u_x, u_spin);
 	u_spin += extraSpin;
-	u_spin = max(-10.0, min(10.0, u_spin));
+	u_spin = max(-12.0, min(12.0, u_spin));
 	ul = u_theta + u_x + u_spin;
 	ur = u_theta + u_x - u_spin;
 	ul = max(-50.0, min(50.0, ul));
@@ -257,7 +256,7 @@ void run () {
 	while(!somatic_sig_received) {
 
 		pthread_mutex_lock(&mutex);
-		dbg = (c_++ % 20 == 0);
+		dbg = (c_++ % 30 == 0);
 		if(dbg) cout << "\nmode: " << mode << endl;
 		if(dbg) cout << "extra spin: " << extraSpin << endl;
 		if(dbg) cout << "offset angle: " << offsetAngle << ", deg: " <<
@@ -276,12 +275,14 @@ void run () {
 
 		// Get the state 
 		getState(state, dt); 
-		if(dbg) cout << "state: " << state.transpose() << endl;
+		if(dbg) DISPLAY_VECTOR(state);
 
 		// Update state0 if the mode has been changed by user from 3-4 to 2
 		if((lastMode == 3 || lastMode == 4) && (mode == 2)) state0 = state;
 		if((lastMode == 0) && (mode == 1)) state0 = state;
-		if(dbg) cout << "state0: " << state0.transpose() << endl;
+//		if((lastMode == 2) && (mode == 3)) state0 = state;
+//		if((lastMode == 2) && (mode == 4)) state0 = state;
+		if(dbg) DISPLAY_VECTOR(state0);
 
 		// Switch the mode if necessary
 		switchModes(state);
@@ -289,13 +290,13 @@ void run () {
 		// Compute the torques based on the state and the desired torque
 		double ul, ur;
 		computeTorques(state, ul, ur);
-		pthread_mutex_unlock(&mutex);
 
 		// Apply the torque
 		double input [2] = {ul, ur};
 		if(dbg) cout << "u: {" << ul << ", " << ur << "}" << endl;
 		if(start) somatic_motor_cmd(&daemon_cx, krang->amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
 		lastMode = mode;
+		pthread_mutex_unlock(&mutex);
 	}
 
 	// Send the stopping event
