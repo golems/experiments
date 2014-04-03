@@ -34,6 +34,8 @@ bool dbg = false;
 bool shouldRead = false;
 size_t integralWindow = 0;
 double Kfint, intErrorLimit;
+double lowerLimit, upperLimit;		//< Limits for the wayPoint changes (hack)
+bool forwardMode = 1;
 
 Eigen::Vector4d K;
 Eigen::Vector4d refState;
@@ -123,16 +125,16 @@ void computeTorques (const Eigen::Vector4d& state, double& ul, double& ur) {
 	if(dbg) cout << "K: " << K.transpose() << endl;
 
 	// Compute the forward and spin torques 
-	double u_x = K(0)*error(0) + K(1)*error(1);
-	double u_spin = K.bottomLeftCorner<2,1>().dot(error.bottomLeftCorner<2,1>());
+	double u_x = -K(0)*error(0) + K(1)*error(1);
+	double u_spin = -K.bottomLeftCorner<2,1>().dot(error.bottomLeftCorner<2,1>());
 
 	// Limit the output torques
 	if(dbg) printf("u_x: %lf, u_spin: %lf\n", u_x, u_spin);
 	u_spin = max(-10.0, min(10.0, u_spin));
 	ul = u_x + u_spin;
 	ur = u_x - u_spin;
-	ul = max(-50.0, min(50.0, ul));
-	ur = max(-50.0, min(50.0, ur));
+	ul = max(-20.0, min(20.0, ul));
+	ur = max(-20.0, min(20.0, ur));
 	if(dbg) printf("ul: %lf, ur: %lf\n", ul, ur);
 }
 
@@ -146,7 +148,6 @@ void run () {
 	// Continue processing data until stop received
 	size_t c_ = 0;
 	struct timespec t_now, t_prev = aa_tm_now();
-	Eigen::Vector4d state;
 	int lastMode = mode;
 	struct timespec t_forwStart;
 	while(!somatic_sig_received) {
@@ -170,14 +171,35 @@ void run () {
 		getState(state, dt); 
 		if(dbg) cout << "state: " << state.transpose() << endl;
 
+
+		// little trajectory test:
+		// Update the reference state if reached the previous key point
+		// TODO: Double check angle error
+		if((fabs(refState(0) - state(0)) < 0.12)){ // && (fabs(refState(2) - state(2)) < 0.12)) {
+		  if (state(0) > upperLimit) {
+      forwardMode = 0;
+	    }
+			
+		  if (state(0) < lowerLimit) {
+				forwardMode = 1;
+			}
+			if (forwardMode)
+      	refState(0) += 0.04;	
+			else 
+			 	refState(0) -= 0.04;
+		}
+
 		// Compute the torques based on the state and the mode
 		double ul, ur;
 		computeTorques(state, ul, ur);
 
 		// Apply the torque
 		double input [2] = {ul, ur};
-		if(dbg) cout << "u: {" << ul << ", " << ur << "}" << endl;
-		if(start) somatic_motor_cmd(&daemon_cx, krang->amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
+		
+		if(dbg) cout << "u: {" << ul << ", " << ur << "}, start: " << start << endl;
+		if(!start) input[0] = input[1] = 0.0;
+		somatic_motor_cmd(&daemon_cx, krang->amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
+		
 		lastMode = mode;
 		pthread_mutex_unlock(&mutex);
 	}
@@ -204,6 +226,8 @@ int main(int argc, char* argv[]) {
 	init();
 	getState(state, 0.0);
 	refState = state;
+	lowerLimit = state(0);
+	upperLimit = state(0) + 1.0;
 	
 	// Print the f/t values
 	run();
