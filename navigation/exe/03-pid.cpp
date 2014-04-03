@@ -24,6 +24,7 @@ Eigen::MatrixXd fix (const Eigen::MatrixXd& mat) { return mat; }
 
 using namespace std;
 
+ach_channel_t state_chan;
 somatic_d_t daemon_cx;				///< The context of the current daemon
 Krang::Hardware* krang;				///< Interface for the motor and sensors on the hardware
 simulation::World* world;			///< the world representation in dart
@@ -81,6 +82,16 @@ void *kbhit(void *) {
 }
 
 /* ******************************************************************************************** */
+/// Get the joint values from the encoders and the imu and compute the center of mass as well 
+void getState(Eigen::Vector4d& state, double dt) {
+  krang->updateSensors(dt);
+	state(0) = (krang->amc->pos[0] + krang->amc->pos[1])/2.0 + krang->imu;
+	state(1) = (krang->amc->vel[0] + krang->amc->vel[1])/2.0 + krang->imuSpeed;
+	state(2) = (krang->amc->pos[1] - krang->amc->pos[0]) / 2.0;
+	state(3) = (krang->amc->vel[1] - krang->amc->vel[0]) / 2.0;
+}
+
+/* ******************************************************************************************** */
 void init() {
 
 	// Initialize the daemon
@@ -95,16 +106,17 @@ void init() {
 	// Create a thread to wait for user input to begin balancing
 	pthread_t kbhitThread;
 	pthread_create(&kbhitThread, NULL, &kbhit, NULL);
-}
 
-/* ******************************************************************************************** */
-/// Get the joint values from the encoders and the imu and compute the center of mass as well 
-void getState(Eigen::Vector4d& state, double dt) {
-  krang->updateSensors(dt);
-	state(0) = (krang->amc->pos[0] + krang->amc->pos[1])/2.0 + krang->imu;
-	state(1) = (krang->amc->vel[0] + krang->amc->vel[1])/2.0 + krang->imuSpeed;
-	state(2) = (krang->amc->pos[1] - krang->amc->pos[0]) / 2.0;
-	state(3) = (krang->amc->vel[1] - krang->amc->vel[0]) / 2.0;
+	// Set the state, refstate and limits
+	getState(state, 0.0);
+	refState = state;
+	lowerLimit = state(0);
+	upperLimit = state(0) + 1.0;
+
+	// Open the channel
+	enum ach_status r = ach_open( &state_chan, "krang_state", NULL );
+	assert(ACH_OK == r);
+	r = ach_flush(&state_chan);
 }
 
 /* ******************************************************************************************** */
@@ -155,7 +167,14 @@ void run () {
 		pthread_mutex_lock(&mutex);
 		dbg = (c_++ % 20 == 0);
 		if(dbg) cout << "\nmode: " << mode << endl;
-		
+
+		// Send the state
+		if(true) {
+			cout << "sending traj: " << endl; 
+			double traj[1][4] = {{state(0), state(1), state(2), state(3)}};
+			ach_put(&state_chan, &traj, sizeof(traj));
+		}
+	
 		// Read the gains if requested by user
 		if(shouldRead) {
 			readGains();
@@ -188,6 +207,26 @@ void run () {
 			else 
 			 	refState(0) -= 0.04;
 		}
+
+/*
+	 	double rtraj[1][4] = {0, 0, 0, 0};
+		size_t frame_size = 512;
+		struct timespec abstimeout = aa_tm_future(aa_tm_sec2timespec(.001));
+		ach_status_t r = ach_get(&state_chan, &rtraj, sizeof(rtraj), &frame_size, &abstimeout, ACH_O_LAST);
+		if(r == ACH_OK) {
+			cout << "received something" << endl;
+			for(size_t i = 0; i < 4; i++) refState(i) = rtraj[0][i];
+		}
+if( ACH_MISSED_FRAME == r ) {
+    fprintf(stdout, "Missed a/some messages(s)\n");
+} else if( ACH_STALE_FRAMES == r ) {
+    fprintf( stdout, "No new data\n" );
+} else if( ACH_OK != r ) {
+    fprintf(stdout, "Unable to get a message: %s\n", ach_result_to_string(r) );
+} else if( frame_size != sizeof(rtraj) ) {
+    fprintf( stdout, "Unexpected message size\n");
+}
+*/
 
 		// Compute the torques based on the state and the mode
 		double ul, ur;
@@ -224,10 +263,6 @@ int main(int argc, char* argv[]) {
 
 	// Initialize the daemon and the drivers
 	init();
-	getState(state, 0.0);
-	refState = state;
-	lowerLimit = state(0);
-	upperLimit = state(0) + 1.0;
 	
 	// Print the f/t values
 	run();
