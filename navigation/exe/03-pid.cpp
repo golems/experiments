@@ -24,7 +24,7 @@ Eigen::MatrixXd fix (const Eigen::MatrixXd& mat) { return mat; }
 
 using namespace std;
 
-ach_channel_t state_chan;
+ach_channel_t state_chan, odom_chan;
 somatic_d_t daemon_cx;				///< The context of the current daemon
 Krang::Hardware* krang;				///< Interface for the motor and sensors on the hardware
 simulation::World* world;			///< the world representation in dart
@@ -40,7 +40,9 @@ bool forwardMode = 1;
 
 Eigen::Vector4d K;
 Eigen::Vector4d refState;
-Eigen::Vector4d state;
+Eigen::Vector4d state;				//< current state [x,xdot,theta,thetadot]
+Eigen::Vector4d laststate;			//< last state for updating odom
+Eigen::VectorXd odom(6);			//< container for integrated 6D state
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 size_t mode = 0;		// 0 sitting, 1 move on ground following keyboard commands
@@ -84,11 +86,27 @@ void *kbhit(void *) {
 /* ******************************************************************************************** */
 /// Get the joint values from the encoders and the imu and compute the center of mass as well 
 void getState(Eigen::Vector4d& state, double dt) {
-  krang->updateSensors(dt);
+	krang->updateSensors(dt);
 	state(0) = (krang->amc->pos[0] + krang->amc->pos[1])/2.0 + krang->imu;
 	state(1) = (krang->amc->vel[0] + krang->amc->vel[1])/2.0 + krang->imuSpeed;
 	state(2) = (krang->amc->pos[1] - krang->amc->pos[0]) / 2.0;
 	state(3) = (krang->amc->vel[1] - krang->amc->vel[0]) / 2.0;
+}
+
+/* ******************************************************************************************** */
+/// Jon's version for full planar odometry
+void updateOdom(Eigen::Vector4d& state, Eigen::Vector4d& laststate, Eigen::VectorXd odom) {
+	double dx = state(0) - laststate(0);
+	double dy = 0;
+	double dt = state(2) - laststate(2);
+	double theta_cur = odom(4); // (state(2)-odom(4))/2 <-- midpoint orientation for last time step
+
+	odom(0) = odom(0) + dx*cos(theta_cur);
+	odom(1) = state(1);
+	odom(2) = odom(2) + dx*sin(theta_cur);;
+	odom(3) = 0;
+	odom(4) = state(2);
+	odom(5) = state(3);
 }
 
 /* ******************************************************************************************** */
@@ -113,10 +131,15 @@ void init() {
 	lowerLimit = state(0);
 	upperLimit = state(0) + 1.0;
 
-	// Open the channel
+	// Open the krang state channel
 	enum ach_status r = ach_open( &state_chan, "krang_state", NULL );
 	assert(ACH_OK == r);
 	r = ach_flush(&state_chan);
+
+	// Open the krang odometry channel
+	enum ach_status r = ach_open( &odom_chan, "krang_odom", NULL );
+	assert(ACH_OK == r);
+	r = ach_flush(&odom_chan);
 }
 
 /* ******************************************************************************************** */
@@ -170,9 +193,16 @@ void run () {
 
 		// Send the state
 		if(true) {
-			cout << "sending traj: " << endl; 
+			cout << "sending state: " << endl;
 			double traj[1][4] = {{state(0), state(1), state(2), state(3)}};
 			ach_put(&state_chan, &traj, sizeof(traj));
+		}
+
+		// Send the odom
+		if(true) {
+			cout << "sending odom: " << endl;
+			double traj[1][6] = {{odom(0), odom(1), odom(2), odom(3), odom(4), odom(5)}};
+			ach_put(&odom_chan, &traj, sizeof(traj));
 		}
 	
 		// Read the gains if requested by user
@@ -186,10 +216,11 @@ void run () {
 		double dt = (double)aa_tm_timespec2sec(aa_tm_sub(t_now, t_prev));	
 		t_prev = t_now;
 
-		// Get the state 
+		// Get the state and update odometry
+		laststate = state;
 		getState(state, dt); 
 		if(dbg) cout << "state: " << state.transpose() << endl;
-
+		updateOdom(state, laststate, odom);
 
 		// little trajectory test:
 		// Update the reference state if reached the previous key point
