@@ -35,8 +35,11 @@ bool dbg = false;
 bool shouldRead = false;
 size_t integralWindow = 0;
 double Kfint, intErrorLimit;
+
+/* little trajectory test
 double lowerLimit, upperLimit;		//< Limits for the wayPoint changes (hack)
 bool forwardMode = 1;
+*/
 
 Eigen::Vector4d K;
 Eigen::Vector4d refState;
@@ -87,26 +90,37 @@ void *kbhit(void *) {
 /// Get the joint values from the encoders and the imu and compute the center of mass as well 
 void getState(Eigen::Vector4d& state, double dt) {
 	krang->updateSensors(dt);
-	state(0) = (krang->amc->pos[0] + krang->amc->pos[1])/2.0 + krang->imu;
-	state(1) = (krang->amc->vel[0] + krang->amc->vel[1])/2.0 + krang->imuSpeed;
-	state(2) = (krang->amc->pos[1] - krang->amc->pos[0]) / 2.0;
-	state(3) = (krang->amc->vel[1] - krang->amc->vel[0]) / 2.0;
+	double width = 0.69; //< krang base width in meters (measured: 0.69)
+	double wheel_diameter = 0.536;
+	double tleft = krang->amc->pos[0] * wheel_diameter;  //< traversed distances for left wheel in meters
+	double tright = krang->amc->pos[1] * wheel_diameter; //< traversed distances for right wheel in meters
+	double vleft = krang->amc->vel[0] * wheel_diameter;  //< left wheel velocity in m/s
+	double vright = krang->amc->vel[1] * wheel_diameter; //< right wheel velocity in m/s
+	double k1 = 0.55; //< scaling constant to make angle actually work
+	double k2 = 5; //< scaling constant to make displacement actually work
+
+	state(0) = k2*(tleft + tright)/2.0 + krang->imu;
+	state(1) = (vleft + vright)/2.0 + krang->imuSpeed;
+	state(2) = k1*(tright - tleft)/width; // (krang->amc->pos[1] - krang->amc->pos[0]) / 2.0;
+	state(3) = k1*(tright - tleft)/width; // TODO: verify
 }
 
 /* ******************************************************************************************** */
 /// Jon's version for full planar odometry
-void updateOdom(Eigen::Vector4d& state, Eigen::Vector4d& laststate, Eigen::VectorXd odom) {
-	double dx = state(0) - laststate(0);
+void updateOdom(Eigen::Vector4d& state, Eigen::Vector4d& laststate, Eigen::VectorXd& odom) {
+	double dx = state[0] - laststate[0];
 	double dy = 0;
-	double dt = state(2) - laststate(2);
-	double theta_cur = odom(4); // (state(2)-odom(4))/2 <-- midpoint orientation for last time step
+	double dt = state[2] - laststate[2];
+	double theta_cur = odom[4]; // (state(2)-odom(4))/2 <-- midpoint orientation for last time step
 
-	odom(0) = odom(0) + dx*cos(theta_cur);
-	odom(1) = state(1);
-	odom(2) = odom(2) + dx*sin(theta_cur);;
-	odom(3) = 0;
-	odom(4) = state(2);
-	odom(5) = state(3);
+	//printf("dx: %lf, dt: %lf, theta_cur: %lf\n", dx, dt, theta_cur);
+
+	odom[0] = odom[0] + dx*cos(theta_cur);
+	odom[1] = state[1];
+	odom[2] = odom[2] + dx*sin(theta_cur);;
+	odom[3] = 0;
+	odom[4] = state[2];
+	odom[5] = state[3];
 }
 
 /* ******************************************************************************************** */
@@ -128,8 +142,11 @@ void init() {
 	// Set the state, refstate and limits
 	getState(state, 0.0);
 	refState = state;
+
+	/* little trajectory test
 	lowerLimit = state(0);
 	upperLimit = state(0) + 1.0;
+	*/
 
 	// Open the krang state channel
 	enum ach_status r = ach_open( &state_chan, "krang_state", NULL );
@@ -137,7 +154,7 @@ void init() {
 	r = ach_flush(&state_chan);
 
 	// Open the krang odometry channel
-	enum ach_status r = ach_open( &odom_chan, "krang_odom", NULL );
+	r = ach_open( &odom_chan, "krang_odom", NULL );
 	assert(ACH_OK == r);
 	r = ach_flush(&odom_chan);
 }
@@ -190,20 +207,6 @@ void run () {
 		pthread_mutex_lock(&mutex);
 		dbg = (c_++ % 20 == 0);
 		if(dbg) cout << "\nmode: " << mode << endl;
-
-		// Send the state
-		if(true) {
-			cout << "sending state: " << endl;
-			double traj[1][4] = {{state(0), state(1), state(2), state(3)}};
-			ach_put(&state_chan, &traj, sizeof(traj));
-		}
-
-		// Send the odom
-		if(true) {
-			cout << "sending odom: " << endl;
-			double traj[1][6] = {{odom(0), odom(1), odom(2), odom(3), odom(4), odom(5)}};
-			ach_put(&odom_chan, &traj, sizeof(traj));
-		}
 	
 		// Read the gains if requested by user
 		if(shouldRead) {
@@ -222,6 +225,23 @@ void run () {
 		if(dbg) cout << "state: " << state.transpose() << endl;
 		updateOdom(state, laststate, odom);
 
+		// Send the state
+		if(true) {
+		  double traj[1][4] = {{state(0), state(1), state(2), state(3)}};
+		  //if(dbg) cout << "sending state: " << state << endl;
+		  //printf("sending state: %2.3lf %2.3lf %2.3lf %2.3lf\n", traj[0][0], traj[0][1], traj[0][2], traj[0][3]);
+		  ach_put(&state_chan, &traj, sizeof(traj));
+		}
+
+		// Send the odom
+		if(true) {
+		  double traj[1][6] = {{odom(0), odom(1), odom(2), odom(3), odom(4), odom(5)}};
+		  //printf("sending odom: %2.3lf %2.3lf %2.3lf %2.3lf %2.3f %2.3lf\n", traj[0][0], traj[0][1], traj[0][2], traj[0][3], traj[0][4], traj[0][5]);
+		  //cout << "sending odom: " << odom << endl;
+		  ach_put(&odom_chan, &traj, sizeof(traj));
+		}
+
+		/*
 		// little trajectory test:
 		// Update the reference state if reached the previous key point
 		// TODO: Double check angle error
@@ -238,6 +258,7 @@ void run () {
 			else 
 			 	refState(0) -= 0.04;
 		}
+		*/
 
 /*
 	 	double rtraj[1][4] = {0, 0, 0, 0};
