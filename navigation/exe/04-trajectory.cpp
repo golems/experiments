@@ -125,7 +125,7 @@ void updateState(Eigen::Vector4d& wheelsState, Eigen::Vector4d& lastWheelsState,
 	state[1] = wheelsState[1];
 	state[2] = state[2] + dx*sin(last_theta);
 	state[3] = 0;
-	state[4] = wheelsState[2];
+	state[4] = state[4] + dt;
 	state[5] = wheelsState[3];
 }
 
@@ -135,15 +135,11 @@ void init() {
 	// Initialize the daemon
 	somatic_d_opts_t dopt;
 	memset(&dopt, 0, sizeof(dopt)); 
-	dopt.ident = "03-pid";
+	dopt.ident = "04-trajectory";
 	somatic_d_init(&daemon_cx, &dopt);
 
 	// Initialize the motors and sensors on the hardware and update the kinematics in dart
 	krang = new Krang::Hardware(Krang::Hardware::MODE_ALL_GRIPSCH, &daemon_cx, robot); 
-
-	// Create a thread to wait for user input to begin balancing
-	pthread_t kbhitThread;
-	pthread_create(&kbhitThread, NULL, &kbhit, NULL);
 
 	// Open channel to publish the state
 	enum ach_status r = ach_open(&state_chan, "krang_global", NULL);
@@ -156,19 +152,28 @@ void init() {
 	r = ach_flush(&vision_chan);
 
 	// Receive the current state from vision
-	double rtraj[1][3] = {0};
+	double rtraj[1][3] = {1, 2, 3};
 	size_t frame_size = 512;
+	cout << "waiting for initial vision data: " << endl;
 	r = ach_get(&vision_chan, &rtraj, sizeof(rtraj), &frame_size, NULL, ACH_O_WAIT);
-	for(size_t i = 0; i < 3; i++) state(2*i) = rtraj[1][i];
-	state(1) = state(3) = state(5) = 0.0;
-	cout << "state: " << state.transpose() << ", OK?" << endl;
-	getchar();
+	for(size_t i = 0; i < 3; i++) printf("%lf\t", rtraj[0][i]);
+	printf("\n");
 
 	// Set the state, refstate and limits
 	updateWheelsState(wheelsState, 0.0);
 	lastWheelsState = wheelsState;
 	updateState(wheelsState, lastWheelsState, state);
+
+	// Reset the current state to vision data
+	for(size_t i = 0; i < 3; i++) state(2*i) = rtraj[0][i];
+	state(1) = state(3) = state(5) = 0.0;
+	cout << "state: " << state.transpose() << ", OK?" << endl;
+	getchar();
 	refState = state;
+
+	// Create a thread to wait for user input to begin balancing
+	pthread_t kbhitThread;
+	pthread_create(&kbhitThread, NULL, &kbhit, NULL);
 
 }
 
@@ -238,6 +243,7 @@ void run () {
 		updateWheelsState(wheelsState, dt); 
 		if(dbg) cout << "wheelsState: " << wheelsState.transpose() << endl;
 		updateState(wheelsState, lastWheelsState, state);
+		if(dbg) cout << "state: " << state.transpose() << endl;
 
 		// Send the state
 		if(true) {
