@@ -116,7 +116,7 @@ void updateWheelsState(Eigen::Vector4d& wheelsState, double dt) {
 	wheelsState(0) = k2*(tleft + tright)/2.0 + krang->imu;
 	wheelsState(1) = (vleft + vright)/2.0 + krang->imuSpeed;
 	wheelsState(2) = k1*(tright - tleft)/width; // (krang->amc->pos[1] - krang->amc->pos[0]) / 2.0;
-	wheelsState(3) = k1*(tright - tleft)/width; // TODO: verify
+	wheelsState(3) = k1*(vright - vleft)/width; // TODO: verify
 }
 
 /* ******************************************************************************************** */
@@ -227,8 +227,9 @@ void computeTorques (const Vector6d& state, double& ul, double& ur) {
 	double u_spin = (K(2)*error(2) + K(3)*error(3));
 
 	// Limit the output torques
+	u_spin = max(-20.0, min(20.0, u_spin));
+	u_x= max(-15.0, min(15.0, u_x));
 	if(dbg) printf("u_x: %lf, u_spin: %lf\n", u_x, u_spin);
-	u_spin = max(-30.0, min(30.0, u_spin));
 	ul = u_x - u_spin;
 	ur = u_x + u_spin;
 	ul = max(-30.0, min(30.0, ul));
@@ -307,25 +308,26 @@ void run () {
 
 			Eigen::Vector2d dir (cos(state(4)), sin(state(4)));
 			Eigen::Vector2d refInCurr (refState(0) - state(0), refState(2) - state(2));
-			double xerror = SQ(dir.dot(refInCurr));
+			double xerror = dir.dot(refInCurr);
 			double therror = SQ(refState(4) - state(4));
-			static const double xErrorThres = SQ(0.10);
+			//static const double xErrorThres = SQ(0.10);
 			static const double thErrorThres = SQ(0.06);
-			if(dbg) cout << "traj idx xerror: " << (sqrt(xerror)) << ", vs. " << (sqrt(xErrorThres)) << endl;
+			// if(dbg) cout << "traj idx xerror: " << (sqrt(xerror)) << ", vs. " << (sqrt(xErrorThres)) << endl;
+			if(dbg) cout << "traj idx xerror: " << (xerror) << ", vs. 0.0 "  << endl;
 			if(dbg) cout << "traj idx therror: " << R2D(sqrt(therror)) << ", vs. " << R2D(sqrt(thErrorThres)) << endl;
 			if(dbg) cout << "jump permission: " << jumpPermission << endl;
-			bool reached = (xerror < xErrorThres) && (therror < thErrorThres);
+			bool reached = (xerror < 0.05) && (therror < thErrorThres);
 
 			if(dbg) printf("reached: %d, xreached: %d, threached: %d\n", reached,
-				(xerror < xErrorThres), (therror < thErrorThres));
+				(xerror < 0.05), (therror < thErrorThres));
 			if(jumpPermission & reached) {
 				fprintf(file, "%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n", state(0), state(2), state(4), 
 					refState(0), refState(2), refState(4));
 				fflush(file);
-				// trajIdx = min((trajIdx + 1), (trajectory.size() - 1));
-				trajIdx = min((trajIdx + 1), (size_t) 20);
+				trajIdx = min((trajIdx + 1), (trajectory.size() - 1));
 				refState = trajectory[trajIdx];
 //				jumpPermission = false;
+				if(trajIdx == trajectory.size() - 1) mode = 0;
 			}
 		}
 		if(dbg) cout << "traj idx: " << trajIdx << ", traj size: " << trajectory.size() << endl;
