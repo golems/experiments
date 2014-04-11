@@ -22,11 +22,14 @@
 
 #include <kore.hpp>
 
+#define SQ(x) ((x) * (x))
+#define R2D(x) (((x) / M_PI) * 180.0)
+
 Eigen::MatrixXd fix (const Eigen::MatrixXd& mat) { return mat; }
 using namespace std;
 
 /* ******************************************************************************************** */
-ach_channel_t state_chan, vision_chan;
+ach_channel_t state_chan, vision_chan, base_waypts_chan;
 somatic_d_t daemon_cx;				//< The context of the current daemon
 Krang::Hardware* krang;				//< Interface for the motor and sensors on the hardware
 simulation::World* world;			//< the world representation in dart
@@ -37,6 +40,7 @@ bool start = false;
 bool dbg = false;
 bool shouldRead = false;
 size_t mode = 0;		//< 0 sitting, 1 move on ground following keyboard commands
+bool jumpPermission = true;
 
 /* ******************************************************************************************** */
 typedef Eigen::Matrix<double,6,1> Vector6d;
@@ -44,6 +48,9 @@ Vector6d refState;
 Vector6d state;					//< current state (x,x.,y,y.,th,th.)
 Eigen::Vector4d wheelsState;		 //< wheel pos and vels in radians (lphi, lphi., rphi, rphi.)
 Eigen::Vector4d lastWheelsState; //< last wheel state used to update the state 
+vector <Vector6d> trajectory;		//< the goal trajectory	
+size_t trajIdx = 0;
+FILE* file;							//< used to print the state when the next trajectory index is used
 
 /* ******************************************************************************************** */
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;	//< mutex to update gains
@@ -81,6 +88,7 @@ void *kbhit(void *) {
 		else if(input=='k') refState(0) -= kOffset;
 		else if(input=='j') refState(2) += kOffset;
 		else if(input=='l') refState(2) -= kOffset;
+		else if(input==' ') jumpPermission = !jumpPermission;
 		pthread_mutex_unlock(&mutex);
 	}
 }
@@ -132,6 +140,10 @@ void updateState(Eigen::Vector4d& wheelsState, Eigen::Vector4d& lastWheelsState,
 /* ******************************************************************************************** */
 void init() {
 
+	// Open the file
+	file = fopen("bla", "w+");
+	assert((file != NULL) && "Could not open the file");
+
 	// Initialize the daemon
 	somatic_d_opts_t dopt;
 	memset(&dopt, 0, sizeof(dopt)); 
@@ -151,11 +163,17 @@ void init() {
 	assert(ACH_OK == r);
 	r = ach_flush(&vision_chan);
 
+	// Open channel to receive waypoints data
+	r = ach_open(&base_waypts_chan, "krang_base_waypts", NULL );
+	assert(ACH_OK == r);
+	r = ach_flush(&base_waypts_chan);
+
 	// Receive the current state from vision
 	double rtraj[1][3] = {1, 2, 3};
-	size_t frame_size = 512;
+	size_t frame_size = 0;
 	cout << "waiting for initial vision data: " << endl;
 	r = ach_get(&vision_chan, &rtraj, sizeof(rtraj), &frame_size, NULL, ACH_O_WAIT);
+	assert(ACH_OK == r);
 	for(size_t i = 0; i < 3; i++) printf("%lf\t", rtraj[0][i]);
 	printf("\n");
 
@@ -187,26 +205,62 @@ void computeTorques (const Vector6d& state, double& ul, double& ur) {
 		ul = ur = 0.0;
 		return;
 	}
-	if(dbg) cout << "refState: " << refState.transpose() << endl;
+
+	// Compute the linear pos error by projecting the reference state's position in the current
+	// state frame to the current heading direction
+	Eigen::Vector2d dir (cos(state(4)), sin(state(4)));
+	Eigen::Vector2d refInCurr (refState(0) - state(0), refState(2) - state(2));
+	double linear_pos_err = dir.dot(refInCurr);
+	double linear_vel_err = state(1);
+	
+	// Compute the angular position error by taking the difference of the two headings
+	double angular_pos_err = refState(4) - state(4);
+	double angular_vel_err = state(5);
 
 	// Compute the error and set the y-components to 0
-	Vector6d error = state - refState;
-	error(2) = error(3) = 0.0;
+	Eigen::Vector4d error (linear_pos_err, linear_vel_err, angular_pos_err, angular_vel_err);
 	if(dbg) cout << "error: " << error.transpose() << endl;
 	if(dbg) cout << "K: " << K.transpose() << endl;
 
 	// Compute the forward and spin torques (note K is 4x1 for x and th)
-	double u_x = -K(0)*error(0) + K(1)*error(1);
-	double u_spin = -K(2)*error(4) + K(3)*error(5);
+	double u_x = (K(0)*error(0) + K(1)*error(1));
+	double u_spin = (K(2)*error(2) + K(3)*error(3));
 
 	// Limit the output torques
 	if(dbg) printf("u_x: %lf, u_spin: %lf\n", u_x, u_spin);
-	u_spin = max(-10.0, min(10.0, u_spin));
-	ul = u_x + u_spin;
-	ur = u_x - u_spin;
-	ul = max(-20.0, min(20.0, ul));
-	ur = max(-20.0, min(20.0, ur));
+	u_spin = max(-30.0, min(30.0, u_spin));
+	ul = u_x - u_spin;
+	ur = u_x + u_spin;
+	ul = max(-30.0, min(30.0, ul));
+	ur = max(-30.0, min(30.0, ur));
 	if(dbg) printf("ul: %lf, ur: %lf\n", ul, ur);
+}
+
+/* ******************************************************************************************** */
+/// Updates the trajectory using the waypoints channel
+void updateTrajectory () {
+
+	// Check if a message is received
+	const size_t k = 170;
+	double rtraj[k][3] = {0};
+	size_t frame_size = 0;
+	struct timespec abstimeout = aa_tm_future(aa_tm_sec2timespec(.001));
+	ach_status_t r = ach_get(&base_waypts_chan, &rtraj, sizeof(rtraj), &frame_size, 
+			&abstimeout, ACH_O_LAST);
+	if(!(r == ACH_OK || r == ACH_MISSED_FRAME)) return;
+
+	// Fill the trajectory data (3 doubles, 8 bytes, for each traj. point)
+	trajectory.clear();
+	size_t numPoints = frame_size / (8 * 3);
+	for(size_t p_idx = 0; p_idx < numPoints; p_idx++) {
+		Vector6d refState;
+		refState << rtraj[p_idx][0], 0.0, rtraj[p_idx][1], 0.0, rtraj[p_idx][2], 0.0;
+		trajectory.push_back(refState);
+	}
+
+	// Update the reference state
+	trajIdx = 0;
+	refState = trajectory[0];
 }
 
 /* ******************************************************************************************** */
@@ -244,6 +298,38 @@ void run () {
 		if(dbg) cout << "wheelsState: " << wheelsState.transpose() << endl;
 		updateState(wheelsState, lastWheelsState, state);
 		if(dbg) cout << "state: " << state.transpose() << endl;
+
+		// Check if a new trajectory data is given
+		updateTrajectory();
+		
+		// Update the reference state if necessary
+		if(!trajectory.empty()) {
+
+			Eigen::Vector2d dir (cos(state(4)), sin(state(4)));
+			Eigen::Vector2d refInCurr (refState(0) - state(0), refState(2) - state(2));
+			double xerror = SQ(dir.dot(refInCurr));
+			double therror = SQ(refState(4) - state(4));
+			static const double xErrorThres = SQ(0.10);
+			static const double thErrorThres = SQ(0.06);
+			if(dbg) cout << "traj idx xerror: " << (sqrt(xerror)) << ", vs. " << (sqrt(xErrorThres)) << endl;
+			if(dbg) cout << "traj idx therror: " << R2D(sqrt(therror)) << ", vs. " << R2D(sqrt(thErrorThres)) << endl;
+			if(dbg) cout << "jump permission: " << jumpPermission << endl;
+			bool reached = (xerror < xErrorThres) && (therror < thErrorThres);
+
+			if(dbg) printf("reached: %d, xreached: %d, threached: %d\n", reached,
+				(xerror < xErrorThres), (therror < thErrorThres));
+			if(jumpPermission & reached) {
+				fprintf(file, "%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n", state(0), state(2), state(4), 
+					refState(0), refState(2), refState(4));
+				fflush(file);
+				// trajIdx = min((trajIdx + 1), (trajectory.size() - 1));
+				trajIdx = min((trajIdx + 1), (size_t) 20);
+				refState = trajectory[trajIdx];
+//				jumpPermission = false;
+			}
+		}
+		if(dbg) cout << "traj idx: " << trajIdx << ", traj size: " << trajectory.size() << endl;
+		if(dbg) cout << "refState: " << refState.transpose() << endl;
 
 		// Send the state
 		if(true) {
