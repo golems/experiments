@@ -21,8 +21,7 @@ int main(void){
 
 	// define a 2D trajectory container
 	const size_t k = 1;
-	double traj[1][3] = {9.81, 6.43, 1.686};
-	// double traj[1][3] = {9.30, 18.21, 0.177};
+	double traj[1][3] = {0.8, 3.6, 0};
 
 	// open the channel
 	enum ach_status r = ach_open( &channel, "krang_vision", NULL );

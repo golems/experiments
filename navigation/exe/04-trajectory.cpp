@@ -100,8 +100,8 @@ void updateWheelsState(Eigen::Vector4d& wheelsState, double dt) {
 	// Model constants
 	static const double width = 0.69; //< krang base width in meters (measured: 0.69)
 	static const double wheel_diameter = 0.536;
-	static const double k1 = 0.55; //< scaling constant to make angle actually work
-	static const double k2 = 5; //< scaling constant to make displacement actually work
+	static const double k1 = 0.475;//< scaling constant to make angle actually work. old: 0.55
+	static const double k2 = 0.503; //< scaling constant to make displacement actually work: 5
 
 	// Update the sensor information
 	krang->updateSensors(dt);
@@ -113,8 +113,8 @@ void updateWheelsState(Eigen::Vector4d& wheelsState, double dt) {
 	double vright = krang->amc->vel[1] * wheel_diameter; //< right wheel velocity in m/s
 
 	// Set the state
-	wheelsState(0) = k2*(tleft + tright)/2.0 + krang->imu;
-	wheelsState(1) = (vleft + vright)/2.0 + krang->imuSpeed;
+	wheelsState(0) = k2*(tleft + tright)/2.0;// + krang->imu;
+	wheelsState(1) = k2*(vleft + vright)/2.0;// + krang->imuSpeed;
 	wheelsState(2) = k1*(tright - tleft)/width; // (krang->amc->pos[1] - krang->amc->pos[0]) / 2.0;
 	wheelsState(3) = k1*(vright - vleft)/width; // TODO: verify
 }
@@ -186,7 +186,7 @@ void init() {
 	for(size_t i = 0; i < 3; i++) state(2*i) = rtraj[0][i];
 	state(1) = state(3) = state(5) = 0.0;
 	cout << "state: " << state.transpose() << ", OK?" << endl;
-	getchar();
+	// getchar();
 	refState = state;
 
 	// Create a thread to wait for user input to begin balancing
@@ -298,6 +298,11 @@ void run () {
 		updateWheelsState(wheelsState, dt); 
 		if(dbg) cout << "wheelsState: " << wheelsState.transpose() << endl;
 		updateState(wheelsState, lastWheelsState, state);
+		if(dbg) {
+			fprintf(file, "%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t0\n", state(0), state(2), state(4), 
+				refState(0), refState(2), refState(4));
+			fflush(file);
+		}
 		if(dbg) cout << "state: " << state.transpose() << endl;
 
 		// Check if a new trajectory data is given
@@ -310,18 +315,18 @@ void run () {
 			Eigen::Vector2d refInCurr (refState(0) - state(0), refState(2) - state(2));
 			double xerror = dir.dot(refInCurr);
 			double therror = SQ(refState(4) - state(4));
-			//static const double xErrorThres = SQ(0.10);
+			static const double xErrorThres = -0.001;
 			static const double thErrorThres = SQ(0.06);
 			// if(dbg) cout << "traj idx xerror: " << (sqrt(xerror)) << ", vs. " << (sqrt(xErrorThres)) << endl;
-			if(dbg) cout << "traj idx xerror: " << (xerror) << ", vs. 0.0 "  << endl;
-			if(dbg) cout << "traj idx therror: " << R2D(sqrt(therror)) << ", vs. " << R2D(sqrt(thErrorThres)) << endl;
+			if(dbg) cout << "traj idx xerror: " << (xerror) << ", vs. " << xErrorThres  << endl;
+			if(dbg) cout << "traj idx therror (deg): " << R2D(sqrt(therror)) << ", vs. " << R2D(sqrt(thErrorThres)) << endl;
 			if(dbg) cout << "jump permission: " << jumpPermission << endl;
-			bool reached = (xerror < 0.05) && (therror < thErrorThres);
+			bool reached = (xerror < xErrorThres) && (therror < thErrorThres);
 
 			if(dbg) printf("reached: %d, xreached: %d, threached: %d\n", reached,
-				(xerror < 0.05), (therror < thErrorThres));
+				(xerror < xErrorThres), (therror < thErrorThres));
 			if(jumpPermission & reached) {
-				fprintf(file, "%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n", state(0), state(2), state(4), 
+				fprintf(file, "%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t1\n", state(0), state(2), state(4), 
 					refState(0), refState(2), refState(4));
 				fflush(file);
 				trajIdx = min((trajIdx + 1), (trajectory.size() - 1));
