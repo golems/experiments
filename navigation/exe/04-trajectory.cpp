@@ -280,7 +280,9 @@ void run () {
 
 		pthread_mutex_lock(&mutex);
 		dbg = (c_++ % 20 == 0);
-		if(dbg) cout << "\nmode: " << mode << endl;
+		if(dbg) cout << "\nmode: " << mode;
+		if(dbg) cout << " start: " << start;
+		if(dbg) cout << " jumpPerm: " << jumpPermission << endl;
 	
 		// Read the gains if requested by user
 		if(shouldRead) {
@@ -351,7 +353,7 @@ void run () {
 
 		// Apply the torque
 		double input [2] = {ul, ur};
-		if(dbg) cout << "u: {" << ul << ", " << ur << "}, start: " << start << endl;
+		if(dbg) cout << "u: {" << ul << ", " << ur << "}" << endl;
 		if(!start) input[0] = input[1] = 0.0;
 		somatic_motor_cmd(&daemon_cx, krang->amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
 		lastMode = mode;
