@@ -15,10 +15,13 @@ do
 done
 
 #### start up daemons
-ach mk spacenav-data -o 666 -1
-ach mk spacenav2-data -o 666 -1
-nohup jachd -j 1 -c spacenav-data -I jachd-spacenav >/dev/null &
-nohup jachd -j 0 -c spacenav2-data -I jachd-spacenav2 >/dev/null &
+ach mk spacenav-data-l -o 666 -1
+ach mk spacenav-data-r -o 666 -1
+nohup jachd -j 1 -c spacenav-data-l -I jachd-spacenav >/dev/null &
+nohup jachd -j 0 -c spacenav-data-r -I jachd-spacenav2 >/dev/null &
+
+#### make vis channel b/c saul's code expects it:
+ach mk telop-05-workspce-vis -o 666 -1
 
 if [[ -n $DO_LIBERTY ]] 
 then

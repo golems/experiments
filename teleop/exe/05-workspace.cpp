@@ -75,9 +75,13 @@ double GRIPPER_CURRENT_OPEN[] = {10.0};
 double GRIPPER_CURRENT_CLOSE[] = {-10.0};
 double GRIPPER_CURRENT_ZERO[] = {0.0};
 
-double GRIPPER_POSITION_OPEN[] = {0, 0, 0, 128};
-double GRIPPER_POSITION_CLOSE[] = {255, 255, 255, 128};
-double GRIPPER_POSITION_PARTIAL[] = {70, 70, 70, 128};
+// Gripper constants (could move to constructor, but convenient here)
+double ROBOTIQ_GRIPPER_POSITION_OPEN[] = {0, 0, 0, 128};
+double ROBOTIQ_GRIPPER_POSITION_CLOSE[] = {255, 255, 255, 128};
+double ROBOTIQ_GRIPPER_POSITION_PARTIAL[] = {70, 70, 70, 128};
+double SCHUNK_GRIPPER_POSITION_OPEN[] = {0.9};
+double SCHUNK_GRIPPER_POSITION_CLOSE[] = {0};
+double SCHUNK_GRIPPER_POSITION_PARTIAL[] = {0.4};
 
 /* ********************************************************************************************* */
 // State variables
@@ -176,10 +180,16 @@ void run() {
 			somatic_motor_halt(&daemon_cx, hw->arms[Krang::RIGHT]);
 		} break;
 		case 'u': {
-			somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::LEFT], GRIPPER_POSITION_PARTIAL, 4);
+			if (hw->mode & Krang::Hardware::MODE_GRIPPERS_SCH)
+				somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::LEFT], SCHUNK_GRIPPER_POSITION_PARTIAL, 1);
+			else if (hw->mode & Krang::Hardware::MODE_GRIPPERS)
+				somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::LEFT], ROBOTIQ_GRIPPER_POSITION_PARTIAL, 4);
 		} break;
 		case 'i': {
-			somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::RIGHT], GRIPPER_POSITION_PARTIAL, 4);
+			if (hw->mode & Krang::Hardware::MODE_GRIPPERS_SCH)
+				somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::RIGHT], SCHUNK_GRIPPER_POSITION_PARTIAL, 1);
+			else if (hw->mode & Krang::Hardware::MODE_GRIPPERS)
+				somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::RIGHT], ROBOTIQ_GRIPPER_POSITION_PARTIAL, 4);
 		} break;
 		case 'f': {
 			spacenavs_flipped = !spacenavs_flipped;
@@ -329,10 +339,23 @@ void run() {
 
 			// Close the gripper if button 0 is pressed, open it if button 1.
 			if(spnavs[sde]->buttons[sint] == 1) {
-				somatic_motor_setpos(&daemon_cx, hw->grippers[sde], GRIPPER_POSITION_OPEN, 4);
+				if (hw->mode & Krang::Hardware::MODE_GRIPPERS_SCH) {
+					somatic_motor_reset(&daemon_cx, hw->grippers[sde]);
+					usleep(1e4);
+					somatic_motor_setpos(&daemon_cx, hw->grippers[sde], SCHUNK_GRIPPER_POSITION_OPEN, 1);
+				}
+				else if (hw->mode & Krang::Hardware::MODE_GRIPPERS)
+					somatic_motor_setpos(&daemon_cx, hw->grippers[sde], ROBOTIQ_GRIPPER_POSITION_OPEN, 4);
 			}
 			if(spnavs[sde]->buttons[(sint + 1) % 2] == 1) {
-				somatic_motor_setpos(&daemon_cx, hw->grippers[sde], GRIPPER_POSITION_CLOSE, 4);
+				if (hw->mode & Krang::Hardware::MODE_GRIPPERS_SCH) {
+					somatic_motor_reset(&daemon_cx, hw->grippers[sde]);
+					usleep(1e4);
+					somatic_motor_setpos(&daemon_cx, hw->grippers[sde], SCHUNK_GRIPPER_POSITION_CLOSE, 1);
+				}
+				else if (hw->mode & Krang::Hardware::MODE_GRIPPERS)
+					somatic_motor_setpos(&daemon_cx, hw->grippers[sde], ROBOTIQ_GRIPPER_POSITION_CLOSE, 4);
+
 			}
 
 			// depending on the synch mode, get a workspace velocity either from the spacenav or
@@ -450,7 +473,7 @@ void init() {
 	// Initalize dart. Do this before we initialize the daemon because initalizing the daemon 
 	// changes our current directory to somewhere in /var/run.
 	DartLoader dl;
-	world = dl.parseWorld("../../common/scenes/01-World-Robot.urdf");
+	world = dl.parseWorld("/etc/kore/scenes/01-World-Robot.urdf");
 	assert((world != NULL) && "Could not find the world");
 	robot = world->getSkeleton("Krang");
 
@@ -460,8 +483,8 @@ void init() {
 	daemon_opt.ident = "05-workspace";
 	somatic_d_init(&daemon_cx, &daemon_opt);
 
-	// Initialize the hardware
-	Krang::Hardware::Mode mode = (Krang::Hardware::Mode)(Krang::Hardware::MODE_ALL);
+	// Initialize the hardware for the appropriate gripper mode
+	Krang::Hardware::Mode mode = (Krang::Hardware::Mode)(Krang::Hardware::MODE_ALL_GRIPSCH);
 	hw = new Krang::Hardware(mode, &daemon_cx, robot);
 
 	// Initialize the spacenavs
