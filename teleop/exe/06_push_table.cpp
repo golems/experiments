@@ -26,11 +26,15 @@
  */
 
 /**
- * @file 04-joyWork.cpp
- * @author Can Erdogan
- * @date Jan 24, 2014
- * @brief This file demonstrates workspace control with the joystick.
+ * @file 05-workspace.cpp
+ * @author Saul Reynolds-Haertle, Can Erdogan, Munzir Zafar
+ * @date July 25, 2013
+ * @brief This file demonstrates workspace control running on
+ * Krang. It will probably be a workhorse for general tasks, including
+ * demonstrations.
  */
+
+#include <argp.h>
 
 #include <kore.hpp>
 #include <kore/workspace.hpp>
@@ -44,6 +48,48 @@
 #include <simulation/World.h>
 
 #include <somatic/msg.h>
+
+
+
+// context struct
+typedef struct {
+	somatic_d_t d;
+	somatic_d_opts_t d_opts;
+	int opt_home_mode;
+} cx_t;
+
+/* ----------------- */
+/* ARGP Definitions  */
+/* ----------------- */
+static struct argp_option options[] = {
+		{"home_mode", 'h', NULL, 0, "home arm rather than pushing"},
+};
+
+/// argp parsing function
+static int parse_opt( int key, char *arg, struct argp_state *state);
+/// argp program version
+const char *argp_program_version = "push_table-0.0.1";
+/// argp program arguments documentation
+static char args_doc[] = "";
+/// argp program doc line
+static char doc[] = "hack: pushes a table";
+/// argp object
+static struct argp argp = {options, parse_opt, args_doc, doc, NULL, NULL, NULL };
+
+static int parse_opt( int key, char *arg, struct argp_state *state) {
+	cx_t *cx = (cx_t*)state->input;
+	switch(key) {
+	case 'h':
+		cx->opt_home_mode++;
+		break;
+	case 0:
+		break;
+	}
+
+	somatic_d_argp_parse( key, arg, &cx->d_opts );
+
+	return 0;
+}
 
 /* ********************************************************************************************* */
 // Type declarations
@@ -73,21 +119,25 @@ double GRIPPER_CURRENT_OPEN[] = {10.0};
 double GRIPPER_CURRENT_CLOSE[] = {-10.0};
 double GRIPPER_CURRENT_ZERO[] = {0.0};
 
-double GRIPPER_POSITION_OPEN[] = {0, 0, 0, 128};
-double GRIPPER_POSITION_CLOSE[] = {255, 255, 255, 128};
-double GRIPPER_POSITION_PARTIAL[] = {70, 70, 70, 128};
+// Gripper constants (could move to constructor, but convenient here)
+double ROBOTIQ_GRIPPER_POSITION_OPEN[] = {0, 0, 0, 128};
+double ROBOTIQ_GRIPPER_POSITION_CLOSE[] = {255, 255, 255, 128};
+double ROBOTIQ_GRIPPER_POSITION_PARTIAL[] = {70, 70, 70, 128};
+double SCHUNK_GRIPPER_POSITION_OPEN[] = {0.9};
+double SCHUNK_GRIPPER_POSITION_CLOSE[] = {0};
+double SCHUNK_GRIPPER_POSITION_PARTIAL[] = {0.4};
 
 /* ********************************************************************************************* */
 // State variables
 
 // hardware objects
 Krang::Hardware* hw;                                   ///< connects to hardware
-bool sending_commands = false;
+bool sending_commands = true;
+std::map<Krang::Side, Krang::SpaceNav*> spnavs; ///< points to spacenavs
 
 // process state
 somatic_d_t daemon_cx;                          ///< daemon context
 Somatic__VisualizeData* vis_msg;
-ach_channel_t js_chan;				///< Read joystick data on this channel
 
 // pointers to important DART objects
 simulation::World* world;
@@ -125,9 +175,9 @@ void destroy() {
 	Krang::destroy_curses();
 
 	// Stop the daemon
-	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
+	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
 	                SOMATIC__EVENT__CODES__PROC_STOPPING, NULL, NULL);
-	
+
 	// close the channel we use for publishing visualization data
 	somatic_d_channel_close(&daemon_cx, &vis_chan);
 
@@ -136,6 +186,8 @@ void destroy() {
 	delete wss[Krang::RIGHT];
 
 	// Close down the hardware
+	delete spnavs[Krang::LEFT];
+	delete spnavs[Krang::RIGHT];
 	delete hw;
 
 	// Destroy the daemon resources
@@ -172,10 +224,16 @@ void run() {
 			somatic_motor_halt(&daemon_cx, hw->arms[Krang::RIGHT]);
 		} break;
 		case 'u': {
-			somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::LEFT], GRIPPER_POSITION_PARTIAL, 4);
+			if (hw->mode & Krang::Hardware::MODE_GRIPPERS_SCH)
+				somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::LEFT], SCHUNK_GRIPPER_POSITION_PARTIAL, 1);
+			else if (hw->mode & Krang::Hardware::MODE_GRIPPERS)
+				somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::LEFT], ROBOTIQ_GRIPPER_POSITION_PARTIAL, 4);
 		} break;
 		case 'i': {
-			somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::RIGHT], GRIPPER_POSITION_PARTIAL, 4);
+			if (hw->mode & Krang::Hardware::MODE_GRIPPERS_SCH)
+				somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::RIGHT], SCHUNK_GRIPPER_POSITION_PARTIAL, 1);
+			else if (hw->mode & Krang::Hardware::MODE_GRIPPERS)
+				somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::RIGHT], ROBOTIQ_GRIPPER_POSITION_PARTIAL, 4);
 		} break;
 		case 'f': {
 			spacenavs_flipped = !spacenavs_flipped;
@@ -250,7 +308,7 @@ void run() {
 			attron(COLOR_PAIR(sending_commands?Krang::COLOR_RED_BACKGROUND:COLOR_WHITE));
 			mvprintw(11, 1, "sendcmds mode: %s", sending_commands?"yes":"no ");
 			attroff(COLOR_PAIR(sending_commands?Krang::COLOR_RED_BACKGROUND:COLOR_WHITE));
-			
+
 			attron(COLOR_PAIR(synch_mode?Krang::COLOR_RED_BACKGROUND:COLOR_WHITE));
 			mvprintw(12, 1, "synch mode: %s", synch_mode?"yes":"no ");
 			attroff(COLOR_PAIR(synch_mode?Krang::COLOR_RED_BACKGROUND:COLOR_WHITE));
@@ -294,10 +352,6 @@ void run() {
 		// Perform workspace for each arm, changing the input for right arm based on synch mode
 
 		for(int sint = Krang::LEFT; sint-1 < Krang::RIGHT; sint++) {
-
-			// =====================================================================
-			// Aget the state, initialize, and prepare nullspace
-
 			// Get the arm side and the joint angles
 			Krang::Side sde = static_cast<Krang::Side>(sint);
 			Krang::Side sde_other = (sde==Krang::LEFT) ? Krang::RIGHT : Krang::LEFT;
@@ -313,7 +367,7 @@ void run() {
 
 			// Create variables
 			Eigen::MatrixXd Tref_off_sync;
-			Eigen::VectorXd spacenav_input = Eigen::VectorXd::Zero(6);
+			Eigen::VectorXd spacenav_input;
 			Eigen::VectorXd xdot_spacenav = Eigen::VectorXd::Zero(6);
 			Eigen::VectorXd xdot_hoh = Eigen::VectorXd::Zero(6);
 			Eigen::VectorXd xdot_ws_goal = Eigen::VectorXd::Zero(6);
@@ -321,31 +375,32 @@ void run() {
 			// Nullspace: construct a qdot that the jacobian will bias toward using the nullspace
 			nullspace_qdot_refs[sde] = (nullspace_q_refs[sde] - q).cwiseProduct(nullspace_q_masks[sde]);
 
-			// =====================================================================
-			// Handle joystick input 
+			// update spacenav, because we use it for grippers regardless of the mode
+			if (spacenavs_flipped)
+				spacenav_input = spnavs[sde_other]->updateSpaceNav();
+			else
+				spacenav_input = spnavs[sde]->updateSpaceNav();
 
-			// Get the message and check output is OK.
-			int r = 0;
-			Somatic__Joystick *js_msg = 
-				SOMATIC_GET_LAST_UNPACK( r, somatic__joystick, &protobuf_c_system_allocator, 4096, 
-				&js_chan );
-			if((ACH_OK == r || ACH_MISSED_FRAME == r) && (js_msg != NULL)) {
-
-				// Get the values
-				char buttons [10];						///< Stores the joystick button inputs
-				double axes [6];						///< Stores the joystick axes inputs
-				for(size_t i = 0; i < 10; i++) 
-					buttons[i] = js_msg->buttons->data[i] ? 1 : 0;
-				memcpy(axes, js_msg->axes->data, sizeof(axes));
-
-				// Get the joystick input
-				if(sde == Krang::LEFT && (buttons[4] == 1 && buttons[6] == 1))
-					spacenav_input << axes[1], axes[0], axes[3], axes[2], axes[4], axes[5];
-				else if(sde == Krang::RIGHT && (buttons[5] == 1 && buttons[7] == 1))
-					spacenav_input << axes[1], axes[0], axes[3], axes[2], axes[4], axes[5];
-				spacenav_input *= -1;
+			// Close the gripper if button 0 is pressed, open it if button 1.
+			if(spnavs[sde]->buttons[sint] == 1) {
+				if (hw->mode & Krang::Hardware::MODE_GRIPPERS_SCH) {
+					somatic_motor_reset(&daemon_cx, hw->grippers[sde]);
+					usleep(1e4);
+					somatic_motor_setpos(&daemon_cx, hw->grippers[sde], SCHUNK_GRIPPER_POSITION_OPEN, 1);
+				}
+				else if (hw->mode & Krang::Hardware::MODE_GRIPPERS)
+					somatic_motor_setpos(&daemon_cx, hw->grippers[sde], ROBOTIQ_GRIPPER_POSITION_OPEN, 4);
 			}
-			//std::cout << "spacenav input: " << spacenav_input << std::endl;
+			if(spnavs[sde]->buttons[(sint + 1) % 2] == 1) {
+				if (hw->mode & Krang::Hardware::MODE_GRIPPERS_SCH) {
+					somatic_motor_reset(&daemon_cx, hw->grippers[sde]);
+					usleep(1e4);
+					somatic_motor_setpos(&daemon_cx, hw->grippers[sde], SCHUNK_GRIPPER_POSITION_CLOSE, 1);
+				}
+				else if (hw->mode & Krang::Hardware::MODE_GRIPPERS)
+					somatic_motor_setpos(&daemon_cx, hw->grippers[sde], ROBOTIQ_GRIPPER_POSITION_CLOSE, 4);
+
+			}
 
 			// depending on the synch mode, get a workspace velocity either from the spacenav or
 			// from the other arm
@@ -400,7 +455,7 @@ void run() {
 
 			// do some debug output by printing to curses
 			if (debug_print_this_it) {
-				// if(synch_mode && (sde == Krang::RIGHT)) 
+				// if(synch_mode && (sde == Krang::RIGHT))
 				// 	Krang::curses_display_matrix(Tref_R_sync);
 				Eigen::MatrixXd ee_trans = wss[sde]->endEffector->getWorldTransform();
 				Eigen::VectorXd ee_pos = Krang::transformToEuler(ee_trans, math::XYZ);
@@ -453,14 +508,119 @@ void run() {
 		}
 		usleep(time_sleep_usec);
 	}
-		
+
+}
+
+void run2()
+{
+	// start some timers
+	double time_last_display = aa_tm_timespec2sec(aa_tm_now());
+	double time_last = aa_tm_timespec2sec(aa_tm_now());
+
+	while(!somatic_sig_received) {
+		// ========================================================================================
+		// Update state: get passed time and kinematics, sensor input and check for current limit
+
+		// Update times
+		double time_now = aa_tm_timespec2sec(aa_tm_now());
+		double time_delta = time_now - time_last;
+		time_last = time_now;
+
+		// set up debug printing
+		debug_print_this_it = (time_now - time_last_display) > (1.0 / DISPLAY_FREQUENCY);
+		if(debug_print_this_it) time_last_display = time_now;
+
+		// Update the robot
+		hw->updateSensors(time_delta);
+
+		// Check for too high currents
+		if(Krang::checkCurrentLimits(hw->arms[Krang::LEFT]->cur, 7)
+		   && Krang::checkCurrentLimits(hw->arms[Krang::RIGHT]->cur, 7)) {
+			if (sending_commands) {
+				sending_commands = false;
+				hoh_mode = false;
+				somatic_motor_halt(&daemon_cx, hw->arms[Krang::LEFT]);
+				somatic_motor_halt(&daemon_cx, hw->arms[Krang::RIGHT]);
+			}
+
+			// // TODO: handle this more nicely
+			// destroy();
+			// exit(EXIT_FAILURE);
+		}
+
+		// ========================================================================================
+		// Perform workspace for each arm, changing the input for right arm based on synch mode
+
+//		for(int sint = Krang::LEFT; sint-1 < Krang::RIGHT; sint++) {
+//			// Get the arm side and the joint angles
+//			Krang::Side sde = static_cast<Krang::Side>(sint);
+//			Krang::Side sde_other = (sde==Krang::LEFT) ? Krang::RIGHT : Krang::LEFT;
+//			Eigen::VectorXd q = robot->getConfig(*wss[sde]->arm_ids);
+
+		Krang::Side sde = Krang::LEFT;
+		Eigen::VectorXd q = robot->getConfig(*wss[sde]->arm_ids);
+
+		// Create variables
+		Eigen::MatrixXd Tref_off_sync;
+		Eigen::VectorXd spacenav_input;
+		Eigen::VectorXd xdot_spacenav = Eigen::VectorXd::Zero(6);
+		Eigen::VectorXd xdot_hoh = Eigen::VectorXd::Zero(6);
+		Eigen::VectorXd xdot_ws_goal = Eigen::VectorXd::Zero(6);
+
+		// Nullspace: construct a qdot that the jacobian will bias toward using the nullspace
+		nullspace_qdot_refs[sde] = (nullspace_q_refs[sde] - q).cwiseProduct(nullspace_q_masks[sde]);
+
+		// update spacenav, because we use it for grippers regardless of the mode
+		//spacenav_input = spnavs[sde]->updateSpaceNav();
+		spacenav_input = Eigen::VectorXd::Zero(6);
+		spacenav_input << 0.1, 0.0, 0.0, 0.0, 0.0, 0.0;
+
+
+		// get a workspace velocity from the spacenav
+		xdot_spacenav = wss[sde]->uiInputVelToXdot(spacenav_input);
+
+		// put together the inputs from spacenav and hand-over-hand
+		xdot_ws_goal = xdot_spacenav; // + xdot_hoh;
+
+		// Jacobian: compute the desired jointspace velocity from the inputs and sensors
+		Eigen::VectorXd qdot_jacobian;
+		wss[sde]->updateFromXdot(xdot_ws_goal, hw->fts[sde]->lastExternal,
+								 nullspace_qdot_refs[sde], time_delta, qdot_jacobian);
+
+		// make sure we're not going too fast
+		double magn = qdot_jacobian.norm();
+		if (magn > 0.5) qdot_jacobian *= (0.5 / magn);
+		if (magn < .05) qdot_jacobian *= 0.0;
+
+		// avoid joint limits
+		Eigen::VectorXd qdot_avoid(7);
+		Krang::computeQdotAvoidLimits(robot, *wss[sde]->arm_ids, q, qdot_avoid);
+
+		// add qdots together to get the overall movement
+		Eigen::VectorXd qdot_apply = qdot_avoid + qdot_jacobian;
+
+		// and apply that to the arm
+		Eigen::VectorXd w = wss[sde]->endEffector->getWorldTransform().topRightCorner<3,1>();
+		if(sending_commands) {
+			std::cout << "<qdot: " << qdot_apply << ">" << std::endl;
+			std::cout << "<FT: " << hw->fts[sde]->lastExternal << ">" << std::endl;
+			std::cout << "<q:" << q << ">" << std::endl;
+			std::cout << "<w:" << w << ">" << std::endl;
+			somatic_motor_setvel(&daemon_cx, hw->arms[sde], qdot_apply.data(), 7);
+		}
+
+		// end once we've pushed forward enough
+		if (w[0] > 0.65) {
+			destroy();
+			exit(EXIT_FAILURE);
+		}
+	}
 }
 
 /* ******************************************************************************************** */
 /// Initialization
 void init() {
-
-	// Initalize dart. Do this before we initialize the daemon because initalizing the daemon 
+	// Initalize dart. Do this before we initialize the daemon because initalizing the daemon
 	// changes our current directory to somewhere in /var/run.
 	DartLoader dl;
 	world = dl.parseWorld("/etc/kore/scenes/01-World-Robot.urdf");
@@ -470,29 +630,33 @@ void init() {
 	// Initialize the daemon
 	somatic_d_opts_t daemon_opt;
 	memset(&daemon_opt, 0, sizeof(daemon_opt)); // zero initialize
-	daemon_opt.ident = "04-joyWork";
+	daemon_opt.ident = "06-push_table";
 	somatic_d_init(&daemon_cx, &daemon_opt);
 
-	// Initialize the hardware
+	// Initialize the hardware for the appropriate gripper mode
 	Krang::Hardware::Mode mode = (Krang::Hardware::Mode)(Krang::Hardware::MODE_ALL_GRIPSCH);
 	hw = new Krang::Hardware(mode, &daemon_cx, robot);
 
-	// Set up the workspace stuff
-	wss[Krang::LEFT] = new Krang::WorkspaceControl(robot, Krang::LEFT, K_WORKERR_P, NULLSPACE_GAIN, 
-		DAMPING_GAIN, SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_TRANSLATION_GAIN, 		COMPLIANCE_ORIENTATION_GAIN);
-	wss[Krang::RIGHT] = new Krang::WorkspaceControl(robot, Krang::RIGHT, K_WORKERR_P, NULLSPACE_GAIN, 
-		DAMPING_GAIN, SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN, COMPLIANCE_TRANSLATION_GAIN, 		COMPLIANCE_ORIENTATION_GAIN);
+	// Initialize the spacenavs
+	spnavs[Krang::LEFT] = new Krang::SpaceNav(&daemon_cx, "joystick-data", .5); // spacenav-data-l
+	spnavs[Krang::RIGHT] = new Krang::SpaceNav(&daemon_cx, "spacenav-data-r", .5);
 
-	// Set up nullspace reference values
+	// Set up the workspace stuff
+	wss[Krang::LEFT] = new Krang::WorkspaceControl(robot, Krang::LEFT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN,
+	                                               SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN,
+	                                               COMPLIANCE_TRANSLATION_GAIN, COMPLIANCE_ORIENTATION_GAIN);
+	wss[Krang::RIGHT] = new Krang::WorkspaceControl(robot, Krang::RIGHT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN,
+	                                                SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN,
+	                                                COMPLIANCE_TRANSLATION_GAIN, COMPLIANCE_ORIENTATION_GAIN);
+
+	// set up the relative transform between the hands
+	Trel_pri_to_off = wss[primary_hand]->Tref.inverse() * wss[off_hand]->Tref;
+
+	// set up nullspace stuff
 	nullspace_q_refs[Krang::LEFT] = (Krang::Vector7d()   << 0, -1.0, 0, -0.5, 0, -0.8, 0).finished();
 	nullspace_q_refs[Krang::RIGHT] = (Krang::Vector7d()  << 0,  1.0, 0,  0.5, 0,  0.8, 0).finished();
 	nullspace_q_masks[Krang::LEFT] = (Krang::Vector7d()  << 0,    0, 0,    1, 0,    0, 0).finished();
 	nullspace_q_masks[Krang::RIGHT] = (Krang::Vector7d() << 0,    0, 0,    1, 0,    0, 0).finished();
-
-	// Initialize the joystick channel
-	int r = ach_open(&js_chan, "joystick-data", NULL);
-	aa_hard_assert(r == ACH_OK, "Ach failure '%s' on opening Joystick channel (%s, line %d)\n", 
-		ach_result_to_string(static_cast<ach_status_t>(r)), __FILE__, __LINE__);
 
 	// initialize visualization
 	size_t vecsizes[] = {6, 6, 6, 6, 6, 6, 6, 6};
@@ -501,14 +665,58 @@ void init() {
 	somatic_d_channel_open(&daemon_cx, &vis_chan, "teleop-05-workspace-vis", NULL);
 
 	// Start the daemon_cx running
-	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
+	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
 	                SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
+}
+
+void home()
+{
+
+	double time_last = aa_tm_timespec2sec(aa_tm_now());
+
+	// set a convenient start position for the left arm for pushing the table
+	std::cout << "Homing left arm" << std::endl << std::flush;
+	Eigen::VectorXd homeConfigsL(7);
+	homeConfigsL << 1.06675184,  -1.12861514, -0.00956137, -2.04222107, 0.12383681,  1.48772061,  -0.06238156;
+	somatic_motor_setpos(&daemon_cx, hw->arms[Krang::LEFT], homeConfigsL.data(), 7);
+
+	double err = 1e10;
+	while (!somatic_sig_received && err > 0.001) {
+		// Update robot
+		double time_now = aa_tm_timespec2sec(aa_tm_now());
+		double time_delta = time_now - time_last;
+		time_last = time_now;
+		hw->updateSensors(time_delta);
+
+		Eigen::VectorXd q = robot->getConfig(*wss[Krang::LEFT]->arm_ids);
+		//std::cout << "q cur: " << q << std::endl;
+		err = (homeConfigsL - q).norm();
+		//std::cout << "err: " << err << std::endl;
+		usleep(1000);
+	}
+
+	std::cout << "Should be home now (" << "err=" << err << ")" << std::endl;
 }
 
 /* ******************************************************************************************** */
 /// The main thread
 int main(int argc, char* argv[]) {
+	cx_t cx;
+	memset(&cx, 0, sizeof(cx));
+
+	// Set the default options
+	cx.opt_home_mode = 0;
+
+	// parse cmd args
+	argp_parse (&argp, argc, argv, 0, NULL, &cx);
+
 	init();
-	run();
+	//run();
+	// foo
+	if (cx.opt_home_mode)
+		home();
+	else
+		run2();
+
 	destroy();
 }

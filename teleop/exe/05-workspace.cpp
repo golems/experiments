@@ -488,7 +488,7 @@ void init() {
 	hw = new Krang::Hardware(mode, &daemon_cx, robot);
 
 	// Initialize the spacenavs
-	spnavs[Krang::LEFT] = new Krang::SpaceNav(&daemon_cx, "spacenav-data-l", .5);
+	spnavs[Krang::LEFT] = new Krang::SpaceNav(&daemon_cx, "joystick-data", .5); // spacenav-data-l
 	spnavs[Krang::RIGHT] = new Krang::SpaceNav(&daemon_cx, "spacenav-data-r", .5);
 
 	// Set up the workspace stuff
