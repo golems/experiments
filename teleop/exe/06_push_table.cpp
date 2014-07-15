@@ -165,7 +165,11 @@ std::map<Krang::Side, Eigen::Vector3d> hoh_initpos;
 bool debug_print_this_it;       ///< whether we print
 
 // stuff for visualization
-ach_channel_t vis_chan;
+ach_channel_t vis_chan; // saul's whatever thing
+ach_channel_t vision_chan; // vision channel for reading tag info (need in sync w/ control stuff)
+size_t frame_size = 512;
+size_t frame_cnt = 10;
+double time_start;
 
 /* ******************************************************************************************** */
 /// Clean up
@@ -511,11 +515,147 @@ void run() {
 
 }
 
+/* ******************************************************************************************** */
+/// Initialization
+void init() {
+	// Initalize dart. Do this before we initialize the daemon because initalizing the daemon
+	// changes our current directory to somewhere in /var/run.
+	DartLoader dl;
+	world = dl.parseWorld("/etc/kore/scenes/01-World-Robot.urdf");
+	assert((world != NULL) && "Could not find the world");
+	robot = world->getSkeleton("Krang");
+
+	// Initialize the daemon
+	somatic_d_opts_t daemon_opt;
+	memset(&daemon_opt, 0, sizeof(daemon_opt)); // zero initialize
+	daemon_opt.ident = "06-push_table";
+	somatic_d_init(&daemon_cx, &daemon_opt);
+
+	// Initialize the hardware for the appropriate gripper mode
+	Krang::Hardware::Mode mode = (Krang::Hardware::Mode)(Krang::Hardware::MODE_ALL_GRIPSCH);
+	hw = new Krang::Hardware(mode, &daemon_cx, robot);
+
+	// Initialize the spacenavs
+	spnavs[Krang::LEFT] = new Krang::SpaceNav(&daemon_cx, "joystick-data", .5); // spacenav-data-l
+	spnavs[Krang::RIGHT] = new Krang::SpaceNav(&daemon_cx, "spacenav-data-r", .5);
+
+	// Set up the workspace stuff
+	wss[Krang::LEFT] = new Krang::WorkspaceControl(robot, Krang::LEFT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN,
+	                                               SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN,
+	                                               COMPLIANCE_TRANSLATION_GAIN, COMPLIANCE_ORIENTATION_GAIN);
+	wss[Krang::RIGHT] = new Krang::WorkspaceControl(robot, Krang::RIGHT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN,
+	                                                SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN,
+	                                                COMPLIANCE_TRANSLATION_GAIN, COMPLIANCE_ORIENTATION_GAIN);
+
+	// set up the relative transform between the hands
+	Trel_pri_to_off = wss[primary_hand]->Tref.inverse() * wss[off_hand]->Tref;
+
+	// set up nullspace stuff
+	nullspace_q_refs[Krang::LEFT] = (Krang::Vector7d()   << 0, -1.0, 0, -0.5, 0, -0.8, 0).finished();
+	nullspace_q_refs[Krang::RIGHT] = (Krang::Vector7d()  << 0,  1.0, 0,  0.5, 0,  0.8, 0).finished();
+	nullspace_q_masks[Krang::LEFT] = (Krang::Vector7d()  << 0,    0, 0,    1, 0,    0, 0).finished();
+	nullspace_q_masks[Krang::RIGHT] = (Krang::Vector7d() << 0,    0, 0,    1, 0,    0, 0).finished();
+
+	// initialize visualization
+	size_t vecsizes[] = {6, 6, 6, 6, 6, 6, 6, 6};
+	vis_msg = somatic__visualize_data__alloc(8, vecsizes, 0);
+	vis_msg->msg = "teleop/05-workspace";
+	somatic_d_channel_open(&daemon_cx, &vis_chan, "teleop-05-workspace-vis", NULL);
+
+	// Start the daemon_cx running
+	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
+	                SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
+}
+
+/*
+ * Initializes the ach channel for vision stuff
+ */
+void init_vision()
+{
+	// create the ach channel
+	enum ach_status r = ach_create( "krang_vision", frame_cnt, frame_size, NULL );
+	if( ACH_OK != r ) {
+		if (ACH_EEXIST == r)
+			fprintf( stderr, "Channel already exists.\n" );
+		else {
+			fprintf( stderr, "Could not create channel: %s\n", ach_result_to_string(r) );
+			exit(EXIT_FAILURE);
+		}
+	}
+
+	// open the channel
+	r = ach_open( &vision_chan, "krang_vision", NULL );
+	assert(ACH_OK == r);
+	r = ach_flush(&vision_chan);
+}
+
+/*
+ * pulls last set of gripper and table poses from the vision channel
+ */
+void get_last_vision(Eigen::Vector3d &gripper_pose, Eigen::Vector3d &table_pose)
+{
+	// receive last
+	double rtraj[3][3] = {0};
+	int r = ach_get( &vision_chan, &rtraj, sizeof(rtraj), &frame_size, NULL, ACH_O_LAST );
+
+	if ( r == ACH_OK || r == ACH_STALE_FRAMES || r == ACH_MISSED_FRAME ) {
+		// Eigen::Vector3d gripper_pose = Eigen::Vector3d(rtraj[0][0], rtraj[0][1], rtraj[0][2]);
+		// Eigen::Vector3d table_pose = Eigen::Vector3d(rtraj[1][0], rtraj[1][1], rtraj[1][2]);
+		// std::cout << "read gripper pose: " << gripper_pose.transpose() << std::endl;
+		// std::cout << "read table pose: " << table_pose.transpose() << std::endl;
+
+		gripper_pose << rtraj[0][0], rtraj[0][1], rtraj[0][2];
+		table_pose << rtraj[1][0], rtraj[1][1], rtraj[1][2];
+	}
+	else {
+		std::cout << "read error: " << r << std::endl;
+	}
+}
+
+void home()
+{
+
+	double time_last = aa_tm_timespec2sec(aa_tm_now());
+
+	// open gripper:
+	somatic_motor_reset(&daemon_cx, hw->grippers[Krang::LEFT]);
+	usleep(1e4);
+	somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::LEFT], SCHUNK_GRIPPER_POSITION_OPEN, 1);
+
+	// set a convenient start position for the left arm for pushing the table
+	std::cout << "Homing left arm" << std::endl << std::flush;
+	Eigen::VectorXd homeConfigsL(7);
+	homeConfigsL << 1.06675184,  -1.12861514, -0.00956137, -2.04222107, 0.12383681,  1.48772061,  -0.06238156;
+	somatic_motor_setpos(&daemon_cx, hw->arms[Krang::LEFT], homeConfigsL.data(), 7);
+
+	double err = 1e10;
+	while (!somatic_sig_received && err > 0.001) {
+		// Update robot
+		double time_now = aa_tm_timespec2sec(aa_tm_now());
+		double time_delta = time_now - time_last;
+		time_last = time_now;
+		hw->updateSensors(time_delta);
+
+		Eigen::VectorXd q = robot->getConfig(*wss[Krang::LEFT]->arm_ids);
+		//std::cout << "q cur: " << q << std::endl;
+		err = (homeConfigsL - q).norm();
+		//std::cout << "err: " << err << std::endl;
+		usleep(1000);
+	}
+
+	std::cout << "Should be home now (" << "err=" << err << ")" << std::endl;
+}
+
 void run2()
 {
 	// start some timers
 	double time_last_display = aa_tm_timespec2sec(aa_tm_now());
 	double time_last = aa_tm_timespec2sec(aa_tm_now());
+	time_start = aa_tm_timespec2sec(aa_tm_now());
+
+	// some eigen 2D pose vectors for printing vision stuff
+	Eigen::Vector3d gripper_pose = Eigen::Vector3d();
+	Eigen::Vector3d table_pose = Eigen::Vector3d();
 
 	while(!somatic_sig_received) {
 		// ========================================================================================
@@ -599,13 +739,20 @@ void run2()
 		// add qdots together to get the overall movement
 		Eigen::VectorXd qdot_apply = qdot_avoid + qdot_jacobian;
 
-		// and apply that to the arm
+		// pull vision channel info, just for printing
+		get_last_vision(gripper_pose, table_pose);
+
+		// apply that to the arm
 		Eigen::VectorXd w = wss[sde]->endEffector->getWorldTransform().topRightCorner<3,1>();
 		if(sending_commands) {
+			std::cout << std::endl;
 			std::cout << "<qdot: " << qdot_apply << ">" << std::endl;
 			std::cout << "<FT: " << hw->fts[sde]->lastExternal << ">" << std::endl;
 			std::cout << "<q:" << q << ">" << std::endl;
 			std::cout << "<w:" << w << ">" << std::endl;
+			std::cout << "<time:" << time_now-time_start << ">" << std::endl;
+			std::cout << "gripper_pose:" << gripper_pose.transpose() << std::endl;
+			std::cout << "table_pose:" << table_pose.transpose() << std::endl;
 			somatic_motor_setvel(&daemon_cx, hw->arms[sde], qdot_apply.data(), 7);
 		}
 
@@ -615,87 +762,6 @@ void run2()
 			exit(EXIT_FAILURE);
 		}
 	}
-}
-
-/* ******************************************************************************************** */
-/// Initialization
-void init() {
-	// Initalize dart. Do this before we initialize the daemon because initalizing the daemon
-	// changes our current directory to somewhere in /var/run.
-	DartLoader dl;
-	world = dl.parseWorld("/etc/kore/scenes/01-World-Robot.urdf");
-	assert((world != NULL) && "Could not find the world");
-	robot = world->getSkeleton("Krang");
-
-	// Initialize the daemon
-	somatic_d_opts_t daemon_opt;
-	memset(&daemon_opt, 0, sizeof(daemon_opt)); // zero initialize
-	daemon_opt.ident = "06-push_table";
-	somatic_d_init(&daemon_cx, &daemon_opt);
-
-	// Initialize the hardware for the appropriate gripper mode
-	Krang::Hardware::Mode mode = (Krang::Hardware::Mode)(Krang::Hardware::MODE_ALL_GRIPSCH);
-	hw = new Krang::Hardware(mode, &daemon_cx, robot);
-
-	// Initialize the spacenavs
-	spnavs[Krang::LEFT] = new Krang::SpaceNav(&daemon_cx, "joystick-data", .5); // spacenav-data-l
-	spnavs[Krang::RIGHT] = new Krang::SpaceNav(&daemon_cx, "spacenav-data-r", .5);
-
-	// Set up the workspace stuff
-	wss[Krang::LEFT] = new Krang::WorkspaceControl(robot, Krang::LEFT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN,
-	                                               SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN,
-	                                               COMPLIANCE_TRANSLATION_GAIN, COMPLIANCE_ORIENTATION_GAIN);
-	wss[Krang::RIGHT] = new Krang::WorkspaceControl(robot, Krang::RIGHT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN,
-	                                                SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN,
-	                                                COMPLIANCE_TRANSLATION_GAIN, COMPLIANCE_ORIENTATION_GAIN);
-
-	// set up the relative transform between the hands
-	Trel_pri_to_off = wss[primary_hand]->Tref.inverse() * wss[off_hand]->Tref;
-
-	// set up nullspace stuff
-	nullspace_q_refs[Krang::LEFT] = (Krang::Vector7d()   << 0, -1.0, 0, -0.5, 0, -0.8, 0).finished();
-	nullspace_q_refs[Krang::RIGHT] = (Krang::Vector7d()  << 0,  1.0, 0,  0.5, 0,  0.8, 0).finished();
-	nullspace_q_masks[Krang::LEFT] = (Krang::Vector7d()  << 0,    0, 0,    1, 0,    0, 0).finished();
-	nullspace_q_masks[Krang::RIGHT] = (Krang::Vector7d() << 0,    0, 0,    1, 0,    0, 0).finished();
-
-	// initialize visualization
-	size_t vecsizes[] = {6, 6, 6, 6, 6, 6, 6, 6};
-	vis_msg = somatic__visualize_data__alloc(8, vecsizes, 0);
-	vis_msg->msg = "teleop/05-workspace";
-	somatic_d_channel_open(&daemon_cx, &vis_chan, "teleop-05-workspace-vis", NULL);
-
-	// Start the daemon_cx running
-	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
-	                SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
-}
-
-void home()
-{
-
-	double time_last = aa_tm_timespec2sec(aa_tm_now());
-
-	// set a convenient start position for the left arm for pushing the table
-	std::cout << "Homing left arm" << std::endl << std::flush;
-	Eigen::VectorXd homeConfigsL(7);
-	homeConfigsL << 1.06675184,  -1.12861514, -0.00956137, -2.04222107, 0.12383681,  1.48772061,  -0.06238156;
-	somatic_motor_setpos(&daemon_cx, hw->arms[Krang::LEFT], homeConfigsL.data(), 7);
-
-	double err = 1e10;
-	while (!somatic_sig_received && err > 0.001) {
-		// Update robot
-		double time_now = aa_tm_timespec2sec(aa_tm_now());
-		double time_delta = time_now - time_last;
-		time_last = time_now;
-		hw->updateSensors(time_delta);
-
-		Eigen::VectorXd q = robot->getConfig(*wss[Krang::LEFT]->arm_ids);
-		//std::cout << "q cur: " << q << std::endl;
-		err = (homeConfigsL - q).norm();
-		//std::cout << "err: " << err << std::endl;
-		usleep(1000);
-	}
-
-	std::cout << "Should be home now (" << "err=" << err << ")" << std::endl;
 }
 
 /* ******************************************************************************************** */
@@ -711,8 +777,10 @@ int main(int argc, char* argv[]) {
 	argp_parse (&argp, argc, argv, 0, NULL, &cx);
 
 	init();
+	init_vision();
+
 	//run();
-	// foo
+
 	if (cx.opt_home_mode)
 		home();
 	else
