@@ -625,7 +625,13 @@ void home()
 	// set a convenient start position for the left arm for pushing the table
 	std::cout << "Homing left arm" << std::endl << std::flush;
 	Eigen::VectorXd homeConfigsL(7);
-	homeConfigsL << 1.06675184,  -1.12861514, -0.00956137, -2.04222107, 0.12383681,  1.48772061,  -0.06238156;
+
+	// For pushing square table at original waist height (forgot to record):
+	//homeConfigsL << 1.06675184,  -1.12861514, -0.00956137, -2.04222107, 0.12383681,  1.48772061,  -0.06238156;
+
+	// For pushing steel cart at waist height: 2.532  -2.532
+	homeConfigsL << 1.00912082, -1.06367242, -0.03891839, -1.88363504, 0.26049611, 1.24310887,  -0.04654793;	
+
 	somatic_motor_setpos(&daemon_cx, hw->arms[Krang::LEFT], homeConfigsL.data(), 7);
 
 	double err = 1e10;
@@ -757,7 +763,7 @@ void run2()
 		}
 
 		// end once we've pushed forward enough
-		if (w[0] > 0.65) {
+		if (w[0] > 0.6) { // 65
 			destroy();
 			exit(EXIT_FAILURE);
 		}
