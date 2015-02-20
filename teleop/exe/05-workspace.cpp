@@ -93,7 +93,7 @@ std::map<Krang::Side, Krang::SpaceNav*> spnavs; ///< points to spacenavs
 
 // process state
 somatic_d_t daemon_cx;                          ///< daemon context
-Somatic__VisualizeData* vis_msg;
+// Somatic__VisualizeData* vis_msg;
 
 // pointers to important DART objects
 simulation::World* world;
@@ -121,7 +121,7 @@ std::map<Krang::Side, Eigen::Vector3d> hoh_initpos;
 bool debug_print_this_it;       ///< whether we print
 
 // stuff for visualization
-ach_channel_t vis_chan;
+// ach_channel_t vis_chan;
 
 /* ******************************************************************************************** */
 /// Clean up
@@ -135,7 +135,7 @@ void destroy() {
 	                SOMATIC__EVENT__CODES__PROC_STOPPING, NULL, NULL);
 	
 	// close the channel we use for publishing visualization data
-	somatic_d_channel_close(&daemon_cx, &vis_chan);
+	// somatic_d_channel_close(&daemon_cx, &vis_chan);
 
 	// Clean up the workspace stuff
 	delete wss[Krang::LEFT];
@@ -403,11 +403,11 @@ void run() {
 				somatic_motor_setvel(&daemon_cx, hw->arms[sde], qdot_apply.data(), 7);
 
 			// store some internal state into the vis_msg so we can publish it
-			Eigen::VectorXd posref_euler = Krang::transformToEuler(wss[sde]->Tref, math::XYZ);
-			for(int i = 0; i < 6; i++) vis_msg->vecs[0 + (4*sint)]->data[i] = posref_euler[i];
-			for(int i = 0; i < 6; i++) vis_msg->vecs[1 + (4*sint)]->data[i] = xdot_spacenav[i];
-			for(int i = 0; i < 6; i++) vis_msg->vecs[2 + (4*sint)]->data[i] = xdot_hoh[i];
-			for(int i = 0; i < 6; i++) vis_msg->vecs[3 + (4*sint)]->data[i] = hw->fts[sde]->lastExternal[i];
+			// Eigen::VectorXd posref_euler = Krang::transformToEuler(wss[sde]->Tref, math::XYZ);
+			// for(int i = 0; i < 6; i++) vis_msg->vecs[0 + (4*sint)]->data[i] = posref_euler[i];
+			// for(int i = 0; i < 6; i++) vis_msg->vecs[1 + (4*sint)]->data[i] = xdot_spacenav[i];
+			// for(int i = 0; i < 6; i++) vis_msg->vecs[2 + (4*sint)]->data[i] = xdot_hoh[i];
+			// for(int i = 0; i < 6; i++) vis_msg->vecs[3 + (4*sint)]->data[i] = hw->fts[sde]->lastExternal[i];
 
 			// do some debug output by printing to curses
 			if (debug_print_this_it) {
@@ -447,7 +447,7 @@ void run() {
 			}
 
 			// publish our visualization data
-			SOMATIC_PACK_SEND(&vis_chan, somatic__visualize_data, vis_msg);
+			// SOMATIC_PACK_SEND(&vis_chan, somatic__visualize_data, vis_msg);
 		}
 
 		// display everything curses has done
@@ -489,7 +489,7 @@ void init() {
 
 	// Initialize the spacenavs
 	spnavs[Krang::LEFT] = new Krang::SpaceNav(&daemon_cx, "joystick-data", .5); // spacenav-data-l
-	spnavs[Krang::RIGHT] = new Krang::SpaceNav(&daemon_cx, "spacenav-data-r", .5);
+	spnavs[Krang::RIGHT] = new Krang::SpaceNav(&daemon_cx, "spacenav-data", .5);
 
 	// Set up the workspace stuff
 	wss[Krang::LEFT] = new Krang::WorkspaceControl(robot, Krang::LEFT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
@@ -509,10 +509,10 @@ void init() {
 	nullspace_q_masks[Krang::RIGHT] = (Krang::Vector7d() << 0,    0, 0,    1, 0,    0, 0).finished();
 
 	// initialize visualization
-	size_t vecsizes[] = {6, 6, 6, 6, 6, 6, 6, 6};
-	vis_msg = somatic__visualize_data__alloc(8, vecsizes, 0);
-	vis_msg->msg = "teleop/05-workspace";
-	somatic_d_channel_open(&daemon_cx, &vis_chan, "teleop-05-workspace-vis", NULL);
+	// size_t vecsizes[] = {6, 6, 6, 6, 6, 6, 6, 6};
+	// vis_msg = somatic__visualize_data__alloc(8, vecsizes, 0);
+	// vis_msg->msg = "teleop/05-workspace";
+	// somatic_d_channel_open(&daemon_cx, &vis_chan, "teleop-05-workspace-vis", NULL);
 
 	// Start the daemon_cx running
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 

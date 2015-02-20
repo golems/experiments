@@ -38,9 +38,11 @@ dynamics::SkeletonDynamics* robot;			//< the robot representation in dart
 /* ******************************************************************************************** */
 bool start = false;
 bool dbg = false;
-bool shouldRead = false;
+bool updateGainsFromFile = false; 	//< if true, read new gains from the text file
+bool resetReference = false; 		//< if true, set reference to current state at next iteration
 size_t mode = 0;		//< 0 sitting, 1 move on ground following keyboard commands
 bool jumpPermission = true;
+bool wait_for_global_vision_msg = false;
 
 /* ******************************************************************************************** */
 typedef Eigen::Matrix<double,6,1> Vector6d;
@@ -91,6 +93,10 @@ void setReference(Vector6d& newRef) {
 
 /* ********************************************************************************************* */
 /// Get the mode input
+/*
+Keybindings:
+'1' - mode: 
+*/
 void *kbhit(void *) {
 	char input;
 	double kOffset = 0.05;
@@ -101,9 +107,8 @@ void *kbhit(void *) {
 		else if(input=='1') mode = 1;
 		else if(input=='d') dbg = !dbg;
 		else if(input=='s') start = !start;
-		else if(input=='r') shouldRead = true;
-		else if(input=='f') {
-			//refState = state;
+		else if(input=='g') updateGainsFromFile = true; 	//< if true, read new gains from the text file
+		else if(input=='r') { 								//< set reference to current state at next iteration
 			setReference(state);
 			angluarIntErr = 0;
 			linIntErr = 0;
@@ -175,7 +180,7 @@ void init() {
 	// Initialize the daemon
 	somatic_d_opts_t dopt;
 	memset(&dopt, 0, sizeof(dopt)); 
-	dopt.ident = "04-trajectory";
+	dopt.ident = "05-trajectoryPID";
 	somatic_d_init(&daemon_cx, &dopt);
 
 	// Initialize the motors and sensors on the hardware and update the kinematics in dart
@@ -197,13 +202,15 @@ void init() {
 	r = ach_flush(&base_waypts_chan);
 
 	// Receive the current state from vision
-	double rtraj[1][3] = {1, 2, 3};
-	size_t frame_size = 0;
-	cout << "waiting for initial vision data: " << endl;
-	r = ach_get(&vision_chan, &rtraj, sizeof(rtraj), &frame_size, NULL, ACH_O_WAIT);
-	assert(ACH_OK == r);
-	for(size_t i = 0; i < 3; i++) printf("%lf\t", rtraj[0][i]);
-	printf("\n");
+	double rtraj[1][3] = {0, 0, 0};
+	if (wait_for_global_vision_msg) {
+		size_t frame_size = 0;
+		cout << "waiting for initial vision data: " << endl;
+		r = ach_get(&vision_chan, &rtraj, sizeof(rtraj), &frame_size, NULL, ACH_O_WAIT);
+		assert(ACH_OK == r);
+		for(size_t i = 0; i < 3; i++) printf("%lf\t", rtraj[0][i]);
+		printf("\n");		
+	}
 
 	// Set the state, refstate and limits
 	updateWheelsState(wheelsState, 0.0);
@@ -262,13 +269,16 @@ void computeTorques (const Vector6d& state, double& ul, double& ur, double& dt) 
 	double u_spin = (K(3)*error(2) + K(5)*error(3)) + K(4) * angluarIntErr;
 
 	// Limit the output torques
-	u_spin = max(-20.0, min(20.0, u_spin));
-	u_x= max(-15.0, min(15.0, u_x));
+	double hard_max = 35.0;		//< never write values higher than this
+	double spin_max = 35.0; 	//< thershold on spin contribution
+	double lin_max = 35.0; 		//< threshold on linear contribution
+	u_spin = max(-spin_max, min(spin_max, u_spin));
+	u_x= max(-lin_max, min(lin_max, u_x));
 	if(dbg) printf("u_x: %lf, u_spin: %lf\n", u_x, u_spin);
 	ul = u_x - u_spin;
 	ur = u_x + u_spin;
-	ul = max(-30.0, min(30.0, ul));
-	ur = max(-30.0, min(30.0, ur));
+	ul = max(-hard_max, min(hard_max, ul));
+	ur = max(-hard_max, min(hard_max, ur));
 	if(dbg) printf("ul: %lf, ur: %lf\n", ul, ur);
 }
 
@@ -322,9 +332,9 @@ void run () {
 		if(dbg) cout << " do integration: " << doErrorIntegration << endl;
 	
 		// Read the gains if requested by user
-		if(shouldRead) {
+		if(updateGainsFromFile) {
 			readGains();
-			shouldRead = false;
+			updateGainsFromFile = false;
 		}
 
 		// Get the current time and compute the time difference and update the prev. time
@@ -338,7 +348,8 @@ void run () {
 		if(dbg) cout << "wheelsState: " << wheelsState.transpose() << endl;
 		updateState(wheelsState, lastWheelsState, state);
 		if(dbg) {
-			fprintf(file, "%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t0\n", state(0), state(2), state(4), 
+			fprintf(file, "%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t0\n", 
+				state(0), state(2), state(4), 
 				refState(0), refState(2), refState(4));
 			fflush(file);
 		}
@@ -412,9 +423,9 @@ void run () {
 		computeTorques(state, ul, ur, dt);
 
 		// Apply the torque
-		double input [2] = {ul, ur};
-		if(dbg) cout << "u: {" << ul << ", " << ur << "}" << endl;
+		double input[2] = {ul, ur};
 		if(!start) input[0] = input[1] = 0.0;
+		if(dbg) cout << "sending wheel control input: {" << input[0] << ", " << input[1] << "}" << endl;
 		somatic_motor_cmd(&daemon_cx, krang->amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
 		lastMode = mode;
 		pthread_mutex_unlock(&mutex);
@@ -429,6 +440,14 @@ void run () {
 /// The main thread
 int main(int argc, char* argv[]) {
 
+    if (argc > 1) {
+    	string flag = argv[1];
+    	cout << "flag: " << flag << endl;
+    	if (flag == "-v") {
+    		wait_for_global_vision_msg = true;
+    	}
+    }
+    
 	// Read the gains
 	readGains();
 
