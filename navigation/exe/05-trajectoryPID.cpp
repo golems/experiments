@@ -5,7 +5,8 @@
  * @brief Implements PID control to follow a trajectory. The global state of the robot is 
  * kept by combining vision data and odometry. If vision data is received, odometry is reset 
  * to stop error built-ups. 
- * The state is the 6x1 (x,x.,y,y.,th,th.) of the robot where (x,y,th) is the transform that
+ * WAS:--------- The state is the 6x1 (x,x.,y,y.,th,th.) of the robot where (x,y,th) is the transform that -------------
+ The state is the 6x1 (x,y,theta,xdot,ydot,thetadot) of the robot where (x,y,theta) is the transform that
  * represents the robot in the global frame. 
  */
 
@@ -24,6 +25,7 @@
 
 #define SQ(x) ((x) * (x))
 #define R2D(x) (((x) / M_PI) * 180.0)
+#define PI 3.141592 // TODO pull this from dart or somewhere
 
 Eigen::MatrixXd fix (const Eigen::MatrixXd& mat) { return mat; }
 using namespace std;
@@ -47,9 +49,9 @@ bool wait_for_global_vision_msg = false;
 /* ******************************************************************************************** */
 typedef Eigen::Matrix<double,6,1> Vector6d;
 Vector6d refState;
-Vector6d state;					//< current state (x,x.,y,y.,th,th.)
-Eigen::Vector4d wheelsState;		 //< wheel pos and vels in radians (lphi, lphi., rphi, rphi.)
-Eigen::Vector4d lastWheelsState; //< last wheel state used to update the state 
+Vector6d state;						//< current state (x,y,th,x.,y.,th.)
+Eigen::Vector4d wheelsState;		//< wheel pos and vels in radians (lphi, lphi., rphi, rphi.)
+Eigen::Vector4d lastWheelsState; 	//< last wheel state used to update the state 
 vector <Vector6d> trajectory;		//< the goal trajectory	
 size_t trajIdx = 0;
 FILE* file;							//< used to print the state when the next trajectory index is used
@@ -65,9 +67,20 @@ double angluarIntErr;
 double linIntErr;
 bool doErrorIntegration = false;
 
+/*
+ * Returns the angle expressed in radians between -Pi and Pi
+ */
+ 
+double unwrap(double angle) 
+{
+	// return (angle + PI) % (2 * PI) - PI;
+	return fmod(angle + PI, 2 * PI) - PI;
+}
+
 /// Read file for gains
 void readGains () {
-	ifstream file ("/home/jscholz/vc/experiments/navigation/data/gains-PID.txt");
+	// ifstream file ("/home/jscholz/vc/experiments/navigation/data/gains-PID.txt");
+	ifstream file ("../data/gains-PID.txt");
 	assert(file.is_open());
 	char line [1024];
 	K = Eigen::VectorXd::Zero(6);
@@ -125,6 +138,13 @@ void *kbhit(void *) {
 
 /* ******************************************************************************************** */
 /// Get the joint values from the encoders and the imu and compute the center of mass as well 
+/*
+ * wheelsState is a 4-vector containing:
+ * linear position (total distance traveled since start; average of both wheels)
+ * linear velocity (current linear vel; average of both wheels)
+ * angular position (difference of wheel dist over wheelbase)
+ * angular velocity (difference of wheel vel over wheelbase)
+ */
 void updateWheelsState(Eigen::Vector4d& wheelsState, double dt) {
 
 	// Model constants
@@ -152,19 +172,42 @@ void updateWheelsState(Eigen::Vector4d& wheelsState, double dt) {
 /* ******************************************************************************************** */
 /// Update the state using the wheels information with Euler approximation (we use the last
 /// theta with the forward motion to reflect changes on x and y axes)
+/*
+ * state is a 6-vector containing:
+ ---* 0: x
+ ---* 1: xdot
+ ---* 2: y
+ ---* 3: ydot
+ ---* 4: theta
+ ---* 5: thetadot
+ * 0: x
+ * 1: y
+ * 2: theta
+ * 3: xdot
+ * 4: ydot
+ * 5: thetadot
+ */
 void updateState(Eigen::Vector4d& wheelsState, Eigen::Vector4d& lastWheelsState, Vector6d& state) {
 
 	// Compute the change in forward direction and orientation
-	double dx = wheelsState[0] - lastWheelsState[0];
-	double dt = wheelsState[2] - lastWheelsState[2];
-	double last_theta = state[4]; 
+	double dlin = wheelsState[0] - lastWheelsState[0]; // linear distance covered (in *some* direction)
+	double dtheta = wheelsState[2] - lastWheelsState[2]; // angular distance covered
+	// double last_theta = state[4]; // last robot heading is whatever theta was before we update it
+	double last_theta = state[2]; // last robot heading is whatever theta was before we update it
 
-	state[0] = state[0] + dx*cos(last_theta);
-	state[1] = wheelsState[1];
-	state[2] = state[2] + dx*sin(last_theta);
-	state[3] = 0;
-	state[4] = state[4] + dt;
-	state[5] = wheelsState[3];
+	// state[0] = state[0] + dlin * cos(last_theta);//< x
+	// state[1] = wheelsState[1]; 					//< xdot <--- this is wrong; wheelsState is in robot frame but state is in world (odom) frame!
+	// state[2] = state[2] + dlin * sin(last_theta);//< y
+	// state[3] = 0;								//< ydot <--- this is wrong; there is no y velocity in the robot frame, but state is in world (odom) frame!
+	// state[4] = state[4] + dtheta;				//< theta
+	// state[5] = wheelsState[3];					//< thetadot
+
+	state[0] += dlin * cos(last_theta);				//< x
+	state[1] += dlin * sin(last_theta);				//< y
+	state[2] += dtheta;								//< theta
+	state[3] = wheelsState[1] * cos(last_theta); 	//< xdot
+	state[4] = wheelsState[1] * sin(last_theta); 	//< ydot
+	state[5] = wheelsState[3];						//< thetadot
 }
 
 /* ******************************************************************************************** */
@@ -218,8 +261,9 @@ void init() {
 	updateState(wheelsState, lastWheelsState, state);
 
 	// Reset the current state to vision data
-	for(size_t i = 0; i < 3; i++) state(2*i) = rtraj[0][i];
-	state(1) = state(3) = state(5) = 0.0;
+	for(size_t i = 0; i < 3; i++) 
+		state(i) = rtraj[0][i];
+	state(3) = state(4) = state(5) = 0.0; // set vels to zero
 	cout << "state: " << state.transpose() << ", OK?" << endl;
 	// getchar();
 	//refState = state;
@@ -231,52 +275,124 @@ void init() {
 
 }
 
+/* 
+ * Computes the error between the provided state and reference state vectors.
+ * Both are assumed to be in the world (or odom) frame.
+ */
+Vector6d computeError(const Vector6d& state, const Vector6d& refState, bool rotate=true)
+{
+	// Error vector in world (or odom) frame, which is where state and refstate are defined
+	Vector6d err = refState - state;
+	err[2] = unwrap(err[2]); //< unwrap angular portion of error
+	
+	// strict steering method:
+	if (false) {
+		double refpos_angle = atan2(err[1], err[0]); 				//< angle towards current waypoint
+		double refpos_dist = err.segment(0,2).norm(); 				//< linear distance to current waypoint
+		double refpos_angle_err = unwrap(state[2] - refpos_angle); 	//< heading error 
+		if (refpos_dist > 5e-2)
+			err[2] = refpos_angle_err; 								//< if we're far from the waypoint only worry about heading towards it
+		if (refpos_angle_err > 1e-2)
+			err.segment(0,2).setZero(); 							//< zero all translation controls if we're rotating
+	}
+
+	// if requested, convert error vector to robot frame, which is where we do control
+	if (rotate) {
+		Eigen::Rotation2Dd rot(state[2]);
+		err.segment(0,2) = rot.inverse() * err.segment(0,2); //< rotate position error to robot frame
+		err.segment(3,2) = rot.inverse() * err.segment(3,2); //< rotate velocity error to robot frame	
+	}
+
+	// cout << "err: " << err.transpose() << endl;
+	return err;
+}
+
 /* ******************************************************************************************** */
-void computeTorques (const Vector6d& state, double& ul, double& ur, double& dt) {
+void computeTorques(const Vector6d& state, double& ul, double& ur, double& dt) {
 	// Set reference based on the mode
 	if(mode == 0) {
 		ul = ur = 0.0;
 		return;
 	}
 
-	// Compute the linear pos error by projecting the reference state's position in the current
-	// state frame to the current heading direction
-	Eigen::Vector2d dir (cos(state(4)), sin(state(4)));
-	Eigen::Vector2d refInCurr (refState(0) - state(0), refState(2) - state(2));
-	double linear_pos_err = dir.dot(refInCurr);
-	double linear_vel_err = state(1);
-	
-	// Compute the angular position error by taking the difference of the two headings
-	double angular_pos_err = refState(4) - state(4);
-	double angular_vel_err = state(5);
+	// // Compute the linear pos error by projecting the reference state's position in the current
+	// // state frame to the current heading direction
+	// // Eigen::Vector2d dir (cos(state(4)), sin(state(4)));
+	// // Eigen::Vector2d refInCurr (refState(0) - state(0), refState(2) - state(2));
+	// Eigen::Vector2d dir (cos(state(2)), sin(state(2)));
+	// Eigen::Vector2d linear_pos_err_2D (refState(0) - state(0), refState(1) - state(1)); // dx,dy for ref-cur
 
-	// Compute the error and set the y-components to 0
-	Eigen::Vector4d error (linear_pos_err, linear_vel_err, angular_pos_err, angular_vel_err);
-	if(dbg) cout << "error: " << error.transpose() << endl;
-	if(dbg) cout << "[K: " << K.transpose() << "]" << endl;
+	// double linear_pos_err = dir.dot(linear_pos_err_2D); // dot product of current heading and linear error
+	// // double linear_vel_err = state(1); // we want zero linear velocity
+	// // double linear_vel_err = state(3); // we want zero linear velocity;  but in world frame this is wrong now!  should be state[3:4].dot(state[3:4])
+	// Eigen::Vector2d planar_vel (state(3), state(4));
+	// double linear_vel_err = planar_vel.dot(planar_vel);
+
+	// // Compute the angular position error by taking the difference of the two headings
+	// // double angular_pos_err = refState(4) - state(4); // Gah gotta unwrap this
+	// double angular_pos_err = unwrap(refState(2) - state(2)); 
+	// double angular_vel_err = state(5); // want zero rotational velocity
+
+	// // Compute the error and set the y-components to 0
+	// Eigen::Vector4d error (linear_pos_err, linear_vel_err, angular_pos_err, angular_vel_err);
+	// if(dbg) cout << "error: " << error.transpose() << endl;
+	// if(dbg) cout << "[K: " << K.transpose() << "]" << endl;
+
+	// if (doErrorIntegration) {
+	// 	angluarIntErr += angular_pos_err * dt;
+	// 	linIntErr += linear_pos_err * dt;
+	// }
+
+	// if (dbg) cout << "angluarIntErr: " << angluarIntErr << " linIntErr: " << linIntErr << endl;
+
+	// New version:
+	
+	// // Error vector in world (or odom) frame, which is where state and refstate are defined
+	// Vector6d err_world = refState - state;
+	// err_world[2] = unwrap(err_world[2]);
+	// // cout << "err_world: " << err_world.transpose() << endl;
+
+
+	// // strict steering method:
+	// if (false) {
+	// 	double refpos_angle = atan2(err_world[1], err_world[0]); 	//< angle towards current waypoint
+	// 	double refpos_dist = err_world.segment(0,2).norm(); 		//< linear distance to current waypoint
+	// 	double refpos_angle_err = unwrap(state[2] - refpos_angle); 	//< heading error 
+	// 	if (refpos_dist > 5e-2)
+	// 		err_world[2] = refpos_angle_err; 						//< if we're far from the waypoint only worry about heading towards it
+	// 	if (refpos_angle_err > 1e-2)
+	// 		err_world.segment(0,2).setZero(); 						//< zero all translation controls if we're rotating
+	// }
+	Vector6d err_robot = computeError(state, refState, true);
 
 	if (doErrorIntegration) {
-		angluarIntErr += angular_pos_err * dt;
-		linIntErr += linear_pos_err * dt;
+		linIntErr += err_robot[0] * dt;		//< only integrate error in direction we can control
+		angluarIntErr += err_robot[2] * dt;	//< integrate angular error
 	}
 
 	if (dbg) cout << "angluarIntErr: " << angluarIntErr << " linIntErr: " << linIntErr << endl;
 
-	// Compute the forward and spin torques (note K is 4x1 for x and th)
+	// // Compute the forward and spin torques (note K is 4x1 for x and th)
+	// // note: K is organized as [linearP linearI linearD angularP angularI angularD]
+	// // 		 err_robot is organized as [x xdot theta thetadot]
+	// double u_x = (K[0]*err_robot(0) + K[2]*err_robot(1)) + K[1] * linIntErr;
+	// double u_theta = (K[3]*err_robot(2) + K[5]*err_robot(3)) + K[4] * angluarIntErr;
+
+	// Compute the forward and rotation torques
 	// note: K is organized as [linearP linearI linearD angularP angularI angularD]
-	// 		 error is organized as [x xdot theta thetadot]
-	double u_x = (K(0)*error(0) + K(2)*error(1)) + K(1) * linIntErr;
-	double u_spin = (K(3)*error(2) + K(5)*error(3)) + K(4) * angluarIntErr;
+	// 		 err_robot is organized as [x, y, theta, xdot, ydot, thetadot]
+	double u_x = (K[0] * err_robot[0] + K[2] * err_robot[3]) + K[1] * linIntErr;
+	double u_theta = (K[3] * err_robot[2] + K[5] * err_robot[5]) + K[4] * angluarIntErr;
 
 	// Limit the output torques
-	double hard_max = 35.0;		//< never write values higher than this
-	double spin_max = 35.0; 	//< thershold on spin contribution
-	double lin_max = 35.0; 		//< threshold on linear contribution
-	u_spin = max(-spin_max, min(spin_max, u_spin));
+	double hard_max = 15.0;		//< never write values higher than this
+	double spin_max = 15.0; 	//< thershold on spin contribution
+	double lin_max = 15.0; 		//< threshold on linear contribution
+	u_theta = max(-spin_max, min(spin_max, u_theta));
 	u_x= max(-lin_max, min(lin_max, u_x));
-	if(dbg) printf("u_x: %lf, u_spin: %lf\n", u_x, u_spin);
-	ul = u_x - u_spin;
-	ur = u_x + u_spin;
+	if(dbg) printf("u_x: %lf, u_theta: %lf\n", u_x, u_theta);
+	ul = u_x - u_theta;
+	ur = u_x + u_theta;
 	ul = max(-hard_max, min(hard_max, ul));
 	ur = max(-hard_max, min(hard_max, ur));
 	if(dbg) printf("ul: %lf, ur: %lf\n", ul, ur);
@@ -300,13 +416,13 @@ void updateTrajectory () {
 	size_t numPoints = frame_size / (8 * 3);
 	for(size_t p_idx = 0; p_idx < numPoints; p_idx++) {
 		Vector6d newRefState;
-		newRefState << rtraj[p_idx][0], 0.0, rtraj[p_idx][1], 0.0, rtraj[p_idx][2], 0.0;
+		//newRefState << rtraj[p_idx][0], 0.0, rtraj[p_idx][1], 0.0, rtraj[p_idx][2], 0.0;
+		newRefState << rtraj[p_idx][0], rtraj[p_idx][1], rtraj[p_idx][2], 0.0, 0.0, 0.0;
 		trajectory.push_back(newRefState);
 	}
 
 	// Update the reference state
 	trajIdx = 0;
-	//refState = trajectory[0];
 	setReference(trajectory[0]);
 }
 
@@ -349,8 +465,10 @@ void run () {
 		updateState(wheelsState, lastWheelsState, state);
 		if(dbg) {
 			fprintf(file, "%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t0\n", 
-				state(0), state(2), state(4), 
-				refState(0), refState(2), refState(4));
+				// state(0), state(2), state(4), 
+				// refState(0), refState(2), refState(4));
+				state(0), state(1), state(2), 
+				refState(0), refState(1), refState(2));
 			fflush(file);
 		}
 		if(dbg) cout << "state: " << state.transpose() << endl;
@@ -360,19 +478,29 @@ void run () {
 		
 		// Update the reference state if necessary
 		if(!trajectory.empty()) {
-			Eigen::Vector2d dir (cos(state(4)), sin(state(4)));
-			Eigen::Vector2d refInCurr (refState(0) - state(0), refState(2) - state(2));
-			double xerror = dir.dot(refInCurr);
-			double therror = SQ(refState(4) - state(4));
-			static const double xErrorThres = -0.001;
-			static const double thErrorThres = SQ(0.06);
-			// if(dbg) cout << "traj idx xerror: " << (sqrt(xerror)) << ", vs. " << (sqrt(xErrorThres)) << endl;
-			if(dbg) cout << "traj idx xerror: " << (xerror) << ", vs. " << xErrorThres  << endl;
-			if(dbg) cout << "traj idx therror (deg): " << R2D(sqrt(therror)) << ", vs. " << R2D(sqrt(thErrorThres)) << endl;
-			bool reached = (trajIdx < 2 || (xerror < xErrorThres)) && (therror < thErrorThres);
+			// // Eigen::Vector2d dir (cos(state(4)), sin(state(4)));
+			// Eigen::Vector2d dir (cos(state(2)), sin(state(2)));
+			// // Eigen::Vector2d refInCurr (refState(0) - state(0), refState(2) - state(2));
+			// Eigen::Vector2d refInCurr (refState(0) - state(0), refState(1) - state(1));
+			// double xerror = dir.dot(refInCurr);
+			// // double thetaerror = SQ(refState(4) - state(4));
+			// double thetaerror = SQ(unwrap(refState(2) - state(2)));
+
+			Vector6d err = computeError(state, refState, true);
+			// double lin_error = err.segment(0,2).norm(); 	//< linear distance to current waypoint
+			double lin_error = abs(err[0]); 				//< linear distance in controllable direction
+			double rot_error = abs(err[2]); 				//< angular distance to current waypoint
+
+			static const double linErrorThres = 0.001;
+			static const double rotErrorThres = 0.0036;
+
+			// if(dbg) cout << "traj idx lin_error: " << (sqrt(lin_error)) << ", vs. " << (sqrt(linErrorThres)) << endl;
+			if(dbg) cout << "traj idx lin_error: " << (lin_error) << ", vs. " << linErrorThres  << endl;
+			if(dbg) cout << "traj idx rot_error (deg): " << R2D(sqrt(rot_error)) << ", vs. " << R2D(sqrt(rotErrorThres)) << endl;
+			bool reached = (trajIdx < 2 || (lin_error < linErrorThres)) && (rot_error < rotErrorThres);
 
 			if(dbg) printf("reached: %d, xreached: %d, threached: %d\n", reached,
-				(xerror < xErrorThres), (therror < thErrorThres));
+				(lin_error < linErrorThres), (rot_error < rotErrorThres));
 
 			if (reached) {
 				// reset integral stuff whenever we reach any reference
@@ -393,11 +521,12 @@ void run () {
 					/*
 					 * advance the reference index in the trajectory, or stop if done
 					 */
-					fprintf(file, "%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t1\n", state(0), state(2), state(4),
-						refState(0), refState(2), refState(4));
+					// fprintf(file, "%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t1\n", state(0), state(2), state(4),
+					// 	refState(0), refState(2), refState(4));
+					fprintf(file, "%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t1\n", state(0), state(1), state(2),
+						refState(0), refState(1), refState(2));
 					fflush(file);
 					trajIdx = min((trajIdx + 1), (trajectory.size() - 1));
-					//refState = trajectory[trajIdx];
 					setReference(trajectory[trajIdx]);
 
 					if(trajIdx == trajectory.size() - 1) {
