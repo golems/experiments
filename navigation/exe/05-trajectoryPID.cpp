@@ -25,7 +25,6 @@
 
 #define SQ(x) ((x) * (x))
 #define R2D(x) (((x) / M_PI) * 180.0)
-#define PI 3.141592 // TODO pull this from dart or somewhere
 
 Eigen::MatrixXd fix (const Eigen::MatrixXd& mat) { return mat; }
 using namespace std;
@@ -58,7 +57,7 @@ FILE* file;							//< used to print the state when the next trajectory index is 
 
 /* ******************************************************************************************** */
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;	//< mutex to update gains
-Eigen::VectorXd K = Eigen::VectorXd::Zero(6);	//< the gains for x and th of the state. y is ignored.
+Eigen::VectorXd K = Eigen::VectorXd::Zero(7);	//< the gains for x and th of the state. y is ignored.
 
 /* ******************************************************************************************** */
 
@@ -73,24 +72,24 @@ bool doErrorIntegration = false;
  
 double unwrap(double angle) 
 {
-	// return (angle + PI) % (2 * PI) - PI;
-	return fmod(angle + PI, 2 * PI) - PI;
+	return fmod(angle + M_PI, 2 * M_PI) - M_PI;
 }
 
 /// Read file for gains
 void readGains () {
-	// ifstream file ("/home/jscholz/vc/experiments/navigation/data/gains-PID.txt");
-	ifstream file ("../data/gains-PID.txt");
+	ifstream file ("/home/jscholz/vc/experiments/navigation/data/gains-PID.txt");
+	// ifstream file ("../data/gains-PID.txt");
 	assert(file.is_open());
 	char line [1024];
-	K = Eigen::VectorXd::Zero(6);
+	// K = Eigen::VectorXd::Zero(7);
 	file.getline(line, 1024);
 	while (line[0] == '#')
 		file.getline(line, 1024);
 	std::stringstream stream(line, std::stringstream::in);
 	size_t i = 0;
 	double newDouble;
-	while ((i < 6) && (stream >> newDouble)) K(i++) = newDouble;
+	while ((i < 7) && (stream >> newDouble)) K(i++) = newDouble;
+	file.close();
 }
 
 /*
@@ -102,38 +101,6 @@ void setReference(Vector6d& newRef) {
 
 	//JFU: turn on error integration whenever we update the reference
 	doErrorIntegration = true;
-}
-
-/* ********************************************************************************************* */
-/// Get the mode input
-/*
-Keybindings:
-'1' - mode: 
-*/
-void *kbhit(void *) {
-	char input;
-	double kOffset = 0.05;
-	while(true){ 
-		input=cin.get(); 
-		pthread_mutex_lock(&mutex);
-		if(input=='0') mode = 0;
-		else if(input=='1') mode = 1;
-		else if(input=='d') dbg = !dbg;
-		else if(input=='s') start = !start;
-		else if(input=='g') updateGainsFromFile = true; 	//< if true, read new gains from the text file
-		else if(input=='r') { 								//< set reference to current state at next iteration
-			setReference(state);
-			angluarIntErr = 0;
-			linIntErr = 0;
-		}
-		else if(input=='i') refState(0) += kOffset;
-		else if(input=='k') refState(0) -= kOffset;
-		else if(input=='j') refState(2) += kOffset;
-		else if(input=='l') refState(2) -= kOffset;
-		else if(input=='o') doErrorIntegration = !doErrorIntegration;
-		else if(input==' ') jumpPermission = !jumpPermission;
-		pthread_mutex_unlock(&mutex);
-	}
 }
 
 /* ******************************************************************************************** */
@@ -164,9 +131,11 @@ void updateWheelsState(Eigen::Vector4d& wheelsState, double dt) {
 
 	// Set the state
 	wheelsState(0) = k2*(tleft + tright)/2.0;// + krang->imu;
-	wheelsState(1) = k2*(vleft + vright)/2.0;// + krang->imuSpeed;
+	// wheelsState(1) = k2*(vleft + vright)/2.0;// + krang->imuSpeed; //<--- was noisy b/c amc vel is noisy
+	wheelsState(1) = (wheelsState[0] - lastWheelsState[0]) * dt;
 	wheelsState(2) = k1*(tright - tleft)/width; // (krang->amc->pos[1] - krang->amc->pos[0]) / 2.0;
-	wheelsState(3) = k1*(vright - vleft)/width; // TODO: verify
+	// wheelsState(3) = k1*(vright - vleft)/width; // TODO: verify 	//<--- was noisy b/c amc vel is noisy
+	wheelsState(3) = (wheelsState[3] - lastWheelsState[3]) * dt;
 }
 
 /* ******************************************************************************************** */
@@ -208,71 +177,6 @@ void updateState(Eigen::Vector4d& wheelsState, Eigen::Vector4d& lastWheelsState,
 	state[3] = wheelsState[1] * cos(last_theta); 	//< xdot
 	state[4] = wheelsState[1] * sin(last_theta); 	//< ydot
 	state[5] = wheelsState[3];						//< thetadot
-}
-
-/* ******************************************************************************************** */
-void init() {
-	angluarIntErr = 0;
-    linIntErr = 0;
-    doErrorIntegration = false;
-
-	// Open the file
-	file = fopen("bla", "w+");
-	assert((file != NULL) && "Could not open the file");
-
-	// Initialize the daemon
-	somatic_d_opts_t dopt;
-	memset(&dopt, 0, sizeof(dopt)); 
-	dopt.ident = "05-trajectoryPID";
-	somatic_d_init(&daemon_cx, &dopt);
-
-	// Initialize the motors and sensors on the hardware and update the kinematics in dart
-	krang = new Krang::Hardware(Krang::Hardware::MODE_ALL_GRIPSCH, &daemon_cx, robot); 
-
-	// Open channel to publish the state
-	enum ach_status r = ach_open(&state_chan, "krang_global", NULL);
-	assert(ACH_OK == r);
-	r = ach_flush(&state_chan);
-
-	// Open channel to receive vision data
-	r = ach_open(&vision_chan, "krang_vision", NULL );
-	assert(ACH_OK == r);
-	r = ach_flush(&vision_chan);
-
-	// Open channel to receive waypoints data
-	r = ach_open(&base_waypts_chan, "krang_base_waypts", NULL );
-	assert(ACH_OK == r);
-	r = ach_flush(&base_waypts_chan);
-
-	// Receive the current state from vision
-	double rtraj[1][3] = {0, 0, 0};
-	if (wait_for_global_vision_msg) {
-		size_t frame_size = 0;
-		cout << "waiting for initial vision data: " << endl;
-		r = ach_get(&vision_chan, &rtraj, sizeof(rtraj), &frame_size, NULL, ACH_O_WAIT);
-		assert(ACH_OK == r);
-		for(size_t i = 0; i < 3; i++) printf("%lf\t", rtraj[0][i]);
-		printf("\n");		
-	}
-
-	// Set the state, refstate and limits
-	updateWheelsState(wheelsState, 0.0);
-	lastWheelsState = wheelsState;
-	updateState(wheelsState, lastWheelsState, state);
-
-	// Reset the current state to vision data
-	for(size_t i = 0; i < 3; i++) 
-		state(i) = rtraj[0][i];
-	state(3) = state(4) = state(5) = 0.0; // set vels to zero
-	cout << "state: " << state.transpose() << ", OK?" << endl;
-	// getchar();
-	//refState = state;
-	setReference(state);
-
-	// Create a thread to wait for user input to begin balancing
-	pthread_t kbhitThread;
-	pthread_create(&kbhitThread, NULL, &kbhit, NULL);
-
 }
 
 /* 
@@ -365,11 +269,21 @@ void computeTorques(const Vector6d& state, double& ul, double& ur, double& dt) {
 	// }
 	Vector6d err_robot = computeError(state, refState, true);
 
+	// HACK: add static-friction compensation term to get robot started
+	// double p_booster = 1.0;
+	// double vel_thresh = 0.01;
+	// if (state.segment(3,2).squaredNorm() < vel_thresh)
+	// 	p_booster = K[6]; 
+
+	double velsq = state.segment(3,2).squaredNorm();
+	double p_booster = K[6] * exp(-20 * velsq); //< exponentially falls off as robot gains speed
+
 	if (doErrorIntegration) {
 		linIntErr += err_robot[0] * dt;		//< only integrate error in direction we can control
 		angluarIntErr += err_robot[2] * dt;	//< integrate angular error
 	}
 
+	if (dbg) cout << "error: " << err_robot.transpose() << endl;
 	if (dbg) cout << "angluarIntErr: " << angluarIntErr << " linIntErr: " << linIntErr << endl;
 
 	// // Compute the forward and spin torques (note K is 4x1 for x and th)
@@ -381,8 +295,8 @@ void computeTorques(const Vector6d& state, double& ul, double& ur, double& dt) {
 	// Compute the forward and rotation torques
 	// note: K is organized as [linearP linearI linearD angularP angularI angularD]
 	// 		 err_robot is organized as [x, y, theta, xdot, ydot, thetadot]
-	double u_x = (K[0] * err_robot[0] + K[2] * err_robot[3]) + K[1] * linIntErr;
-	double u_theta = (K[3] * err_robot[2] + K[5] * err_robot[5]) + K[4] * angluarIntErr;
+	double u_x 		= (K[0] * err_robot[0] * p_booster + K[1] * linIntErr + K[2] * err_robot[3]);
+	double u_theta 	= (K[3] * err_robot[2] * p_booster + K[4] * angluarIntErr + K[5] * err_robot[5]);
 
 	// Limit the output torques
 	double hard_max = 15.0;		//< never write values higher than this
@@ -426,6 +340,31 @@ void updateTrajectory () {
 	setReference(trajectory[0]);
 }
 
+
+/// sets the trajectory to some hard-coded thing for debugging
+void setTestTrajectory()
+{
+	// clear the trajectory
+	trajectory.clear();
+	
+	// push back some waypoints
+	double x0 = state[0];
+	// trajectory.push_back((Eigen::VectorXd(6) << x0, 0, 0, 0, 0, 0).finished());
+	// trajectory.push_back((Eigen::VectorXd(6) << x0 +0.1, 0, 0, 0, 0, 0).finished());
+	// trajectory.push_back((Eigen::VectorXd(6) << x0 +0.2, 0, 0, 0, 0, 0).finished());
+	// trajectory.push_back((Eigen::VectorXd(6) << x0 +0.3, 0, 0, 0, 0, 0).finished());
+
+	trajectory.push_back((Eigen::VectorXd(6) << x0, 0, 0, 0, 0, 0).finished());
+	trajectory.push_back((Eigen::VectorXd(6) << x0 + 0.2, 0, 0.1, 0, 0, 0).finished());
+	trajectory.push_back((Eigen::VectorXd(6) << x0 + 0.4, 0, 0.2, 0, 0, 0).finished());
+	trajectory.push_back((Eigen::VectorXd(6) << x0 + 0.2, 0, 0.1, 0, 0, 0).finished());
+	trajectory.push_back((Eigen::VectorXd(6) << x0, 0, 0, 0, 0, 0).finished());
+
+	// Update the reference state
+	trajIdx = 0;
+	setReference(trajectory[0]);
+}
+
 /* ******************************************************************************************** */
 void run () {
 
@@ -457,6 +396,9 @@ void run () {
 		t_now = aa_tm_now();						
 		double dt = (double)aa_tm_timespec2sec(aa_tm_sub(t_now, t_prev));	
 		t_prev = t_now;
+
+		// TODO: poll krang_vision for updates to state here
+
 
 		// Get the state and update odometry
 		lastWheelsState = wheelsState;
@@ -491,13 +433,13 @@ void run () {
 			double lin_error = abs(err[0]); 				//< linear distance in controllable direction
 			double rot_error = abs(err[2]); 				//< angular distance to current waypoint
 
-			static const double linErrorThres = 0.001;
-			static const double rotErrorThres = 0.0036;
+			static const double linErrorThres = 0.003; // 0.001;
+			static const double rotErrorThres = 0.006; // 0.0036;
 
-			// if(dbg) cout << "traj idx lin_error: " << (sqrt(lin_error)) << ", vs. " << (sqrt(linErrorThres)) << endl;
 			if(dbg) cout << "traj idx lin_error: " << (lin_error) << ", vs. " << linErrorThres  << endl;
-			if(dbg) cout << "traj idx rot_error (deg): " << R2D(sqrt(rot_error)) << ", vs. " << R2D(sqrt(rotErrorThres)) << endl;
-			bool reached = (trajIdx < 2 || (lin_error < linErrorThres)) && (rot_error < rotErrorThres);
+			if(dbg) cout << "traj idx rot_error (deg): " << R2D(rot_error) << ", vs. " << R2D(rotErrorThres) << endl;
+			// bool reached = (trajIdx < 2 || (lin_error < linErrorThres)) && (rot_error < rotErrorThres);
+			bool reached = ((lin_error < linErrorThres)) && (rot_error < rotErrorThres);
 
 			if(dbg) printf("reached: %d, xreached: %d, threached: %d\n", reached,
 				(lin_error < linErrorThres), (rot_error < rotErrorThres));
@@ -563,6 +505,106 @@ void run () {
 	// Send the stopping event
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
 					 SOMATIC__EVENT__CODES__PROC_STOPPING, NULL, NULL);
+}
+
+/* ********************************************************************************************* */
+/// Get the mode input
+/*
+Keybindings:
+'1' - mode: 
+*/
+void *kbhit(void *) {
+	char input;
+	double kOffset = 0.05;
+	while(true){ 
+		input=cin.get(); 
+		pthread_mutex_lock(&mutex);
+		if(input=='0') mode = 0;
+		else if(input=='1') mode = 1;
+		else if(input=='d') dbg = !dbg;
+		else if(input=='s') start = !start;
+		else if(input=='g') updateGainsFromFile = true; 	//< if true, read new gains from the text file
+		else if(input=='r') { 								//< set reference to current state at next iteration
+			setReference(state);
+			trajectory.clear();
+			angluarIntErr = 0;
+			linIntErr = 0;
+		}
+		else if(input=='i') refState(0) += kOffset;
+		else if(input=='k') refState(0) -= kOffset;
+		else if(input=='j') refState(2) += kOffset;
+		else if(input=='l') refState(2) -= kOffset;
+		else if(input=='o') doErrorIntegration = !doErrorIntegration;
+		else if(input==' ') jumpPermission = !jumpPermission;
+		else if(input=='t') setTestTrajectory();
+		pthread_mutex_unlock(&mutex);
+	}
+}
+
+/* ******************************************************************************************** */
+void init() {
+	angluarIntErr = 0;
+    linIntErr = 0;
+    doErrorIntegration = false;
+
+	// Open the file
+	file = fopen("bla", "w+");
+	assert((file != NULL) && "Could not open the file");
+
+	// Initialize the daemon
+	somatic_d_opts_t dopt;
+	memset(&dopt, 0, sizeof(dopt)); 
+	dopt.ident = "05-trajectoryPID";
+	somatic_d_init(&daemon_cx, &dopt);
+
+	// Initialize the motors and sensors on the hardware and update the kinematics in dart
+	krang = new Krang::Hardware(Krang::Hardware::MODE_ALL_GRIPSCH, &daemon_cx, robot); 
+
+	// Open channel to publish the state
+	enum ach_status r = ach_open(&state_chan, "krang_global", NULL);
+	assert(ACH_OK == r);
+	r = ach_flush(&state_chan);
+
+	// Open channel to receive vision data
+	r = ach_open(&vision_chan, "krang_vision", NULL );
+	assert(ACH_OK == r);
+	r = ach_flush(&vision_chan);
+
+	// Open channel to receive waypoints data
+	r = ach_open(&base_waypts_chan, "krang_base_waypts", NULL );
+	assert(ACH_OK == r);
+	r = ach_flush(&base_waypts_chan);
+
+	// Receive the current state from vision
+	double rtraj[1][3] = {0, 0, 0};
+	if (wait_for_global_vision_msg) {
+		size_t frame_size = 0;
+		cout << "waiting for initial vision data on [krang_vision]: " << endl;
+		r = ach_get(&vision_chan, &rtraj, sizeof(rtraj), &frame_size, NULL, ACH_O_WAIT);
+		assert(ACH_OK == r);
+
+		for(size_t i = 0; i < 3; i++) 
+			printf("%lf\t", rtraj[0][i]);
+		printf("\n");		
+	}
+
+	// Set the state, refstate and limits
+	updateWheelsState(wheelsState, 0.0);
+	lastWheelsState = wheelsState;
+	updateState(wheelsState, lastWheelsState, state);
+
+	// Reset the current state to vision data
+	for(size_t i = 0; i < 3; i++) 
+		state(i) = rtraj[0][i];
+	state(3) = state(4) = state(5) = 0.0; // set vels to zero
+	cout << "state: " << state.transpose() << ", OK?" << endl;
+	// getchar();
+	//refState = state;
+	setReference(state);
+
+	// Create a thread to wait for user input to begin balancing
+	pthread_t kbhitThread;
+	pthread_create(&kbhitThread, NULL, &kbhit, NULL);
 }
 
 /* ******************************************************************************************** */
