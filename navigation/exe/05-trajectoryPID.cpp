@@ -49,8 +49,8 @@ const double waypt_rot_thresh = 0.015; // 0.0036;
 bool error_integration = false;
 double ang_int_err;					//< accumulator for angular error
 double lin_int_err;					//< accumulator for linear error (x in robot frame)
-double u_hard_max = 15.0;			//< never write values higher than this
-double u_spin_max = 15.0; 			//< thershold on spin contribution
+double u_hard_max = 18.0;			//< never write values higher than this
+double u_spin_max = 18.0; 			//< thershold on spin contribution
 double u_lin_max = 15.0; 			//< threshold on linear contribution
 bool save_hist = false;				//< save tracking history flag
 
@@ -169,7 +169,7 @@ void updateWheelsState(Eigen::Vector4d& wheel_state, double dt) {
 	wheel_state[0] = k2 * (tleft + tright)/2.0; // + krang->imu;
 	wheel_state[1] = (wheel_state[0] - last_wheel_state[0]) * dt; // finite diff. rather than amc vels b/c of noise
 	wheel_state[2] = k1 * (tright - tleft)/width; // (krang->amc->pos[1] - krang->amc->pos[0]) / 2.0;
-	wheel_state[3] = (wheel_state[3] - last_wheel_state[3]) * dt; // finite diff. rather than amc vels b/c of noise
+	wheel_state[3] = (wheel_state[2] - last_wheel_state[2]) * dt; // finite diff. rather than amc vels b/c of noise
 }
 
 /* ******************************************************************************************** */
@@ -256,9 +256,10 @@ void computeTorques(const Vector6d& state, double& ul, double& ur, double& dt) {
 
 	if (dbg) cout << "error: " << err_robot.transpose() << endl;
 	if (dbg) cout << "ang_int_err: " << ang_int_err << " lin_int_err: " << lin_int_err << endl;
+	if (dbg) cout << "Gains: " << K.transpose() << endl;
 
 	// Compute the forward and rotation torques
-	// note: K is organized as [linearP linearI linearD angularP angularI angularD]
+	// note: K is organized as [linearP linearI linearD angularP angularI angularD p_booster]
 	// 		 err_robot is organized as [x, y, theta, xdot, ydot, thetadot]
 	double u_x 		= (K[0] * err_robot[0] * p_booster + K[1] * lin_int_err + K[2] * err_robot[3]);
 	double u_theta 	= (K[3] * err_robot[2] * p_booster + K[4] * ang_int_err + K[5] * err_robot[5]);
