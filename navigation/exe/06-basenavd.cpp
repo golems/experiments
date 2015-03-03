@@ -149,6 +149,7 @@ Vector6d state;						//< current state (x,y,th,x.,y.,th.)
 Eigen::Vector4d wheel_state;		//< wheel pos and vels in radians (lphi, lphi., rphi, rphi.)
 Eigen::Vector4d last_wheel_state; 	//< last wheel state used to update the state 
 vector <Vector6d> trajectory;		//< the goal trajectory	
+const size_t max_traj_msg_len = 170;
 size_t trajIdx = 0;
 FILE* state_hist_file;				//< used to dump state and reference poses over time to plot traj. tracking
 
@@ -366,8 +367,7 @@ void computeTorques(const Vector6d& state, double& ul, double& ur, double& dt) {
 void updateTrajectory () {
 
 	// Check if a message is received
-	const size_t k = 170; // TODO make global for this
-	double rtraj[k][3] = {0};
+	double rtraj[max_traj_msg_len][3] = {0};
 	size_t frame_size = 0;
 	struct timespec abstimeout = aa_tm_future(aa_tm_sec2timespec(.001));
 	ach_status_t r = ach_get(&base_waypts_chan, &rtraj, sizeof(rtraj), &frame_size, 
@@ -376,7 +376,7 @@ void updateTrajectory () {
 
 	// Fill the trajectory data (3 doubles, 8 bytes, for each traj. point)
 	trajectory.clear();
-	size_t numPoints = frame_size / (8 * 3); // TODO should prob do frame_size / (sizeof(double) * 3)
+	size_t numPoints = frame_size / (sizeof(double) * 3); // TODO should prob do frame_size / (sizeof(double) * 3)
 	for(size_t p_idx = 0; p_idx < numPoints; p_idx++) {
 		Vector6d newRefState;
 		newRefState << rtraj[p_idx][0], rtraj[p_idx][1], rtraj[p_idx][2], 0.0, 0.0, 0.0;
@@ -571,12 +571,12 @@ void *kbhit(void *) {
 	}
 }
 
-void parse_args() 
+void parse_args(int argc, char* argv[]) 
 {
     memset(&cx, 0, sizeof(cx));
 
     // default options
-    cx.opt_base_state_chan_name = "krang_base_state"; // FIXME this will segfault when parse_args returns, no?
+    cx.opt_base_state_chan_name = "krang_base_state";
     cx.opt_base_pose_chan_name = "vision_krang_pose";
     cx.opt_base_waypts_chan_name = "krang_base_waypts";
     cx.d_opts.ident = "basenavd";
@@ -663,7 +663,7 @@ int main(int argc, char* argv[]) {
     // }
     
     // parse command line arguments
-	parse_args();
+	parse_args(argc, argv);
 
 	// Read the gains
 	readGains();
