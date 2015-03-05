@@ -37,6 +37,10 @@ include_directories(/usr/include/kore)
 include_directories(/usr/include/eigen3)
 include_directories(/usr/local/include/eigen3)
 
+# find trajectory_io (ach serialization lib for talking to python)
+find_library(TRAJECTORY_IO_LIBRARY NAMES trajectory_io REQUIRED)
+message(STATUS "trajectory_io lib detected: [${TRAJECTORY_IO_LIBRARY}].")
+
 # ================================================================================================
 # Build the codebase library and the executables
 
@@ -60,7 +64,7 @@ foreach(script_src_file ${scripts_source})
 	message(STATUS "Adding script ${script_src_file} with base name ${script_base}" )
 	add_executable(${script_base} ${script_src_file})
 #	target_link_libraries(${script_base} Main) 
-	target_link_libraries(${script_base} ${GRIP_LIBRARIES} ${DART_LIBRARIES} ${DARTExt_LIBRARIES} ${wxWidgets_LIBRARIES}) 
+	target_link_libraries(${script_base} ${GRIP_LIBRARIES} ${DART_LIBRARIES} ${DARTExt_LIBRARIES} ${wxWidgets_LIBRARIES} trajectory_io) 
 	add_custom_target(${script_base}.run ${script_base} ${ARGN})
 endforeach(script_src_file)
 message(STATUS " ")
