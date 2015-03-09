@@ -53,6 +53,7 @@ Somatic__WaistCmd *waistDaemonCmd = somatic_waist_cmd_alloc();		///< The waist c
 
 char b [10];
 double x [6];
+double js_axis_scale = 0.25;
 
 /* ********************************************************************************************* */
 /// Reads the joystick data into global variables 'b' and 'x'
@@ -69,6 +70,10 @@ void readJoystick() {
 		b[i] = js_msg->buttons->data[i] ? 1 : 0;
 	memcpy(x, js_msg->axes->data, sizeof(x));
 
+	// scale the js for lower sensitivity [jon 3/8/2015]
+	for (int i=0; i<6; ++i)
+		x[i] = x[i] * js_axis_scale;
+
 	// Free the joystick message
 	somatic__joystick__free_unpacked(js_msg, &protobuf_c_system_allocator);
 }
@@ -80,8 +85,10 @@ double presetArmConfs [][7] = {
   { -1.102,  0.589,  0.000,  1.339,  0.000,  1.400,  0.000},
   // {  1.008,  -1.113,  -0.000,  -1.594,   0.037,   1.022,  -0.021}, // sitting grasp ready (left) <-- old
   // {  -0.855,   1.113,   0.000,   1.561,  -0.028,  -1.052,   0.021}, // sitting grasp ready (right) <-- old
-  { 0.79781085,  -0.98589057, -0.03357025, -1.83594871, -0.10874920, 1.24906766,  -0.00678584}, // sitting grasp ready (left)
-  {-0.82863194, 1.05825043,  -0.02488768, 1.82641244,  0.03631044 , -1.30717576, -0.02426357}, // sitting grasp ready (right)
+  { 0.8081, -0.9675, -0.0309, -1.8660, -0.0964,  1.2592, -0.0176}, // sitting grasp ready (left)
+  {-0.7666,  1.0676,  0.0042,  1.8341,  0.1111, -1.3258, -0.0701}, // sitting grasp ready (left)
+  //{ 0.79781085,  -0.98589057, -0.03357025, -1.83594871, -0.10874920, 1.24906766,  -0.00678584}, // sitting grasp ready (left)
+  //{-0.82863194, 1.05825043,  -0.02488768, 1.82641244,  0.03631044 , -1.30717576, -0.02426357}, // sitting grasp ready (right)
   {  1.400, -1.000,  0.000, -0.800,  0.000, -0.800,  0.000}, 
   { -1.400,  1.000,  0.000,  0.800,  0.000,  0.800,  0.000},
   {  0.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000},

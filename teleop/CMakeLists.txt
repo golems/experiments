@@ -18,6 +18,8 @@ include(cmake/simulation.cmake)
 # in /usr/lib or /usr/local/lib
 link_libraries(protobuf-c amino ach kore somatic filter stdc++ ncurses blas lapack)
 
+# find trajectory_io
+find_library(trajectory_io REQUIRED)
 
 # Include Eigen
 #include_directories(/usr/local/include/eigen3)
@@ -50,7 +52,7 @@ foreach(script_src_file ${scripts_source})
 	message(STATUS "Adding script ${script_src_file} with base name ${script_base}" )
 	add_executable(${script_base} ${script_src_file})
 	# target_link_libraries(${script_base} Main) 
-	target_link_libraries(${script_base} ${GRIP_LIBRARIES} ${DART_LIBRARIES} ${DARTExt_LIBRARIES} ${wxWidgets_LIBRARIES}) 
+	target_link_libraries(${script_base} ${GRIP_LIBRARIES} ${DART_LIBRARIES} ${DARTExt_LIBRARIES} ${wxWidgets_LIBRARIES} trajectory_io) 
 	add_custom_target(${script_base}.run ${script_base} ${ARGN})
 endforeach(script_src_file)
 message(STATUS " ")
