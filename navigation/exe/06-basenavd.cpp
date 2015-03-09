@@ -19,6 +19,7 @@
 #include <math/UtilsRotation.h>
 
 #include <kore.hpp>
+#include <trajectory_io.h>
 #include <argp.h>
 
 #define SQ(x) ((x) * (x))
@@ -196,17 +197,19 @@ void readGains () {
 void poll_vision_channel(bool block, bool reset_reference=true)
 {
 	// Receive the current state from vision
-	double rtraj[1][3] = {0, 0, 0};
+	// double rtraj[1][3] = {0, 0, 0};
+	int bufsize = 2 * sizeof(int) + 3 * sizeof(double); // krang pose message size
+	char buf[bufsize];
 
 	size_t frame_size = 0;
 	int options = block ? ACH_O_WAIT : ACH_O_LAST;
-	int r = ach_get(&vision_chan, &rtraj, sizeof(rtraj), &frame_size, NULL, options); 
+	int r = ach_get(&vision_chan, &buf, bufsize, &frame_size, NULL, options); 
 	if(!(r == ACH_OK || r == ACH_MISSED_FRAME)) 
 		return;
 
 	// Set the current state to vision data
-	for(size_t i = 0; i < 3; i++) 
-		state(i) = rtraj[0][i];
+	Eigen::MatrixXd M = deserialize_to_Matrix(buf);
+	state.head(3) = M.row(0).head(3); // M.topLeftCorner(1,3);
 	state(3) = state(4) = state(5) = 0.0; // set vels to zero (will be over-written by odometry)
 	cout << "Updated state from vision message: " << state.transpose() << endl;
 
@@ -366,20 +369,25 @@ void computeTorques(const Vector6d& state, double& ul, double& ur, double& dt) {
 /// Updates the trajectory using the waypoints channel
 void updateTrajectory () {
 
+	// allocate a buffer big enough for the incoming trjajectory
+	char buf[max_traj_msg_len * 3 * sizeof(double)];
+
 	// Check if a message is received
-	double rtraj[max_traj_msg_len][3] = {0};
 	size_t frame_size = 0;
 	struct timespec abstimeout = aa_tm_future(aa_tm_sec2timespec(.001));
-	ach_status_t r = ach_get(&base_waypts_chan, &rtraj, sizeof(rtraj), &frame_size, 
-			&abstimeout, ACH_O_LAST);
+	ach_status_t r = ach_get(&base_waypts_chan, &buf, sizeof(buf), 
+		&frame_size, &abstimeout, ACH_O_LAST);
 	if(!(r == ACH_OK || r == ACH_MISSED_FRAME)) return;
 
 	// Fill the trajectory data (3 doubles, 8 bytes, for each traj. point)
+	// Update: now that we're unpacking to Eigen, could plug matrix in for 
+	// traj and create refState (with vels) in run loop, but why bother?
 	trajectory.clear();
-	size_t numPoints = frame_size / (sizeof(double) * 3); // TODO should prob do frame_size / (sizeof(double) * 3)
-	for(size_t p_idx = 0; p_idx < numPoints; p_idx++) {
+	Eigen::MatrixXd poses = deserialize_to_Matrix(buf);
+	for(size_t i = 0; i < poses.rows(); i++) {
 		Vector6d newRefState;
-		newRefState << rtraj[p_idx][0], rtraj[p_idx][1], rtraj[p_idx][2], 0.0, 0.0, 0.0;
+		//newRefState << poses[i][0], poses[i][1], poses[i][2], 0.0, 0.0, 0.0;
+		newRefState << poses(i,0), poses(i,1), poses(i,2), 0.0, 0.0, 0.0;
 		trajectory.push_back(newRefState);
 	}
 
@@ -391,30 +399,7 @@ void updateTrajectory () {
 	mode = 2; // TODO prob. shouldn't change mode without permission
 }
 
-/// sets the trajectory to some hard-coded thing for debugging
-void setTestTrajectory()
-{
-	// clear the trajectory
-	trajectory.clear();
-	
-	// push back some waypoints
-	double x0 = state[0];
-	// trajectory.push_back((Eigen::VectorXd(6) << x0, 0, 0, 0, 0, 0).finished());
-	// trajectory.push_back((Eigen::VectorXd(6) << x0 +0.1, 0, 0, 0, 0, 0).finished());
-	// trajectory.push_back((Eigen::VectorXd(6) << x0 +0.2, 0, 0, 0, 0, 0).finished());
-	// trajectory.push_back((Eigen::VectorXd(6) << x0 +0.3, 0, 0, 0, 0, 0).finished());
 
-	trajectory.push_back((Eigen::VectorXd(6) << x0, 0, 0, 0, 0, 0).finished());
-	trajectory.push_back((Eigen::VectorXd(6) << x0 + 0.2, 0, 0.1, 0, 0, 0).finished());
-	trajectory.push_back((Eigen::VectorXd(6) << x0 + 0.4, 0, 0.2, 0, 0, 0).finished());
-	trajectory.push_back((Eigen::VectorXd(6) << x0 + 0.2, 0, 0.1, 0, 0, 0).finished());
-	trajectory.push_back((Eigen::VectorXd(6) << x0, 0, 0, 0, 0, 0).finished());
-
-	// Update the reference state
-	trajIdx = 0;
-	setReference(trajectory[0]);
-	mode = 2;
-}
 
 /* ******************************************************************************************** */
 void run () {
@@ -506,8 +491,9 @@ void run () {
 
 		// Send the state
 		if(true) {
-		  double traj[1][6] = {{state(0), state(1), state(2), state(3), state(4), state(5)}};
-		  ach_put(&state_chan, &traj, sizeof(traj));
+			char buf[56]; // two ints and 6 doubles
+			serialize_from_Matrix(state.transpose(), buf); // send state as row-vector like vision
+			ach_put(&state_chan, &buf, 56);
 		}
 
 		// Compute the torques based on the state and the mode
@@ -566,7 +552,6 @@ void *kbhit(void *) {
 		else if(input=='l') refstate(2) -= 10*waypt_rot_thresh;
 		else if(input=='o') error_integration = !error_integration;
 		else if(input==' ') advance_waypts = !advance_waypts;
-		else if(input=='t') setTestTrajectory();
 		pthread_mutex_unlock(&mutex);
 	}
 }
