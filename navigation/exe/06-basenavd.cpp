@@ -29,6 +29,10 @@
 #define SQ(x) ((x) * (x))
 #define R2D(x) (((x) / M_PI) * 180.0)
 
+#define MODE_OFF 1
+#define MODE_KBD 2
+#define MODE_TRAJ 3
+
 /* Prints a row or column vector. */
 #define PRINT_VECTOR(X)                                   \
 			printw("(%d x %d) ", (X).rows(), (X).cols()); \
@@ -183,6 +187,14 @@ Eigen::VectorXd K = Eigen::VectorXd::Zero(7);	//< the gains for x and th of the 
 
 // display information
 const int CURSES_DEBUG_DISPLAY_START = 20;
+
+// // Enum for control modes
+// typedef enum Modes {
+// 	DEFAULT = 0,
+// 	OFF = 1,
+// 	KBD = 2,
+// 	TRAJ = 3
+// } Modes;
 
 /* ******************************************************************************************** */
 
@@ -375,9 +387,8 @@ void computeTorques(const Vector6d& state, double& ul, double& ur, double& dt) {
 	// if (dbg) cout << "ang_int_err: " << ang_int_err << " lin_int_err: " << lin_int_err << endl;
 	// if (dbg) cout << "Gains: " << K.transpose() << endl;
 	if (dbg) {
-		printw("error:\n");  PRINT_VECTOR(err_robot.transpose())
-		printw("Gains:\n");  PRINT_VECTOR(K.transpose())
-		printw("int. errors (ang, lin): %f, %f", ang_int_err, lin_int_err);
+		printw("Reference state error:\n\t");  PRINT_VECTOR(err_robot)
+		printw("Integrated errors (ang, lin): %f, %f\n", ang_int_err, lin_int_err);
 	}
 
 	// Compute the forward and rotation torques
@@ -444,11 +455,19 @@ void updateTrajectory () {
 /* Prints the keyboard keys and \corresponding actions to the console */
 void print_key_bindings(){
 	const char *str =
-	 "'m','M': toggle ON and OFF sending commands to motors                     \n\r"
+	 "' ': toggle ON and OFF sending commands to motors                         \n\r"
 	 "'q'    : Quit                                                             \n\r"
-	 "'r'    : Reset Motors                                                     \n\r"
-	 "' '    : Start/Stop                                                       \n\r";
-	 "'d'    : Toggle debug output                                              \n\r";
+	 "'r'    : Reset Reference                                                  \n\r"
+	 "' '    : Start/Stop                                                       \n\r"
+	 "'d'    : Toggle debug output                                              \n\r"
+	 "'a'    : Toggle waypoint advance mode                                     \n\r"
+	 "'1'    : Set Mode: OFF                                                    \n\r"
+	 "'2'    : Set Mode: KEYBOARD                                               \n\r"
+	 "'3'    : Set Mode: TRAJECTORY                                             \n\r"
+	 "'j'    : Keyboard control: turn left                                      \n\r"
+	 "'l'    : Keyboard control: turn right                                     \n\r"
+	 "'i'    : Keyboard control: drive forward                                  \n\r"
+	 "'k'    : Keyboard control: drive backward                                 \n\r";
 
 	printw("KEY BINDINGS\n\r%s\r", str);
 	return;
@@ -509,22 +528,26 @@ void *kbhit(void *) {
 				break;
 			}
 			case 'i': {
+				if (mode != MODE_KBD) break;
 				// input is in the the robot frame, so we rotate to world for refstate
 				refstate(0) += 10 * waypt_lin_thresh * cos(state[2]);
 				refstate(1) += 10 * waypt_lin_thresh * sin(state[2]);
 				break;
 			}
 			case 'k': {
+				if (mode != MODE_KBD) break;
 				// input is in the the robot frame, so we rotate to world for refstate
 				refstate(0) -= 10 * waypt_lin_thresh * cos(state[2]);
 				refstate(1) -= 10 * waypt_lin_thresh * sin(state[2]);
 				break;
 			}
 			case 'j': {
+				if (mode != MODE_KBD) break;
 				refstate(2) += 10 * waypt_rot_thresh;
 				break;
 			}
 			case 'l': {
+				if (mode != MODE_KBD) break;
 				refstate(2) -= 10 * waypt_rot_thresh;
 				break;
 			}
@@ -585,10 +608,15 @@ void print_status(const Krang::Hardware* hw, const cx_t& cx)
 	printw("Allow waypoint advance:\t\t");
 	printw(advance_waypts ? "ON\n" : "OFF\n");
 
+	printw("Debug output:\t\t\t");
+	printw(dbg ? "ON\n" : "OFF\n");
+
 	// Integration is not really appropriate in this controller
 	// printw("do integration: %d\n", error_integration);
 
 	printw("----------------------------------\n");
+	printw("Gains (linear P I D, angular P I D, P-booster):\n\t");  
+	PRINT_VECTOR(K)
 
 	printw("Base state ([x,y,t,x.,y.,t.] in world frame):\n\t");
 	PRINT_VECTOR(state)
@@ -598,6 +626,8 @@ void print_status(const Krang::Hardware* hw, const cx_t& cx)
 
 	printw("Wheel State (:\n\t");
 	PRINT_VECTOR(wheel_state)
+
+	printw("Trajectory index: [%d/%d]\n", trajIdx, trajectory.size());
 }
 
 void run () {
@@ -615,20 +645,21 @@ void run () {
 	while(!somatic_sig_received) {
 
 		pthread_mutex_lock(&mutex);
-		dbg = true; //(c_++ % 20 == 0);
+		// dbg = (c_++ % 20 == 0);
 		// if(dbg) cout << "\nmode: " << mode;
 		// if(dbg) cout << " start: " << start;
 		// if(dbg) cout << " advance waypoints: " << advance_waypts;
 		// if(dbg) cout << " do integration: " << error_integration << endl;
 
-		Krang::curses_display_row = CURSES_DEBUG_DISPLAY_START;
-		
+		// Krang::curses_display_row = CURSES_DEBUG_DISPLAY_START;
+		// clear();
 		move(0, 0);
 		printw("----------------------------------\n");
 		print_key_bindings();
 		printw("----------------------------------\n");
 		print_status(krang, cx);
 		printw("----------------------------------\n");
+		printw("DEBUG MESSAGES\n");
 
 		// Read the gains if requested by user
 		if(update_gains) {
@@ -675,9 +706,8 @@ void run () {
 			// if(dbg) cout << "traj idx rot_error (deg): " << R2D(rot_error) << ", vs. " << R2D(waypt_rot_thresh) << endl;
 			// if(dbg) printf("reached: %d, xreached: %d, threached: %d\n", reached,
 			// 	(lin_error < waypt_lin_thresh), (rot_error < waypt_rot_thresh));
+			
 			if(dbg) {
-				printw("----------------------------------\n");
-				printw("DEBUG MESSAGES\n");
 				printw("lin_error: %f (thresh = %f)\n", lin_error, waypt_lin_thresh); 
 				printw("rot_error: %f (thresh = %f)\n", R2D(rot_error), R2D(rot_error)); 
 				printw("reached: %d, xreached: %d, threached: %d\n", reached,
@@ -704,9 +734,6 @@ void run () {
 
 		// if(dbg) cout << "traj idx: " << trajIdx << ", traj size: " << trajectory.size() << endl;
 		// if(dbg) cout << "refstate: " << refstate.transpose() << endl;
-		if (dbg) {
-			printw("traj idx: %d, traj size: %d\n", trajIdx, trajectory.size());
-		}
 
 		// Send the state
 		if(true) {
@@ -721,9 +748,8 @@ void run () {
 
 		// Apply the torque
 		double input[2] = {ul, ur};
-		if(!start) input[0] = input[1] = 0.0;		
-		if (dbg)
-			printw("sending wheel control input: [%f, %f]", input[0], input[1]);
+		if(!start) input[0] = input[1] = 0.0;
+		if (dbg) printw("sending wheel velocities: [%f, %f]", input[0], input[1]);
 
 		somatic_motor_cmd(&cx.d, krang->amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
 		lastMode = mode;
