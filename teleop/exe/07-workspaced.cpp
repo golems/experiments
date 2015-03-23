@@ -129,7 +129,8 @@ const char* input_mode_to_string(int mode){
             printw("(%d x %d) ", (X).rows(), (X).cols()); \
             printw("[");                                  \
             for(int i = 0; i < (X).size(); i++){          \
-                printw(" %4.4f", (X)[i]);                 \
+                printw(((X)[i]) >= 0 ? "  " : " ");       \
+                printw("%.4f", (X)[i]);                   \
             }                                             \
             printw("]\n\r");
 
@@ -392,31 +393,63 @@ void destroy() {
 
 /* Prints the keyboard keys and corresponding actions to the console */
 void print_key_bindings(){
-    const char *str =
+    printw("KEY BINDINGS\n\r%s\n\r",
      "'m','M': toggle ON and OFF sending commands to motors                     \n\r"
      "'z'    : Rotates among 3 synch mode. 'OFF', 'ON - left primary',          \n\r"
      "          'ON - right primary' . If synch mode is ON, then trajectory on  \n\r"
      "          waypoints channel for off hand is ignored.                      \n\r"
      "'q'    : Quit                                                             \n\r"
      "'r'    : Reset Motors                                                     \n\r"
-     "'i'    : Toggle input mode between VELOCITY and POSITION control          \n\r"
+     "'i'    : Toggle input mode between VELOCITY and POSE control              \n\r"
      "'1'    : Close left gripper                                               \n\r"
      "'2'    : Open left gripper                                                \n\r"
      "'3'    : Close right gripper                                              \n\r"
-     "'4'    : Open right gripper                                               \n\r";
-
-    printw("KEY BINDINGS\n\r%s\n\r", str);
+     "'4'    : Open right gripper                                               \n\r" );
     return;
 }
 
-/* 
- * Gets current pose of the gripper in World frame
+/* Gets current pose of the gripper in World frame
  * @param gripperBodyNode : The pointer to the gripper node in the DART model
  * Returns the 6-vector pose of gripper in World frame */
 Eigen::VectorXd getCurPose(kinematics::BodyNode *gripperBodyNode){
     return Krang::transformToEuler(gripperBodyNode->getWorldTransform(), math::XYZ);
 }
 
+/* Set the input mode (pose or velocity). Uses global variable cx.
+ * inputMode: INPUT_MODE_POSE or INPUT_MODE_VEL */
+void setInputMode(int inputMode){
+    if ((cx.input_mode = inputMode) == INPUT_MODE_VEL){
+        ach_flush(&cx.channel_ref_vel[L_GRIP]);
+        ach_flush(&cx.channel_ref_vel[R_GRIP]);
+
+        cx.ref_vel[L_GRIP] = Eigen::VectorXd::Zero(6);
+        cx.ref_vel[R_GRIP] = Eigen::VectorXd::Zero(6);
+    }
+    else{   // pose mode
+        ach_flush(&waypts_channel[L_GRIP]);
+        ach_flush(&waypts_channel[R_GRIP]);
+
+        cx.ref_poses[L_GRIP] = getCurPose(wss[Krang::LEFT]->endEffector);
+        cx.ref_poses[R_GRIP] = getCurPose(wss[Krang::RIGHT]->endEffector);
+    }
+    return;
+}
+
+/* Open the gripper. Uses global var daemon_cx.*/
+void openGripper(somatic_motor_t *gripper){
+    somatic_motor_reset(&daemon_cx, gripper);
+    usleep(1e4);
+    somatic_motor_setpos(&daemon_cx, gripper, SCHUNK_GRIPPER_POSITION_OPEN, 1);
+    return;
+}
+
+/* Close the gripper. Uses global var daemon_cx. */
+void closeGripper(somatic_motor_t *gripper){
+    somatic_motor_reset(&daemon_cx, gripper);
+    usleep(1e4);
+    somatic_motor_setpos(&daemon_cx, gripper, SCHUNK_GRIPPER_POSITION_CLOSE, 1);
+    return;
+}
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 void *kbhit(void *) {
@@ -445,22 +478,7 @@ void *kbhit(void *) {
             somatic_motor_halt(&daemon_cx, hw->arms[Krang::RIGHT]);
         } break;              
         case 'i':
-            if (cx.input_mode == INPUT_MODE_POSE){
-                cx.input_mode = INPUT_MODE_VEL;
-                ach_flush(&cx.channel_ref_vel[L_GRIP]);
-                ach_flush(&cx.channel_ref_vel[R_GRIP]);
-
-                cx.ref_vel[L_GRIP] = Eigen::VectorXd::Zero(6);
-                cx.ref_vel[R_GRIP] = Eigen::VectorXd::Zero(6);
-            }
-            else{
-                cx.input_mode = INPUT_MODE_POSE;
-                ach_flush(&waypts_channel[L_GRIP]);
-                ach_flush(&waypts_channel[R_GRIP]);
-
-                cx.ref_poses[L_GRIP] = getCurPose(wss[Krang::LEFT]->endEffector);
-                cx.ref_poses[R_GRIP] = getCurPose(wss[Krang::RIGHT]->endEffector);
-            }
+            setInputMode(!cx.input_mode);
             break;
         case 'z': {
             // change synch mode
@@ -497,24 +515,16 @@ void *kbhit(void *) {
             }
             break;
         case '1':   // experimental functionality for developer. 
-            somatic_motor_reset(&daemon_cx, hw->grippers[Krang::LEFT]);
-            usleep(1e4);
-            somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::LEFT], SCHUNK_GRIPPER_POSITION_CLOSE, 1);
+            closeGripper(hw->grippers[Krang::LEFT]);
             break;
         case '2': 
-            somatic_motor_reset(&daemon_cx, hw->grippers[Krang::LEFT]);
-            usleep(1e4);
-            somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::LEFT], SCHUNK_GRIPPER_POSITION_OPEN, 1);
+            openGripper(hw->grippers[Krang::LEFT]);
             break;
         case '3': 
-            somatic_motor_reset(&daemon_cx, hw->grippers[Krang::RIGHT]);
-            usleep(1e4);
-            somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::RIGHT], SCHUNK_GRIPPER_POSITION_CLOSE, 1);
+            closeGripper(hw->grippers[Krang::RIGHT]);
             break;
         case '4': 
-            somatic_motor_reset(&daemon_cx, hw->grippers[Krang::RIGHT]);
-            usleep(1e4);
-            somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::RIGHT], SCHUNK_GRIPPER_POSITION_OPEN, 1);
+            openGripper(hw->grippers[Krang::RIGHT]);
             break;
         default:
             //cout<<__LINE__<<": Value of ch is :" << (int)ch <<std::endl<<'\r';
@@ -531,13 +541,11 @@ void print_robot_state(const Krang::Hardware* hw,
                        const Krang::WorkspaceControl *r_ws, 
                        const cx_t& cx){
 
-    printw("Orien gain %f\n", l_ws->compliance_orientation_gain);
-
     printw("CURRENT CONF. (use key-bindings to change)\n\r");
-    printw("Synch Mode: %s\n\r", synch_mode_to_string(cx.synch_mode));
-    printw("Send commands to Motor: ");
+    printw("   Synch Mode: %s\n\r", synch_mode_to_string(cx.synch_mode));
+    printw("   Send commands to Motor: ");
     printw(cx.send_motor_cmds ? "ON\n" : "OFF\n");
-    printw("Input Mode: %s\n\r", input_mode_to_string(cx.input_mode));
+    printw("   Input Mode: %s\n\r", input_mode_to_string(cx.input_mode));
 
     printw("---------------\n");
 
@@ -710,8 +718,6 @@ bool poll_ref_vel_channel(ach_channel_t& chan, Eigen::VectorXd& vel) {
  *  chan :[IN] the channel to read the command from */
 void poll_cmd_channel(ach_channel_t& chan){
 
-    printw("\n%d:I am inside %s()\n", __LINE__, __func__);
-
     size_t frame_size = 0;  
     char buf[2 * sizeof(int) + 2 * sizeof(double)];
 
@@ -731,28 +737,31 @@ void poll_cmd_channel(ach_channel_t& chan){
 
     switch(cmdCode){ // round a command code
         case 0:     // close/open both grippers
-            somatic_motor_reset(&daemon_cx, hw->grippers[Krang::LEFT]);
-            somatic_motor_reset(&daemon_cx, hw->grippers[Krang::RIGHT]);
-            usleep(1e4);
-            somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::LEFT], 
-                            (val == 0) ? SCHUNK_GRIPPER_POSITION_OPEN : SCHUNK_GRIPPER_POSITION_CLOSE, 1);
-            somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::RIGHT],
-                            (val == 0) ? SCHUNK_GRIPPER_POSITION_OPEN : SCHUNK_GRIPPER_POSITION_CLOSE, 1);
+            if(val == 0){
+                openGripper(hw->grippers[Krang::LEFT]);
+                openGripper(hw->grippers[Krang::RIGHT]);
+            }
+            else{
+                closeGripper(hw->grippers[Krang::LEFT]);
+                closeGripper(hw->grippers[Krang::RIGHT]);
+            }
             break;
         case 1: 
-            somatic_motor_reset(&daemon_cx, hw->grippers[Krang::LEFT]);
-            usleep(1e4);
-            somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::LEFT], 
-                            (val == 0) ? SCHUNK_GRIPPER_POSITION_OPEN : SCHUNK_GRIPPER_POSITION_CLOSE, 1);
+            if(val == 0)
+                openGripper(hw->grippers[Krang::LEFT]);
+            else
+                closeGripper(hw->grippers[Krang::LEFT]);
             break;
         case 2: break;
-            somatic_motor_reset(&daemon_cx, hw->grippers[Krang::RIGHT]);
-            usleep(1e4);
-            somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::RIGHT], 
-                            (val == 0) ? SCHUNK_GRIPPER_POSITION_OPEN : SCHUNK_GRIPPER_POSITION_CLOSE, 1);
+            if(val == 0)
+                openGripper(hw->grippers[Krang::RIGHT]);
+            else
+                closeGripper(hw->grippers[Krang::RIGHT]);
             break;
         case 3: 
-            cx.input_mode = (val == 0) ? INPUT_MODE_POSE : INPUT_MODE_VEL;
+            (val == 0) ? 
+                setInputMode(INPUT_MODE_POSE)
+                    : setInputMode(INPUT_MODE_VEL);
             break;
         default: 
             break;
@@ -781,8 +790,6 @@ void run() {
 
     cx.ref_vel[L_GRIP] = Eigen::VectorXd::Zero(6);
     cx.ref_vel[R_GRIP] = Eigen::VectorXd::Zero(6);
-
-    cx.ref_vel[L_GRIP][1] = 0.10;
 
     Eigen::VectorXd x; // current position of the gripper
 
@@ -853,7 +860,7 @@ void run() {
                 
                 /* passing time argument as 1.
                   We need to get qdot from xdot using jacobian and time is not 
-                  required. But kore seems to be in-efficiently. Reseting the 
+                  required. But kore seems to be inefficient. Reseting the 
                   reference transform passing time as 1 is just a hacky way to
                   do, till kore is upgraded (See workspace.c in kore to 
                   understand what's happening). */
