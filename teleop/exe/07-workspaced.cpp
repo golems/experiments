@@ -101,6 +101,8 @@ const char *g_default_cmd_chan_name = "cmd_workspaced";
 #define SYNCH_OFF       0      //< synch mode is off
 #define SYNCH_ON_L_PRIM 1      //< synch on with left hand primary
 #define SYNCH_ON_R_PRIM 2      //< synch on with right hand primary
+#define IMU_OFF 0          //< don't call kore::updateSensors each timestep
+#define IMU_ON 1           //< call kore::updateSensors each timestep
 
 const char* synch_mode_to_string(int mode){
     switch(mode) {
@@ -110,6 +112,15 @@ const char* synch_mode_to_string(int mode){
     }
     return "UNKNOWN";
 }
+
+const char* imu_mode_to_string(int mode){
+    switch(mode) {
+    case IMU_OFF: return "IMU_OFF";
+    case IMU_ON: return "IMU_ON";
+    }
+    return "UNKNOWN";
+}
+
 
 /* In vel mode, gripper aims for target velocity. In pose mode, grippper
  * aims for target pose */
@@ -166,9 +177,10 @@ typedef struct {
     ach_channel_t channel_cmd;
 
     // set by key-bindings when daemon is running
-    int synch_mode;     // 3-modes off, on-left primary, on-right primary
-    bool send_motor_cmds;
-    int input_mode;     // vel or pose
+    int synch_mode;         //< 3-modes off, on-left primary, on-right primary
+    bool send_motor_cmds;   //< boolean on or off
+    int input_mode;         //< vel or pose
+    int imu_mode;        //< int 0=off, 1=on (not bool b/c we might add more options)
 
     Eigen::VectorXd ref_poses[2];   // for pose input mode
     Eigen::VectorXd ref_vel[2];     // for vel input mode
@@ -183,7 +195,7 @@ typedef struct {
 
 /* GLOBAL VARIABLES (Ideally, global variables should be as minimum as 
    possible) */
-cx_t cx;;
+cx_t cx;
 
 // TODO: move the channels into the context struct
 // channels for for reading waypoints
@@ -314,10 +326,8 @@ const double NULLSPACE_GAIN = 0.1;
 const double DAMPING_GAIN = 0.005;
 const double SPACENAV_ORIENTATION_GAIN = 0.50; // maximum 50 cm per second from spacenav
 const double SPACENAV_TRANSLATION_GAIN = 0.25; // maximum .25 radians per second from spacenav
-//const double COMPLIANCE_TRANSLATION_GAIN = 1.0 / 750.0;
-const double COMPLIANCE_TRANSLATION_GAIN = 0.002;
-//const double COMPLIANCE_ORIENTATION_GAIN = .125 / 750.0;
-const double COMPLIANCE_ORIENTATION_GAIN = 0.10;
+const double COMPLIANCE_TRANSLATION_GAIN = 0.003; // 0.002;
+const double COMPLIANCE_ORIENTATION_GAIN = 0.03; // 0.10;
 const double HAND_OVER_HAND_SPEED = 0.05; // 3 cm per second when going hand-over-hand
 
 // various rate limits - be nice to other programs
@@ -390,16 +400,17 @@ void destroy() {
 	somatic_d_destroy(&daemon_cx);
 }
 
-/* Prints the keyboard keys and corresponding actions to the console */
+/* Prints the keyboard keys and \corresponding actions to the console */
 void print_key_bindings(){
     const char *str =
      "'m','M': toggle ON and OFF sending commands to motors                     \n\r"
      "'z'    : Rotates among 3 synch mode. 'OFF', 'ON - left primary',          \n\r"
      "          'ON - right primary' . If synch mode is ON, then trajectory on  \n\r"
      "          waypoints channel for off hand is ignored.                      \n\r"
+     "'i'    : toggle IMU mode                                                  \n\r"
      "'q'    : Quit                                                             \n\r"
      "'r'    : Reset Motors                                                     \n\r"
-     "'i'    : Toggle input mode between VELOCITY and POSITION control          \n\r"
+     "'p'    : Toggle input mode between VELOCITY and POSITION control          \n\r"
      "'1'    : Close left gripper                                               \n\r"
      "'2'    : Open left gripper                                                \n\r"
      "'3'    : Close right gripper                                              \n\r"
@@ -417,6 +428,18 @@ Eigen::VectorXd getCurPose(kinematics::BodyNode *gripperBodyNode){
     return Krang::transformToEuler(gripperBodyNode->getWorldTransform(), math::XYZ);
 }
 
+void toggle_imu(int mode = -1)
+{
+    if (mode >= 0)
+        cx.imu_mode = mode;
+    else
+        cx.imu_mode = 1 - cx.imu_mode;
+        
+    if (cx.imu_mode)
+        hw->mode = (Krang::Hardware::Mode)(Krang::Hardware::MODE_ALL_GRIPSCH);
+    else
+        hw->mode = (Krang::Hardware::Mode)(Krang::Hardware::MODE_ALL_GRIPSCH & ~Krang::Hardware::MODE_IMU);
+}
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 void *kbhit(void *) {
@@ -444,7 +467,7 @@ void *kbhit(void *) {
             somatic_motor_halt(&daemon_cx, hw->arms[Krang::LEFT]);
             somatic_motor_halt(&daemon_cx, hw->arms[Krang::RIGHT]);
         } break;              
-        case 'i':
+        case 'p':
             if (cx.input_mode == INPUT_MODE_POSE){
                 cx.input_mode = INPUT_MODE_VEL;
                 ach_flush(&cx.channel_ref_vel[L_GRIP]);
@@ -482,6 +505,10 @@ void *kbhit(void *) {
             Eigen::Matrix4d T_off_to_world = wss[off]->endEffector->getWorldTransform();
 
             cx.T_off_to_pri = T_pri_to_world.inverse() * T_off_to_world;
+        } break;
+        case 'i': {
+            // change sensor mode
+            toggle_imu();
         } break;
         case 'm': case 'M': case ' ':
             // toggle sending commands to motors
@@ -531,31 +558,34 @@ void print_robot_state(const Krang::Hardware* hw,
                        const Krang::WorkspaceControl *r_ws, 
                        const cx_t& cx){
 
-    printw("Orien gain %f\n", l_ws->compliance_orientation_gain);
+    printw("Compliance lin/ang gains: %f %f\n", 
+        l_ws->compliance_translation_gain, 
+        l_ws->compliance_orientation_gain);
 
     printw("CURRENT CONF. (use key-bindings to change)\n\r");
     printw("Synch Mode: %s\n\r", synch_mode_to_string(cx.synch_mode));
     printw("Send commands to Motor: ");
     printw(cx.send_motor_cmds ? "ON\n" : "OFF\n");
     printw("Input Mode: %s\n\r", input_mode_to_string(cx.input_mode));
+    printw("Sensor (IMU) update Mode: %s\n\r", imu_mode_to_string(cx.imu_mode));
 
-    printw("---------------\n");
+    printw("----------------------------------\n");
 
     Eigen::VectorXd pose = Eigen::VectorXd::Zero(6);
 
     printw("ROBOT STATE\n\r");
 
     // TODO the pose used exponential coordinates. Covert it to euler
-    printw("Base pose (in World Frame):\n     ");
+    printw("Base pose (in World Frame):\n");
     pose = hw->robot->getConfig(Krang::dart_root_dof_ids);
-    printw("exp:   ");
+    printw("\texp:   ");
     PRINT_VECTOR(pose)
-    printw("\n    euler: ");
+    printw("\teuler: ");
     kinematics::BodyNode* baseBodyNode = hw->robot->getNode("Base");
     pose = Krang::transformToEuler(baseBodyNode->getWorldTransform(), math::XYZ);
     PRINT_VECTOR(pose)
 
-    printw("\n]Left Gripper]\n");
+    printw("\n[Left Gripper]\n");
 
     printw(" Current Pose (in Robot Frame):\n     ");
     pose = getCurPose(l_ws->endEffector);
@@ -710,7 +740,7 @@ bool poll_ref_vel_channel(ach_channel_t& chan, Eigen::VectorXd& vel) {
  *  chan :[IN] the channel to read the command from */
 void poll_cmd_channel(ach_channel_t& chan){
 
-    printw("\n%d:I am inside %s()\n", __LINE__, __func__);
+    // printw("\n%d:I am inside %s()\n", __LINE__, __func__);
 
     size_t frame_size = 0;  
     char buf[2 * sizeof(int) + 2 * sizeof(double)];
@@ -718,19 +748,22 @@ void poll_cmd_channel(ach_channel_t& chan){
     enum ach_status r = ach_get(&chan, buf, sizeof(buf), &frame_size, NULL, ACH_O_LAST);
     if(!(r == ACH_OK || r == ACH_MISSED_FRAME)) return;
 
-    printw("\n%d:I am inside %s()\n", __LINE__, __func__);
+    // printw("\n%d:I am inside %s()\n", __LINE__, __func__);
 
     Eigen::MatrixXd cmdM = deserialize_to_Matrix(buf);
     if(cmdM.size() != 2)
         printw("Error at Line %d: Invalid message on command code\n\r", __LINE__);
 
-    printw("\n%d:I am inside %s()\n", __LINE__, __func__);
+    // printw("\n%d:I am inside %s()\n", __LINE__, __func__);
 
     int cmdCode = int(cmdM(0) + 0.5);   // round the value
     int val = int(cmdM(1) + 0.5);       // round the value
 
     switch(cmdCode){ // round a command code
-        case 0:     // close/open both grippers
+        case 0: 
+            cx.input_mode = (val == 0) ? INPUT_MODE_POSE : INPUT_MODE_VEL;
+            break;
+        case 1:     // close/open both grippers
             somatic_motor_reset(&daemon_cx, hw->grippers[Krang::LEFT]);
             somatic_motor_reset(&daemon_cx, hw->grippers[Krang::RIGHT]);
             usleep(1e4);
@@ -739,20 +772,20 @@ void poll_cmd_channel(ach_channel_t& chan){
             somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::RIGHT],
                             (val == 0) ? SCHUNK_GRIPPER_POSITION_OPEN : SCHUNK_GRIPPER_POSITION_CLOSE, 1);
             break;
-        case 1: 
+        case 2: 
             somatic_motor_reset(&daemon_cx, hw->grippers[Krang::LEFT]);
             usleep(1e4);
             somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::LEFT], 
                             (val == 0) ? SCHUNK_GRIPPER_POSITION_OPEN : SCHUNK_GRIPPER_POSITION_CLOSE, 1);
             break;
-        case 2: break;
+        case 3: 
             somatic_motor_reset(&daemon_cx, hw->grippers[Krang::RIGHT]);
             usleep(1e4);
             somatic_motor_setpos(&daemon_cx, hw->grippers[Krang::RIGHT], 
                             (val == 0) ? SCHUNK_GRIPPER_POSITION_OPEN : SCHUNK_GRIPPER_POSITION_CLOSE, 1);
             break;
-        case 3: 
-            cx.input_mode = (val == 0) ? INPUT_MODE_POSE : INPUT_MODE_VEL;
+        case 4: 
+            toggle_imu(val);
             break;
         default: 
             break;
@@ -978,7 +1011,7 @@ void init() {
 	// Initialize somatic
 	somatic_d_opts_t daemon_opt;
 	memset(&daemon_opt, 0, sizeof(daemon_opt)); // zero initialize
-	daemon_opt.ident = "05-workspace";
+	daemon_opt.ident = "workspaced";
 	somatic_d_init(&daemon_cx, &daemon_opt);
 
 	// Initialize ACH channels for reading waypoints for left and right grippers
@@ -1047,6 +1080,7 @@ void init() {
     cx.send_motor_cmds = true;
     cx.synch_mode = SYNCH_OFF;
     cx.input_mode = INPUT_MODE_POSE;
+    cx.imu_mode = IMU_ON;
 
 	// Send message on event channel for 'daemon initialized and running'
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 

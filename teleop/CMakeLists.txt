@@ -27,7 +27,8 @@ find_library(trajectory_io REQUIRED)
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 find_package(Eigen3 REQUIRED)
-include_directories(EIGEN3_INCLUDE_DIR)
+include_directories(${EIGEN3_INCLUDE_DIR}) # sometimes it's called this...
+include_directories(${EIGEN_INCLUDE_DIR})	# and sometimes it's called this
 
 # Include the project files and the common helpers for all the experiments
 include_directories(src)
