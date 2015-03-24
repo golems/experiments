@@ -153,13 +153,15 @@ simulation::World* world;			//< the world representation in dart
 dynamics::SkeletonDynamics* robot;			//< the robot representation in dart
 
 /* ******************************************************************************************** */
-bool start = false;
-bool dbg = false;
-bool update_gains = false; 	//< if true, read new gains from the text file
-size_t mode = 1;			//< 0 sitting, 1 keyboard commands, 2 trajectory following
-bool advance_waypts = true;
+bool start = false; 				//< send motor velocities
+bool dbg = false;					//< print debug output
+bool update_gains = false; 			//< if true, read new gains from the text file
+size_t mode = 1;					//< 0 sitting, 1 keyboard commands, 2 trajectory following
+bool advance_waypts = true; 		//< if true, allow trajectory following
 bool wait_for_global_vision_msg_at_startup = false;
-bool use_steering_method = false;
+bool use_steering_method = false; 	//< if true, use a steering controller
+bool vision_updates = false;			//< if true, upate base pose from vision channel
+
 const double waypt_lin_thresh = 0.01; // 0.003; // 0.001;
 const double waypt_rot_thresh = 0.015; // 0.0036;
 bool error_integration = false;
@@ -187,14 +189,6 @@ Eigen::VectorXd K = Eigen::VectorXd::Zero(7);	//< the gains for x and th of the 
 
 // display information
 const int CURSES_DEBUG_DISPLAY_START = 20;
-
-// // Enum for control modes
-// typedef enum Modes {
-// 	DEFAULT = 0,
-// 	OFF = 1,
-// 	KBD = 2,
-// 	TRAJ = 3
-// } Modes;
 
 /* ******************************************************************************************** */
 
@@ -255,7 +249,7 @@ void poll_vision_channel(bool block, bool reset_reference=true)
 	// reset odometry
 	last_wheel_state = wheel_state;
 
-	// never change the state without resetting the reference!
+	// never change the state without resetting the reference!(?)
 	if (reset_reference)
 		refstate = state;
 }
@@ -383,9 +377,6 @@ void computeTorques(const Vector6d& state, double& ul, double& ur, double& dt) {
 		ang_int_err += err_robot[2] * dt;	//< integrate angular error
 	}
 
-	// if (dbg) cout << "error: " << err_robot.transpose() << endl;
-	// if (dbg) cout << "ang_int_err: " << ang_int_err << " lin_int_err: " << lin_int_err << endl;
-	// if (dbg) cout << "Gains: " << K.transpose() << endl;
 	if (dbg) {
 		printw("Reference state error:\n\t");  PRINT_VECTOR(err_robot)
 		printw("Integrated errors (ang, lin): %f, %f\n", ang_int_err, lin_int_err);
@@ -461,6 +452,8 @@ void print_key_bindings(){
 	 "' '    : Start/Stop                                                       \n\r"
 	 "'d'    : Toggle debug output                                              \n\r"
 	 "'a'    : Toggle waypoint advance mode                                     \n\r"
+	 "'v'    : Toggle vision updates (polling base pose)                        \n\r"
+	 "'g'    : Re-read gains from file (gains-PID.txt)                          \n\r"
 	 "'1'    : Set Mode: OFF                                                    \n\r"
 	 "'2'    : Set Mode: KEYBOARD                                               \n\r"
 	 "'3'    : Set Mode: TRAJECTORY                                             \n\r"
@@ -512,6 +505,10 @@ void *kbhit(void *) {
 				advance_waypts = !advance_waypts;
 				break;
 			}
+			case 'v': {
+				vision_updates = !vision_updates;
+				break;
+			}
 			case ' ': {
 				start = !start;
 				break;
@@ -559,34 +556,6 @@ void *kbhit(void *) {
 				break;
 		}
 		pthread_mutex_unlock(&mutex);
-
-		// if(input=='0') mode = 0;
-		// else if(input=='1') mode = 1;
-		// else if(input=='2') mode = 2;
-		// else if(input=='d') dbg = !dbg;
-		// else if(input=='s') start = !start;
-		// else if(input=='g') update_gains = true; 	//< if true, read new gains from the text file
-		// else if(input=='r') { 						//< set reference to current state at next iteration
-		// 	setReference(state);
-		// 	trajectory.clear();
-		// 	ang_int_err = 0;
-		// 	lin_int_err = 0;
-		// }
-		// else if(input=='i') { 
-		// 	// input is in the the robot frame, so we rotate to world for refstate
-		// 	refstate(0) += 10*waypt_lin_thresh * cos(state[2]);
-		// 	refstate(1) += 10*waypt_lin_thresh * sin(state[2]);
-		// }
-		// else if(input=='k') {
-		// 	// input is in the the robot frame, so we rotate to world for refstate
-		// 	refstate(0) -= 10*waypt_lin_thresh * cos(state[2]);
-		// 	refstate(1) -= 10*waypt_lin_thresh * sin(state[2]);
-		// }
-		// else if(input=='j') refstate(2) += 10*waypt_rot_thresh;
-		// else if(input=='l') refstate(2) -= 10*waypt_rot_thresh;
-		// else if(input=='o') error_integration = !error_integration;
-		// else if(input==' ') advance_waypts = !advance_waypts;
-		// pthread_mutex_unlock(&mutex);
 	}
 }
 
@@ -607,6 +576,9 @@ void print_status(const Krang::Hardware* hw, const cx_t& cx)
 
 	printw("Allow waypoint advance:\t\t");
 	printw(advance_waypts ? "ON\n" : "OFF\n");
+
+	printw("Vision updates:\t\t");
+	printw(vision_updates ? "ON\n" : "OFF\n");
 
 	printw("Debug output:\t\t\t");
 	printw(dbg ? "ON\n" : "OFF\n");
@@ -645,11 +617,6 @@ void run () {
 	while(!somatic_sig_received) {
 
 		pthread_mutex_lock(&mutex);
-		// dbg = (c_++ % 20 == 0);
-		// if(dbg) cout << "\nmode: " << mode;
-		// if(dbg) cout << " start: " << start;
-		// if(dbg) cout << " advance waypoints: " << advance_waypts;
-		// if(dbg) cout << " do integration: " << error_integration << endl;
 
 		// Krang::curses_display_row = CURSES_DEBUG_DISPLAY_START;
 		// clear();
@@ -673,23 +640,13 @@ void run () {
 		t_prev = t_now;
 
 		// poll krang_vision for updates to state before odometry updates
-		poll_vision_channel(false, mode < 3); // don't reset reference if executing traj
+		if (vision_updates) 
+			poll_vision_channel(false, mode < 3); // don't reset reference if executing traj
 
 		// Get the state and update odometry
 		last_wheel_state = wheel_state;
 		updateWheelsState(wheel_state, dt); 
 		updateState(wheel_state, last_wheel_state, state);
-		// if (dbg) cout << "wheel_state: " << wheel_state.transpose() << endl;
-		// if (dbg) cout << "state: " << state.transpose() << endl;
-
-		// save trajectory tracking as requested
-		// if(save_hist) {
-		// 	fprintf(state_hist_file, "%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t0\n", 
-		// 		state(0), state(1), state(2), 
-		// 		refstate(0), refstate(1), refstate(2));
-		// 	fflush(state_hist_file);
-		// }
-
 
 		// Check if a new trajectory data is given
 		updateTrajectory();
@@ -701,11 +658,6 @@ void run () {
 			double rot_error = abs(err[2]); 				//< angular distance to current waypoint
 
 			bool reached = ((lin_error < waypt_lin_thresh)) && (rot_error < waypt_rot_thresh);
-			
-			// if(dbg) cout << "traj idx lin_error: " << (lin_error) << ", vs. " << waypt_lin_thresh  << endl;
-			// if(dbg) cout << "traj idx rot_error (deg): " << R2D(rot_error) << ", vs. " << R2D(waypt_rot_thresh) << endl;
-			// if(dbg) printf("reached: %d, xreached: %d, threached: %d\n", reached,
-			// 	(lin_error < waypt_lin_thresh), (rot_error < waypt_rot_thresh));
 			
 			if(dbg) {
 				printw("lin_error: %f (thresh = %f)\n", lin_error, waypt_lin_thresh); 
@@ -731,9 +683,6 @@ void run () {
 				}
 			}
 		}
-
-		// if(dbg) cout << "traj idx: " << trajIdx << ", traj size: " << trajectory.size() << endl;
-		// if(dbg) cout << "refstate: " << refstate.transpose() << endl;
 
 		// Send the state
 		if(true) {
@@ -851,13 +800,6 @@ void destroy()
 /* ******************************************************************************************** */
 /// The main thread
 int main(int argc, char* argv[]) {
-	// if (argc > 1) {
-	// 	string flag = argv[1];
-	// 	cout << "flag: " << flag << endl;
-	// 	if (flag == "-v") {
-	// 		wait_for_global_vision_msg_at_startup = true;
-	// 	}
-	// }
 	
 	// parse command line arguments
 	parse_args(argc, argv);
