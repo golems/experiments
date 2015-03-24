@@ -49,7 +49,11 @@
  *    Publishes to:
  *      Left gripper pose:  Matrix of size 1 x 6
  *      Right gripper pose: Matrix of size 1 x 6
- *      Body state:         Matrix of size 1 x 24          
+ *      Body state:         Matrix of size 1 x 24  
+ *  
+ *  NOTE: There should be minimum delay of 100ms between two successive ACH 
+ *        message. This is especially important after changing cmd msg is sent
+ *        for changing input mode.        
  *
  *
  * The program runs in two threads:
@@ -411,7 +415,7 @@ void print_key_bindings(){
      "'i'    : toggle IMU mode                                                  \n\r"
      "'q'    : Quit                                                             \n\r"
      "'r'    : Reset Motors                                                     \n\r"
-     "'i'    : Toggle input mode between VELOCITY and POSE control              \n\r"
+     "'p'    : Toggle input mode between VELOCITY and POSE control              \n\r"
      "'1'    : Close left gripper                                               \n\r"
      "'2'    : Open left gripper                                                \n\r"
      "'3'    : Close right gripper                                              \n\r"
@@ -1113,19 +1117,25 @@ A simple implementation of events.
 Each event is just a character string.
 One function records the event. Another functions prints the events. Prev events
 may be over-written with new ones. Current it supports recording only last
-event. It can be extended to record more events.
-*/
+event. It can be extended to record more events. */
+typedef struct {
+    char events[10][256];
+    unsigned int numEvents;
+    int start;
+} EventQ_t;
 
-char g_lastEvent[256] = "\0";
-unsigned int g_eventNum = 0;
+EventQ_t g_EventQ {.events = {0}, .numEvents = 0, .start = 0};
 
 void recordEvent(const char* event){
-    strncpy(g_lastEvent, event, 256); g_eventNum++;
+    strncpy(g_EventQ.events[g_EventQ.start], event, 256);
+    g_EventQ.start = (g_EventQ.start+1)%10;
+    g_EventQ.numEvents++;
     return;
 }
 
 void printEvents(){
     printw("EVENTS\n");
-    printw("    %d: %s\n", g_eventNum, g_lastEvent);
+    for(int i=0; i<10; i++)
+        printw("    %d: %s\n", g_EventQ.numEvents + i, g_EventQ.events[(g_EventQ.start + i)%10]);
     return;
 }
