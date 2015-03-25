@@ -55,6 +55,15 @@
 
 using namespace std;
 
+/**
+ * Util to get working directory, since somatic annoyingly changes it
+ */
+std::string getcwd_str()
+{
+   char temp[1024];
+   return ( getcwd(temp, 1024) ? std::string( temp ) : std::string("") );
+}
+
 /* ---------- */
 /* ARGP Info  */
 /* ---------- */
@@ -162,8 +171,10 @@ bool wait_for_global_vision_msg_at_startup = false;
 bool use_steering_method = false; 	//< if true, use a steering controller
 bool vision_updates = false;			//< if true, upate base pose from vision channel
 
-const double waypt_lin_thresh = 0.01; // 0.003; // 0.001;
-const double waypt_rot_thresh = 0.015; // 0.0036;
+const double waypt_lin_thresh = 0.01; 		// (meters) for advancing waypoints in traj.
+const double waypt_rot_thresh = 0.015; 		// (meters) for advancing waypoints in traj.
+const double goal_reached_epsilon = 0.01;  // (meters) tolerance for reaching goal (static friction)
+
 bool error_integration = false;
 double ang_int_err;					//< accumulator for angular error
 double lin_int_err;					//< accumulator for linear error (x in robot frame)
@@ -176,16 +187,18 @@ double u_lin_max = 15.0; 			//< threshold on linear contribution
 typedef Eigen::Matrix<double,6,1> Vector6d;
 Vector6d refstate;					//< reference state for controller (x,y,th,x.,y.,th.)
 Vector6d state;						//< current state (x,y,th,x.,y.,th.)
+Eigen::VectorXd K = Eigen::VectorXd::Zero(8);		//< the gains for x and th of the state. y is ignored.
 Eigen::Vector4d wheel_state;		//< wheel pos and vels in radians (lphi, lphi., rphi, rphi.)
 Eigen::Vector4d last_wheel_state; 	//< last wheel state used to update the state 
 vector <Vector6d> trajectory;		//< the goal trajectory	
 const size_t max_traj_msg_len = 170;
 size_t trajIdx = 0;
-// FILE* state_hist_file;				//< used to dump state and reference poses over time to plot traj. tracking
+FILE* log_file;				//< used to dump state and reference poses over time to plot traj. tracking
+std::string init_wd;
 
 /* ******************************************************************************************** */
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;	//< mutex to update gains
-Eigen::VectorXd K = Eigen::VectorXd::Zero(7);	//< the gains for x and th of the state. y is ignored.
+
 
 // display information
 const int CURSES_DEBUG_DISPLAY_START = 20;
@@ -202,8 +215,8 @@ double unwrap(double angle)
 
 /// Read file for gains
 void readGains () {
-	ifstream file ("/home/jscholz/vc/experiments/navigation/data/gains-PID.txt");
-	// ifstream file ("../data/gains-PID.txt");
+	std::string gains_file = init_wd + "/../data/gains-PID.txt";
+	ifstream file(gains_file.c_str());
 	assert(file.is_open());
 	char line [1024];
 	// K = Eigen::VectorXd::Zero(7);
@@ -213,7 +226,7 @@ void readGains () {
 	std::stringstream stream(line, std::stringstream::in);
 	size_t i = 0;
 	double newDouble;
-	while ((i < 7) && (stream >> newDouble)) K(i++) = newDouble;
+	while ((i < 8) && (stream >> newDouble)) K(i++) = newDouble;
 	file.close();
 }
 
@@ -267,32 +280,40 @@ void setReference(Vector6d& newRef) {
 /*
  * wheel_state is a 4-vector containing:
  * linear position (total distance traveled since start; average of both wheels)
- * linear velocity (current linear vel; average of both wheels)
  * angular position (difference of wheel dist over wheelbase)
+ * linear velocity (current linear vel; average of both wheels)
  * angular velocity (difference of wheel vel over wheelbase)
  */
 void updateWheelsState(Eigen::Vector4d& wheel_state, double dt) {
 
 	// Model constants
-	static const double width = 0.69; //< krang base width in meters (measured: 0.69)
-	static const double wheel_diameter = 0.536;
-	static const double k1 = 0.475;//< scaling constant to make angle actually work. old: 0.55
-	static const double k2 = 0.503; //< scaling constant to make displacement actually work: 5
+	static const double wheel_base = 0.692; //< krang wheel base (width) in meters (measured)
+	static const double wheel_diameter = 0.536; // meters 0.543 (measured)
+	static const double wheel_radius = wheel_diameter/2;
 
 	// Update the sensor information
 	krang->updateSensors(dt);
-
+	
 	// Change the wheel values from radians to meters
-	double tleft = krang->amc->pos[0] * wheel_diameter;  //< traversed distances for left wheel in meters
-	double tright = krang->amc->pos[1] * wheel_diameter; //< traversed distances for right wheel in meters
-	double vleft = krang->amc->vel[0] * wheel_diameter;  //< left wheel velocity in m/s <-- cafeful: noisy!
-	double vright = krang->amc->vel[1] * wheel_diameter; //< right wheel velocity in m/s <-- cafeful: noisy!
+	double pleft  = krang->amc->pos[0] * wheel_radius; //< traversed distances for left wheel in meters
+	double pright = krang->amc->pos[1] * wheel_radius; //< traversed distances for right wheel in meters
+	double vleft  = krang->amc->vel[0] * wheel_radius; //< left wheel velocity in m/s <-- cafeful: noisy!
+	double vright = krang->amc->vel[1] * wheel_radius; //< right wheel velocity in m/s <-- cafeful: noisy!
 
 	// Set the state
-	wheel_state[0] = k2 * (tleft + tright)/2.0; // + krang->imu;
-	wheel_state[1] = (wheel_state[0] - last_wheel_state[0]) * dt; // finite diff. rather than amc vels b/c of noise
-	wheel_state[2] = k1 * (tright - tleft)/width; // (krang->amc->pos[1] - krang->amc->pos[0]) / 2.0;
-	wheel_state[3] = (wheel_state[2] - last_wheel_state[2]) * dt; // finite diff. rather than amc vels b/c of noise
+	wheel_state[0] = (pleft + pright)/2.0; // + krang->imu;
+	wheel_state[1] = (pright - pleft)/wheel_base;
+
+	// "correct" version:
+	wheel_state[2] = (vleft + vright)/2.0;
+	wheel_state[3] = (vright - vleft)/wheel_base;
+
+	// finite diff version:
+	// wheel_state[2] = (wheel_state[0] - last_wheel_state[0]) / dt; // finite diff. rather than amc vels b/c of noise
+	// wheel_state[3] = (wheel_state[1] - last_wheel_state[1]) / dt; // finite diff. rather than amc vels b/c of noise
+
+	// wheel_state[2] = 0.;
+	// wheel_state[3] = 0.;
 }
 
 /* ******************************************************************************************** */
@@ -311,15 +332,15 @@ void updateWheelsState(Eigen::Vector4d& wheel_state, double dt) {
 void updateState(Eigen::Vector4d& wheel_state, Eigen::Vector4d& last_wheel_state, Vector6d& state) {
 
 	// Compute the change in forward direction and orientation
-	double dlin = wheel_state[0] - last_wheel_state[0]; // linear distance covered (in *some* direction)
-	double dtheta = wheel_state[2] - last_wheel_state[2]; // angular distance covered
+	double dlin   = wheel_state[0] - last_wheel_state[0]; // linear distance covered (in *some* direction)
+	double dtheta = wheel_state[1] - last_wheel_state[1]; // angular distance covered
 	double last_theta = state[2]; // last robot heading is whatever theta was before we update it
 
 	state[0] += dlin * cos(last_theta);				//< x
 	state[1] += dlin * sin(last_theta);				//< y
 	state[2] += dtheta;								//< theta
-	state[3] = wheel_state[1] * cos(last_theta); 	//< xdot
-	state[4] = wheel_state[1] * sin(last_theta); 	//< ydot
+	state[3] = wheel_state[2] * cos(last_theta); 	//< xdot
+	state[4] = wheel_state[2] * sin(last_theta); 	//< ydot
 	state[5] = wheel_state[3];						//< thetadot
 }
 
@@ -331,8 +352,9 @@ Vector6d computeError(const Vector6d& state, const Vector6d& refstate, bool rota
 {
 	// Error vector in world (or odom) frame, which is where state and refstate are defined
 	Vector6d err = refstate - state;
-	err[2] = unwrap(err[2]); //< unwrap angular portion of error
-	Eigen::Rotation2Dd rot(state[2]); // used for rotating errors between robot and world frame
+
+	err[2] = unwrap(err[2]); 			//< unwrap angular portion of error
+	Eigen::Rotation2Dd rot(state[2]); 	//< used for rotating errors between robot and world frame
 
 	// strict steering method:
 	if (use_steering_method) {
@@ -355,48 +377,80 @@ Vector6d computeError(const Vector6d& state, const Vector6d& refstate, bool rota
 		err.segment(3,2) = rot.inverse() * err.segment(3,2); //< rotate velocity error to robot frame	
 	}
 
+	// fprintf(log_file, "%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t \n", 
+	// 	err(0), err(1), err(2), err(3), err(4), err(5));
+	// fflush(log_file);
 	return err;
 }
 
 /* ******************************************************************************************** */
-void computeTorques(const Vector6d& state, double& ul, double& ur, double& dt) {
+Vector6d computeTorques(const Vector6d& state, double& ul, double& ur, double& dt)
+{
+	Vector6d err_robot = computeError(state, refstate, true);
+
 	// Set reference based on the mode
 	if(mode == 1 || mode == 0) {
 		ul = ur = 0.0;
-		return;
+		return err_robot;
 	}
 
-	Vector6d err_robot = computeError(state, refstate, true);
-
-	// Static-friction compensation: increase p-gain inversely with vel to get robot started
-	double velsq = state.segment(3,2).squaredNorm();
-	double p_booster = K[6] * exp(-20 * velsq); //< exponentially falls off as robot gains speed
+	// Static-friction compensation: adaptive p-gain: falls inversely with vel to get robot started
+	double velsq = state.segment(3,3).squaredNorm(); // total velocity magnitude
+	double k_fri = K[6] * exp(-K[7] * velsq); //< exponentially falls off as robot gains speed
 
 	if (error_integration) {
-		lin_int_err += err_robot[0] * dt;		//< only integrate error in direction we can control
+		lin_int_err += err_robot[0] * dt;	//< only integrate error in direction we can control
 		ang_int_err += err_robot[2] * dt;	//< integrate angular error
 	}
 
 	if (dbg) {
-		printw("Reference state error:\n\t");  PRINT_VECTOR(err_robot)
+		printw("Reference state error: %lf\n\t", err_robot.norm());
+		PRINT_VECTOR(err_robot)
+		printw("Velocity squared-norm: %lf\n", velsq);
 		printw("Integrated errors (ang, lin): %f, %f\n", ang_int_err, lin_int_err);
 	}
 
 	// Compute the forward and rotation torques
-	// note: K is organized as [linearP linearI linearD angularP angularI angularD p_booster]
+	// note: K is organized as [linearP linearI linearD angularP angularI angularD k_fri]
 	// 		 err_robot is organized as [x, y, theta, xdot, ydot, thetadot]
-	double u_x 		= (K[0] * err_robot[0] * p_booster + K[1] * lin_int_err + K[2] * err_robot[3]);
-	double u_theta 	= (K[3] * err_robot[2] * p_booster + K[4] * ang_int_err + K[5] * err_robot[5]);
+	// double u_x 		= K[0] * err_robot[0] * k_fri + K[1] * lin_int_err + K[2] * err_robot[3];
+	// double u_theta 	= K[3] * err_robot[2] * k_fri + K[4] * ang_int_err + K[5] * err_robot[5];
+
+	double u_x = K[0] * err_robot[0] + K[1] * lin_int_err + K[2] * err_robot[3];
+	// if (abs(err_robot[0]) > goal_reached_epsilon)
+	// 	u_x += k_fri * (err_robot[0] > 0 ? 1 : -1); // static friction term
+	u_x += k_fri * err_robot[0]; // static friction term
+
+	double u_theta = K[3] * err_robot[2] + K[4] * ang_int_err + K[5] * err_robot[5];
+	//u_theta += k_fri * (err_robot[2] > 0 ? 1 : -1); // static friction term
+
+	fprintf(log_file, "%lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf\n",
+		err_robot[0], 
+		err_robot[1], 
+		err_robot[2], 
+		err_robot[3], 
+		err_robot[4], 
+		err_robot[5], 
+		u_x,
+		u_theta,
+		k_fri,
+		velsq,
+		wheel_state[2],
+		wheel_state[3]);
+	fflush(log_file);
 
 	// Limit the output torques
 	u_theta = max(-u_spin_max, min(u_spin_max, u_theta));
-	u_x= max(-u_lin_max, min(u_lin_max, u_x));
+	u_x     = max(-u_lin_max, min(u_lin_max, u_x));
 	if(dbg) printw("u_x: %lf, u_theta: %lf\n", u_x, u_theta);
+
 	ul = u_x - u_theta;
 	ur = u_x + u_theta;
 	ul = max(-u_hard_max, min(u_hard_max, ul));
 	ur = max(-u_hard_max, min(u_hard_max, ur));
 	if(dbg) printw("ul: %lf, ur: %lf\n", ul, ur);
+
+	return err_robot;
 }
 
 /* ******************************************************************************************** */
@@ -462,7 +516,7 @@ void print_key_bindings(){
 	 "'i'    : Keyboard control: drive forward                                  \n\r"
 	 "'k'    : Keyboard control: drive backward                                 \n\r";
 
-	printw("KEY BINDINGS\n\r%s\r", str);
+	printw("\t\t[KEY BINDINGS]\n\r%s\r", str);
 	return;
 }
 
@@ -507,6 +561,8 @@ void *kbhit(void *) {
 			}
 			case 'v': {
 				vision_updates = !vision_updates;
+				if (vision_updates) 
+					poll_vision_channel(true, true);
 				break;
 			}
 			case ' ': {
@@ -562,7 +618,7 @@ void *kbhit(void *) {
 /* Prints the current status of the machine */
 void print_status(const Krang::Hardware* hw, const cx_t& cx)
 {
-	printw("STATUS\n");
+	printw("\t\t[STATUS]\n");
 	
 	printw("Sending motor commands:\t\t");
     printw(start ? "ON\n" : "OFF\n");
@@ -577,7 +633,7 @@ void print_status(const Krang::Hardware* hw, const cx_t& cx)
 	printw("Allow waypoint advance:\t\t");
 	printw(advance_waypts ? "ON\n" : "OFF\n");
 
-	printw("Vision updates:\t\t");
+	printw("Vision updates:\t\t\t");
 	printw(vision_updates ? "ON\n" : "OFF\n");
 
 	printw("Debug output:\t\t\t");
@@ -626,7 +682,7 @@ void run () {
 		printw("----------------------------------\n");
 		print_status(krang, cx);
 		printw("----------------------------------\n");
-		printw("DEBUG MESSAGES\n");
+		printw("\t\t[DEBUG MESSAGES]\n");
 
 		// Read the gains if requested by user
 		if(update_gains) {
@@ -641,19 +697,38 @@ void run () {
 
 		// poll krang_vision for updates to state before odometry updates
 		if (vision_updates) 
-			poll_vision_channel(false, mode < 3); // don't reset reference if executing traj
+			poll_vision_channel(false, false); //mode == MODE_OFF || mode == MODE_KBD); // don't reset reference if executing traj
 
 		// Get the state and update odometry
 		last_wheel_state = wheel_state;
 		updateWheelsState(wheel_state, dt); 
 		updateState(wheel_state, last_wheel_state, state);
 
+		// Send the state
+		if(true) {
+			char buf[56]; // two ints and 6 doubles
+			serialize_from_Matrix(state.transpose(), buf); // send state as row-vector like vision
+			ach_put(&state_chan, &buf, 56);
+		}
+
+		// Compute the torques based on the state and the mode
+		double ul, ur;
+		Vector6d err = computeTorques(state, ul, ur, dt);
+
+		// Apply the torque
+		double input[2] = {ul, ur};
+		if(!start) input[0] = input[1] = 0.0;
+		if (dbg) printw("sending wheel currents: [%f, %f]", input[0], input[1]);
+
+		somatic_motor_cmd(&cx.d, krang->amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
+		lastMode = mode;
+
 		// Check if a new trajectory data is given
 		updateTrajectory();
 		
 		// Update the reference state if necessary
-		if(mode == 3 && !trajectory.empty()) {
-			Vector6d err = computeError(state, refstate, true);
+		if(mode == MODE_TRAJ && !trajectory.empty()) {
+			// Vector6d err = computeError(state, refstate, true);
 			double lin_error = abs(err[0]); 				//< linear distance in controllable direction
 			double rot_error = abs(err[2]); 				//< angular distance to current waypoint
 
@@ -677,31 +752,12 @@ void run () {
 					setReference(trajectory[trajIdx]);
 
 					if(trajIdx == trajectory.size() - 1) {
-						mode = 1;
+						// mode = 1;
 						error_integration = false;
 					}
 				}
 			}
 		}
-
-		// Send the state
-		if(true) {
-			char buf[56]; // two ints and 6 doubles
-			serialize_from_Matrix(state.transpose(), buf); // send state as row-vector like vision
-			ach_put(&state_chan, &buf, 56);
-		}
-
-		// Compute the torques based on the state and the mode
-		double ul, ur;
-		computeTorques(state, ul, ur, dt);
-
-		// Apply the torque
-		double input[2] = {ul, ur};
-		if(!start) input[0] = input[1] = 0.0;
-		if (dbg) printw("sending wheel velocities: [%f, %f]", input[0], input[1]);
-
-		somatic_motor_cmd(&cx.d, krang->amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
-		lastMode = mode;
 
 		refresh();  // refresh the ncurses screen
 		pthread_mutex_unlock(&mutex);
@@ -742,6 +798,11 @@ void parse_args(int argc, char* argv[])
 /* ******************************************************************************************** */
 void init()
 {
+	// Open the log file (this is just for debugging)
+	log_file = fopen((init_wd + "/basenavd_log.txt").c_str(), "w+");
+	assert((log_file != NULL) && "Could not open the file");
+
+	// initialize errors (not really used anymore)
 	ang_int_err = 0;
 	lin_int_err = 0;
 	error_integration = false;
@@ -767,11 +828,11 @@ void init()
 	// Receive the current state from vision
 	if (wait_for_global_vision_msg_at_startup) {
 		cout << "waiting for initial vision data on vision channel: " << endl;
-		poll_vision_channel(true, false);
+		poll_vision_channel(true, true);
 	}
 
 	// Set the state, refstate and limits
-	updateWheelsState(wheel_state, 0.0);
+	updateWheelsState(wheel_state, 1e-3);
 	last_wheel_state = wheel_state;
 	updateState(wheel_state, last_wheel_state, state);
 	setReference(state);
@@ -800,7 +861,8 @@ void destroy()
 /* ******************************************************************************************** */
 /// The main thread
 int main(int argc, char* argv[]) {
-	
+	init_wd = getcwd_str();
+
 	// parse command line arguments
 	parse_args(argc, argv);
 
