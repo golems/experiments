@@ -169,11 +169,10 @@ size_t mode = 1;					//< 0 sitting, 1 keyboard commands, 2 trajectory following
 bool advance_waypts = true; 		//< if true, allow trajectory following
 bool wait_for_global_vision_msg_at_startup = false;
 bool use_steering_method = false; 	//< if true, use a steering controller
-bool vision_updates = false;			//< if true, upate base pose from vision channel
+bool vision_updates = false;		//< if true, upate base pose from vision channel
 
-const double waypt_lin_thresh = 0.01; 		// (meters) for advancing waypoints in traj.
-const double waypt_rot_thresh = 0.015; 		// (meters) for advancing waypoints in traj.
-const double goal_reached_epsilon = 0.01;  // (meters) tolerance for reaching goal (static friction)
+const double waypt_lin_thresh = 0.015; //0.01; 		// (meters) for advancing waypoints in traj.
+const double waypt_rot_thresh = 0.025; //0.015;		// (meters) for advancing waypoints in traj.
 
 bool error_integration = false;
 double ang_int_err;					//< accumulator for angular error
@@ -257,7 +256,7 @@ void poll_vision_channel(bool block, bool reset_reference=true)
 	state.head(3) = M.row(0).head(3); // M.topLeftCorner(1,3);
 	state(3) = state(4) = state(5) = 0.0; // set vels to zero (will be over-written by odometry)
 	// cout << "Updated state from vision message: " << state.transpose() << endl;
-	printw("Updated state from vision message: \n"); PRINT_VECTOR(state.transpose())
+	// printw("Updated state from vision message: \n"); PRINT_VECTOR(state.transpose())
 
 	// reset odometry
 	last_wheel_state = wheel_state;
@@ -406,38 +405,34 @@ Vector6d computeTorques(const Vector6d& state, double& ul, double& ur, double& d
 	if (dbg) {
 		printw("Reference state error: %lf\n\t", err_robot.norm());
 		PRINT_VECTOR(err_robot)
-		printw("Velocity squared-norm: %lf\n", velsq);
-		printw("Integrated errors (ang, lin): %f, %f\n", ang_int_err, lin_int_err);
+		printw("k_fri: %lf, (velsq: %lf)\n", k_fri, velsq);
+		// printw("Integrated errors (ang, lin): %f, %f\n", ang_int_err, lin_int_err);
 	}
 
 	// Compute the forward and rotation torques
 	// note: K is organized as [linearP linearI linearD angularP angularI angularD k_fri]
 	// 		 err_robot is organized as [x, y, theta, xdot, ydot, thetadot]
-	// double u_x 		= K[0] * err_robot[0] * k_fri + K[1] * lin_int_err + K[2] * err_robot[3];
-	// double u_theta 	= K[3] * err_robot[2] * k_fri + K[4] * ang_int_err + K[5] * err_robot[5];
-
 	double u_x = K[0] * err_robot[0] + K[1] * lin_int_err + K[2] * err_robot[3];
-	// if (abs(err_robot[0]) > goal_reached_epsilon)
-	// 	u_x += k_fri * (err_robot[0] > 0 ? 1 : -1); // static friction term
 	u_x += k_fri * err_robot[0]; // static friction term
 
 	double u_theta = K[3] * err_robot[2] + K[4] * ang_int_err + K[5] * err_robot[5];
-	//u_theta += k_fri * (err_robot[2] > 0 ? 1 : -1); // static friction term
+	u_theta += k_fri * err_robot[2]; // static friction term
 
-	fprintf(log_file, "%lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf\n",
-		err_robot[0], 
-		err_robot[1], 
-		err_robot[2], 
-		err_robot[3], 
-		err_robot[4], 
-		err_robot[5], 
-		u_x,
-		u_theta,
-		k_fri,
-		velsq,
-		wheel_state[2],
-		wheel_state[3]);
-	fflush(log_file);
+	// Dump controller output for plotting 
+	// fprintf(log_file, "%lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf\n",
+	// 	err_robot[0], 
+	// 	err_robot[1], 
+	// 	err_robot[2], 
+	// 	err_robot[3], 
+	// 	err_robot[4], 
+	// 	err_robot[5], 
+	// 	u_x,
+	// 	u_theta,
+	// 	k_fri,
+	// 	velsq,
+	// 	wheel_state[2],
+	// 	wheel_state[3]);
+	// fflush(log_file);
 
 	// Limit the output torques
 	u_theta = max(-u_spin_max, min(u_spin_max, u_theta));
@@ -480,16 +475,13 @@ void updateTrajectory () {
 	}
 	static int tctr = 0;
 	// cout << "updating trajectory from poses" << poses << endl;
-	if (dbg)
-		printw("updating trajectory from poses:\n"); PRINT_MAT(poses)
+	// if (dbg)
+	// 	printw("updating trajectory from poses:\n"); PRINT_MAT(poses)
 	tctr++;
 
 	// Update the reference state
 	trajIdx = 0;
 	setReference(trajectory[0]);
-
-	// turn on trajectory following mode
-	// mode = 3; // TODO prob. shouldn't change mode without permission
 }
 
 
@@ -655,7 +647,7 @@ void print_status(const Krang::Hardware* hw, const cx_t& cx)
 	printw("Wheel State (:\n\t");
 	PRINT_VECTOR(wheel_state)
 
-	printw("Trajectory index: [%d/%d]\n", trajIdx, trajectory.size());
+	printw("Trajectory index: [%d/%d]\n", trajIdx, trajectory.size()-1);
 }
 
 void run () {
@@ -678,7 +670,7 @@ void run () {
 		// clear();
 		move(0, 0);
 		printw("----------------------------------\n");
-		print_key_bindings();
+		// print_key_bindings();
 		printw("----------------------------------\n");
 		print_status(krang, cx);
 		printw("----------------------------------\n");
@@ -718,43 +710,45 @@ void run () {
 		// Apply the torque
 		double input[2] = {ul, ur};
 		if(!start) input[0] = input[1] = 0.0;
-		if (dbg) printw("sending wheel currents: [%f, %f]", input[0], input[1]);
+		if (dbg) printw("sending wheel currents: [%f, %f]\n", input[0], input[1]);
 
 		somatic_motor_cmd(&cx.d, krang->amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
 		lastMode = mode;
-
-		// Check if a new trajectory data is given
-		updateTrajectory();
 		
 		// Update the reference state if necessary
-		if(mode == MODE_TRAJ && !trajectory.empty()) {
-			// Vector6d err = computeError(state, refstate, true);
-			double lin_error = abs(err[0]); 				//< linear distance in controllable direction
-			double rot_error = abs(err[2]); 				//< angular distance to current waypoint
+		if(mode == MODE_TRAJ) {
+			// Check if a new trajectory data is given
+			updateTrajectory();
 
-			bool reached = ((lin_error < waypt_lin_thresh)) && (rot_error < waypt_rot_thresh);
-			
-			if(dbg) {
-				printw("lin_error: %f (thresh = %f)\n", lin_error, waypt_lin_thresh); 
-				printw("rot_error: %f (thresh = %f)\n", R2D(rot_error), R2D(rot_error)); 
-				printw("reached: %d, xreached: %d, threached: %d\n", reached,
-					(lin_error < waypt_lin_thresh), (rot_error < waypt_rot_thresh));
-			} 
+			if (!trajectory.empty()) {
+				// Vector6d err = computeError(state, refstate, true);
+				double lin_error = abs(err[0]); 	//< linear distance in controllable direction
+				double rot_error = abs(err[2]); 	//< angular distance to current waypoint
 
-			if (reached) {
-				// reset integral stuff whenever we reach any reference
-				ang_int_err = 0;
-				lin_int_err = 0;
+				bool reached = ((lin_error < waypt_lin_thresh)) && (rot_error < waypt_rot_thresh);
+				
+				if(dbg) {
+					printw("lin_error: %f (thresh=%f)\n", lin_error, waypt_lin_thresh); 
+					printw("rot_error: %f (thresh=%f)\n", rot_error, waypt_rot_thresh); 
+					printw("reached: %d, xreached: %d, threached: %d\n", reached,
+						(lin_error < waypt_lin_thresh), (rot_error < waypt_rot_thresh));
+				} 
 
-				if (advance_waypts) {
-					// advance the reference index in the trajectory, or stop if done		
-					trajIdx = min((trajIdx + 1), (trajectory.size() - 1));
-					setReference(trajectory[trajIdx]);
+				if (reached) {
+					// reset integral stuff whenever we reach any reference
+					ang_int_err = 0;
+					lin_int_err = 0;
 
-					if(trajIdx == trajectory.size() - 1) {
-						// mode = 1;
-						error_integration = false;
-					}
+					if (advance_waypts) {
+						// advance the reference index in the trajectory, or stop if done		
+						trajIdx = min((trajIdx + 1), (trajectory.size() - 1));
+						setReference(trajectory[trajIdx]);
+
+						if(trajIdx == trajectory.size() - 1) {
+							// mode = 1;
+							error_integration = false;
+						}
+				}
 				}
 			}
 		}
