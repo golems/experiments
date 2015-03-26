@@ -9,6 +9,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <deque>
 
 #include <Eigen/Dense>
 
@@ -175,32 +176,33 @@ const double waypt_lin_thresh = 0.015; //0.01; 		// (meters) for advancing waypo
 const double waypt_rot_thresh = 0.025; //0.015;		// (meters) for advancing waypoints in traj.
 
 bool error_integration = false;
-double ang_int_err;					//< accumulator for angular error
-double lin_int_err;					//< accumulator for linear error (x in robot frame)
+Eigen::Vector3d int_err;			//< accumulator for integral error (x,y,theta in robot frame)
 double u_hard_max = 18.0;			//< never write values higher than this
 double u_spin_max = 18.0; 			//< thershold on spin contribution
 double u_lin_max = 15.0; 			//< threshold on linear contribution
-// bool save_hist = false;				//< save tracking history flag
 
 /* ******************************************************************************************** */
 typedef Eigen::Matrix<double,6,1> Vector6d;
+
 Vector6d refstate;					//< reference state for controller (x,y,th,x.,y.,th.)
 Vector6d state;						//< current state (x,y,th,x.,y.,th.)
-Eigen::VectorXd K = Eigen::VectorXd::Zero(8);		//< the gains for x and th of the state. y is ignored.
 Eigen::Vector4d wheel_state;		//< wheel pos and vels in radians (lphi, lphi., rphi, rphi.)
 Eigen::Vector4d last_wheel_state; 	//< last wheel state used to update the state 
+Eigen::VectorXd K = Eigen::VectorXd::Zero(8);	//< the gains for x and th of the state. y is ignored.
 vector <Vector6d> trajectory;		//< the goal trajectory	
 const size_t max_traj_msg_len = 170;
 size_t trajIdx = 0;
+
+deque<Vector6d> state_hist;		//< state history for filtering
+const int state_hist_len = 10;	//< max number of states in history
+deque<Vector6d> err_hist;		//< error history for integral control
+const int err_hist_len = 10;	//< max number of states in history
+
 FILE* log_file;				//< used to dump state and reference poses over time to plot traj. tracking
 std::string init_wd;
 
 /* ******************************************************************************************** */
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;	//< mutex to update gains
-
-
-// display information
-const int CURSES_DEBUG_DISPLAY_START = 20;
 
 /* ******************************************************************************************** */
 
@@ -227,6 +229,15 @@ void readGains () {
 	double newDouble;
 	while ((i < 8) && (stream >> newDouble)) K(i++) = newDouble;
 	file.close();
+}
+
+/*
+ * A single setter for refstate, so we have the chance to use as
+ * trigger for other events (flags and stuff)
+ */
+void setReference(Vector6d& newRef) {
+	refstate = newRef;
+	int_err.setZero();
 }
 
 /*
@@ -263,15 +274,7 @@ void poll_vision_channel(bool block, bool reset_reference=true)
 
 	// never change the state without resetting the reference!(?)
 	if (reset_reference)
-		refstate = state;
-}
-
-/*
- * A single setter for refstate, so we have the chance to use as
- * trigger for other events (flags and stuff)
- */
-void setReference(Vector6d& newRef) {
-	refstate = newRef;
+		setReference(state);
 }
 
 /* ******************************************************************************************** */
@@ -341,6 +344,10 @@ void updateState(Eigen::Vector4d& wheel_state, Eigen::Vector4d& last_wheel_state
 	state[3] = wheel_state[2] * cos(last_theta); 	//< xdot
 	state[4] = wheel_state[2] * sin(last_theta); 	//< ydot
 	state[5] = wheel_state[3];						//< thetadot
+
+	state_hist.push_front(state);
+	if (state_hist.size() > state_hist_len)
+		state_hist.pop_back();
 }
 
 /* 
@@ -398,24 +405,39 @@ Vector6d computeTorques(const Vector6d& state, double& ul, double& ur, double& d
 	double k_fri = K[6] * exp(-K[7] * velsq); //< exponentially falls off as robot gains speed
 
 	if (error_integration) {
-		lin_int_err += err_robot[0] * dt;	//< only integrate error in direction we can control
-		ang_int_err += err_robot[2] * dt;	//< integrate angular error
+		Vector6d cur_err = err_robot * dt;
+		int_err += cur_err.head(3);
+		// err_hist.push_front(cur_err);
+
+		// if (err_hist.size() > err_hist_len) {
+		// 	Vector6d old_err = err_hist.back();
+		// 	// int_err -= old_err.head(3);
+		// 	err_hist.pop_back();
+		// }
+
+		// hack: sum each time
+		// int_err.setZero();
+		// deque<Vector6d>::iterator it = err_hist.begin();
+		// while (it != err_hist.end()) {
+		// 	int_err += (*it++).head(3);
+		// }
 	}
 
 	if (dbg) {
 		printw("Reference state error: %lf\n\t", err_robot.norm());
 		PRINT_VECTOR(err_robot)
 		printw("k_fri: %lf, (velsq: %lf)\n", k_fri, velsq);
-		// printw("Integrated errors (ang, lin): %f, %f\n", ang_int_err, lin_int_err);
+		printw("Integrated errors: "); PRINT_VECTOR(int_err);
 	}
 
 	// Compute the forward and rotation torques
 	// note: K is organized as [linearP linearI linearD angularP angularI angularD k_fri]
 	// 		 err_robot is organized as [x, y, theta, xdot, ydot, thetadot]
-	double u_x = K[0] * err_robot[0] + K[1] * lin_int_err + K[2] * err_robot[3];
+	double u_x = K[0] * err_robot[0] + K[1] * int_err[0] + K[2] * err_robot[3];
+	// u_x += k_fri * (err_robot[0] > 0 ? 1 : -1); // static friction term
 	u_x += k_fri * err_robot[0]; // static friction term
 
-	double u_theta = K[3] * err_robot[2] + K[4] * ang_int_err + K[5] * err_robot[5];
+	double u_theta = K[3] * err_robot[2] + K[4] * int_err[2] + K[5] * err_robot[5];
 	u_theta += k_fri * err_robot[2]; // static friction term
 
 	// Dump controller output for plotting 
@@ -498,6 +520,7 @@ void print_key_bindings(){
 	 "' '    : Start/Stop                                                       \n\r"
 	 "'d'    : Toggle debug output                                              \n\r"
 	 "'a'    : Toggle waypoint advance mode                                     \n\r"
+	 "'o'    : Toggle error integration                                     \n\r"
 	 "'v'    : Toggle vision updates (polling base pose)                        \n\r"
 	 "'g'    : Re-read gains from file (gains-PID.txt)                          \n\r"
 	 "'1'    : Set Mode: OFF                                                    \n\r"
@@ -568,8 +591,7 @@ void *kbhit(void *) {
 			case 'r': {
 				setReference(state);
 				trajectory.clear();
-				ang_int_err = 0;
-				lin_int_err = 0;
+				int_err.setZero();
 				break;
 			}
 			case 'i': {
@@ -577,6 +599,7 @@ void *kbhit(void *) {
 				// input is in the the robot frame, so we rotate to world for refstate
 				refstate(0) += 10 * waypt_lin_thresh * cos(state[2]);
 				refstate(1) += 10 * waypt_lin_thresh * sin(state[2]);
+				int_err.setZero();
 				break;
 			}
 			case 'k': {
@@ -584,16 +607,19 @@ void *kbhit(void *) {
 				// input is in the the robot frame, so we rotate to world for refstate
 				refstate(0) -= 10 * waypt_lin_thresh * cos(state[2]);
 				refstate(1) -= 10 * waypt_lin_thresh * sin(state[2]);
+				int_err.setZero();
 				break;
 			}
 			case 'j': {
 				if (mode != MODE_KBD) break;
 				refstate(2) += 10 * waypt_rot_thresh;
+				int_err.setZero();
 				break;
 			}
 			case 'l': {
 				if (mode != MODE_KBD) break;
 				refstate(2) -= 10 * waypt_rot_thresh;
+				int_err.setZero();
 				break;
 			}
 			case 'o': {
@@ -666,7 +692,6 @@ void run () {
 
 		pthread_mutex_lock(&mutex);
 
-		// Krang::curses_display_row = CURSES_DEBUG_DISPLAY_START;
 		// clear();
 		move(0, 0);
 		printw("----------------------------------\n");
@@ -736,8 +761,7 @@ void run () {
 
 				if (reached) {
 					// reset integral stuff whenever we reach any reference
-					ang_int_err = 0;
-					lin_int_err = 0;
+					int_err.setZero();
 
 					if (advance_waypts) {
 						// advance the reference index in the trajectory, or stop if done		
@@ -797,8 +821,7 @@ void init()
 	assert((log_file != NULL) && "Could not open the file");
 
 	// initialize errors (not really used anymore)
-	ang_int_err = 0;
-	lin_int_err = 0;
+	int_err.setZero();
 	error_integration = false;
 
 	// Initialize the motors and sensors on the hardware and update the kinematics in dart

@@ -2,7 +2,7 @@
 # pb_alpha and pb_beta are parameters for an adaptive positional gain 
 # for overcoming static friction which falls off as velocity increases:
 # k_pb = pb_apha * exp(-pb_beta * ||v||)
-# To disable adaptive gains, set pb_alpha=1 and pb_beta=0
+# To disable adaptive gains, set pb_alpha=0
 #
 # 100 0 15 100 0 5 20 50
-230 0 13 120 0 6 300 2000
+330 130 13 120 130 6 0 1000
