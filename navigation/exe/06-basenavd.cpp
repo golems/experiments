@@ -172,8 +172,10 @@ bool wait_for_global_vision_msg_at_startup = false;
 bool use_steering_method = false; 	//< if true, use a steering controller
 bool vision_updates = false;		//< if true, upate base pose from vision channel
 
-const double waypt_lin_thresh = 0.015; //0.01; 		// (meters) for advancing waypoints in traj.
-const double waypt_rot_thresh = 0.025; //0.015;		// (meters) for advancing waypoints in traj.
+const double waypt_lin_thresh = 0.03; //0.015; 		// (meters) for advancing waypoints in traj.
+const double waypt_rot_thresh = 0.05; //0.025;		// (meters) for advancing waypoints in traj.
+const double kbd_lin_incr = 0.05;
+const double kbd_rot_incr = 0.1;
 
 bool error_integration = false;
 Eigen::Vector3d int_err;			//< accumulator for integral error (x,y,theta in robot frame)
@@ -597,28 +599,28 @@ void *kbhit(void *) {
 			case 'i': {
 				if (mode != MODE_KBD) break;
 				// input is in the the robot frame, so we rotate to world for refstate
-				refstate(0) += 10 * waypt_lin_thresh * cos(state[2]);
-				refstate(1) += 10 * waypt_lin_thresh * sin(state[2]);
+				refstate(0) += kbd_lin_incr * cos(state[2]);
+				refstate(1) += kbd_lin_incr * sin(state[2]);
 				int_err.setZero();
 				break;
 			}
 			case 'k': {
 				if (mode != MODE_KBD) break;
 				// input is in the the robot frame, so we rotate to world for refstate
-				refstate(0) -= 10 * waypt_lin_thresh * cos(state[2]);
-				refstate(1) -= 10 * waypt_lin_thresh * sin(state[2]);
+				refstate(0) -= kbd_lin_incr * cos(state[2]);
+				refstate(1) -= kbd_lin_incr * sin(state[2]);
 				int_err.setZero();
 				break;
 			}
 			case 'j': {
 				if (mode != MODE_KBD) break;
-				refstate(2) += 10 * waypt_rot_thresh;
+				refstate(2) += kbd_rot_incr;
 				int_err.setZero();
 				break;
 			}
 			case 'l': {
 				if (mode != MODE_KBD) break;
-				refstate(2) -= 10 * waypt_rot_thresh;
+				refstate(2) -= kbd_rot_incr;
 				int_err.setZero();
 				break;
 			}
@@ -650,6 +652,9 @@ void print_status(const Krang::Hardware* hw, const cx_t& cx)
 
 	printw("Allow waypoint advance:\t\t");
 	printw(advance_waypts ? "ON\n" : "OFF\n");
+
+	printw("Error integration:\t\t");
+	printw(error_integration ? "ON\n" : "OFF\n");
 
 	printw("Vision updates:\t\t\t");
 	printw(vision_updates ? "ON\n" : "OFF\n");
