@@ -85,6 +85,8 @@
 #include <Eigen/Dense>
 
 #include <iostream>
+#include <fstream>
+
 #include <iomanip>
 
 #include <robotics/parser/dart_parser/DartLoader.h>
@@ -181,7 +183,6 @@ typedef struct {
     somatic_d_opts_t d_opts;
     
     // set by command line arguments
-
     const char *lgrip_waypnts_channel_name;	// left gripper waypoints channel name
     const char *rgrip_waypnts_channel_name;	// right gripper waypoints channel name
     const char *lgrip_state_channel_name;
@@ -195,6 +196,8 @@ typedef struct {
     // channels to subscribe
     ach_channel_t channel_ref_vel[2]; // to read ref vel in vel mode
     ach_channel_t channel_cmd;
+
+    std::string init_wd; // The initial working directory
 
     // set by key-bindings when daemon is running
     int synch_mode;         //< 3-modes off, on-left primary, on-right primary
@@ -430,6 +433,8 @@ void print_key_bindings(){
      "          waypoints channel for off hand is ignored.                      \n\r"
      "'c'    : toggle COMPLIANCE mode (ON or OFF)                               \n\r"
      "'i'    : toggle IMU mode (ON or OFF)                                      \n\r"
+     "'g'    : Re-read and update compliance gains from file                    \n\r"
+     "          (workspaced-compliance-gains.txt)                               \n\r"
      "'q'    : Quit                                                             \n\r"
      "'r'    : Reset Motors                                                     \n\r"
      "'p'    : Toggle input mode between VELOCITY and POSE control              \n\r"
@@ -496,6 +501,29 @@ void closeGripper(somatic_motor_t *gripper){
     return;
 }
 
+/* [This variable should be put into cx_t. But if this is put up there, 
+    the program throws seg fault during execution] */
+std::string init_wd;
+/* Outputs the complaince gains from the file. Use global variable cx */
+void readComplianceGains(double* translationGain, double* orientationGain) {
+    std::string gains_file = init_wd + "/../data/workspaced-compliance-gains.txt";
+    ifstream file(gains_file.c_str());
+
+    assert(file.is_open());
+    char line [1024];
+    file.getline(line, 1024);
+    while (line[0] == '#')      // Ignore lines starting with hash
+        file.getline(line, 1024);
+    std::stringstream stream(line, std::stringstream::in);
+    size_t i = 0;
+    // double newDouble;
+    // while ((i < 8) && (stream >> newDouble)) K(i++) = newDouble;
+    stream >> *translationGain >> *orientationGain;
+    
+    file.close();
+    return;
+}
+
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 void *kbhit(void *) {
     
@@ -548,26 +576,25 @@ void *kbhit(void *) {
         } break;
         case 'c': // toggle compliance mode
             if(cx.compliance_mode == COMPLIANCE_ON){
-                wss[Krang::LEFT]->compliance_translation_gain = 0;
-                wss[Krang::LEFT]->compliance_orientation_gain = 0;
-                wss[Krang::RIGHT]->compliance_translation_gain = 0;
-                wss[Krang::RIGHT]->compliance_orientation_gain = 0;
+                wss[Krang::LEFT]->setComplianceOff();
+                wss[Krang::RIGHT]->setComplianceOff();
                 cx.compliance_mode = COMPLIANCE_OFF;
             }
             else{ // turn compliance on
-                wss[Krang::LEFT]->compliance_translation_gain 
-                    = wss[Krang::RIGHT]->compliance_translation_gain
-                      = COMPLIANCE_TRANSLATION_GAIN;
-                wss[Krang::LEFT]->compliance_orientation_gain
-                    = wss[Krang::RIGHT]->compliance_orientation_gain
-                      = COMPLIANCE_ORIENTATION_GAIN;
+                wss[Krang::LEFT]->setComplianceOn();
+                wss[Krang::RIGHT]->setComplianceOn();
                 cx.compliance_mode = COMPLIANCE_ON;
             }
             break;            
-        case 'i': {
+        case 'i':
             // change sensor mode
-            toggle_imu();
-        } break;
+            toggle_imu(); break;
+        case 'g': // update the gains
+            double tGain, oGain;
+            readComplianceGains(&tGain, &oGain);
+            wss[Krang::LEFT]->updateComplianceGains(tGain, oGain);
+            wss[Krang::RIGHT]->updateComplianceGains(tGain, oGain);
+            break;
         case 'm': case 'M': case ' ':
             // toggle sending commands to motors
             cx.send_motor_cmds = !cx.send_motor_cmds;
@@ -609,7 +636,7 @@ void print_robot_state(const Krang::Hardware* hw,
                        const cx_t& cx){
 
     printw("Compliance lin/ang gains: %f %f\n", 
-        l_ws->compliance_translation_gain, 
+        l_ws->compliance_translation_gain,
         l_ws->compliance_orientation_gain);
     printw("CURRENT CONF. (use key-bindings to change)\n\r");
     printw("   Synch Mode: %s\n\r", synch_mode_to_string(cx.synch_mode));
@@ -1021,7 +1048,7 @@ void run() {
         printw("----------------------------------\n");
         print_robot_state(hw, wss[Krang::LEFT], wss[Krang::RIGHT], cx);
         printw("----------------------------------\n");
-        printEvents();
+        //printEvents();
         printw("----------------------------------\n");
         refresh();  // refresh the ncurses screen
 
@@ -1139,6 +1166,11 @@ void init() {
 /* ******************************************************************************************** */
 /// The main thread
 int main(int argc, char* argv[]) {
+
+    /* Store the current working directory since somatic annoyingly changes it */
+    char temp[1024];
+    init_wd = getcwd(temp, 1024) ? std::string( temp ) : std::string("");
+    
 
 	// parse command line arguments
 	parse_args(argc, argv);
