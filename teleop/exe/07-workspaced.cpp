@@ -63,6 +63,10 @@
  *      
  *      Some variables are written by both threads, so mutex lock has been 
  *      used.
+ * 
+ * Default Settings
+        . Compliance Mode - ON
+        . Input Mode - Pose
  *
  *  TODOs
         . Display current values on the screen
@@ -105,8 +109,6 @@ const char *g_default_cmd_chan_name = "cmd_workspaced";
 #define SYNCH_OFF       0      //< synch mode is off
 #define SYNCH_ON_L_PRIM 1      //< synch on with left hand primary
 #define SYNCH_ON_R_PRIM 2      //< synch on with right hand primary
-#define IMU_OFF 0          //< don't call kore::updateSensors each timestep
-#define IMU_ON 1           //< call kore::updateSensors each timestep
 
 const char* synch_mode_to_string(int mode){
     switch(mode) {
@@ -117,6 +119,9 @@ const char* synch_mode_to_string(int mode){
     return "UNKNOWN";
 }
 
+#define IMU_OFF 0          //< don't call kore::updateSensors each timestep
+#define IMU_ON 1           //< call kore::updateSensors each timestep
+
 const char* imu_mode_to_string(int mode){
     switch(mode) {
     case IMU_OFF: return "IMU_OFF";
@@ -124,7 +129,6 @@ const char* imu_mode_to_string(int mode){
     }
     return "UNKNOWN";
 }
-
 
 /* In vel mode, gripper aims for target velocity. In pose mode, grippper
  * aims for target pose */
@@ -134,6 +138,17 @@ const char* imu_mode_to_string(int mode){
 const char* input_mode_to_string(int mode){
     return mode == INPUT_MODE_VEL ?
                 "VELOCITY" : (mode == INPUT_MODE_POSE ? "POSE" : "UNKNOWN");
+}
+
+#define COMPLIANCE_OFF 0
+#define COMPLIANCE_ON 1   
+
+const char* compliance_mode_to_string(int mode){
+    switch(mode) {
+    case COMPLIANCE_OFF: return "COMPLIANCE_OFF";
+    case COMPLIANCE_ON: return "COMPLIANCE_ON";
+    }
+    return "UNKNOWN";
 }
 
 #define L_GRIP   0     // left gripper
@@ -186,6 +201,7 @@ typedef struct {
     bool send_motor_cmds;   //< boolean on or off
     int input_mode;         //< vel or pose
     int imu_mode;        //< int 0=off, 1=on (not bool b/c we might add more options)
+    int compliance_mode;
 
     Eigen::VectorXd ref_poses[2];   // for pose input mode
     Eigen::VectorXd ref_vel[2];     // for vel input mode
@@ -412,7 +428,8 @@ void print_key_bindings(){
      "'z'    : Rotates among 3 synch mode. 'OFF', 'ON - left primary',          \n\r"
      "          'ON - right primary' . If synch mode is ON, then trajectory on  \n\r"
      "          waypoints channel for off hand is ignored.                      \n\r"
-     "'i'    : toggle IMU mode                                                  \n\r"
+     "'c'    : toggle COMPLIANCE mode (ON or OFF)                               \n\r"
+     "'i'    : toggle IMU mode (ON or OFF)                                      \n\r"
      "'q'    : Quit                                                             \n\r"
      "'r'    : Reset Motors                                                     \n\r"
      "'p'    : Toggle input mode between VELOCITY and POSE control              \n\r"
@@ -529,6 +546,24 @@ void *kbhit(void *) {
 
             cx.T_off_to_pri = T_pri_to_world.inverse() * T_off_to_world;
         } break;
+        case 'c': // toggle compliance mode
+            if(cx.compliance_mode == COMPLIANCE_ON){
+                wss[Krang::LEFT]->compliance_translation_gain = 0;
+                wss[Krang::LEFT]->compliance_orientation_gain = 0;
+                wss[Krang::RIGHT]->compliance_translation_gain = 0;
+                wss[Krang::RIGHT]->compliance_orientation_gain = 0;
+                cx.compliance_mode = COMPLIANCE_OFF;
+            }
+            else{ // turn compliance on
+                wss[Krang::LEFT]->compliance_translation_gain 
+                    = wss[Krang::RIGHT]->compliance_translation_gain
+                      = COMPLIANCE_TRANSLATION_GAIN;
+                wss[Krang::LEFT]->compliance_orientation_gain
+                    = wss[Krang::RIGHT]->compliance_orientation_gain
+                      = COMPLIANCE_ORIENTATION_GAIN;
+                cx.compliance_mode = COMPLIANCE_ON;
+            }
+            break;            
         case 'i': {
             // change sensor mode
             toggle_imu();
@@ -582,7 +617,7 @@ void print_robot_state(const Krang::Hardware* hw,
     printw(cx.send_motor_cmds ? "ON\n" : "OFF\n");
     printw("Input Mode: %s\n\r", input_mode_to_string(cx.input_mode));
     printw("Sensor (IMU) update Mode: %s\n\r", imu_mode_to_string(cx.imu_mode));
-
+    printw("Compliance Mode: %s\n\r", compliance_mode_to_string(cx.compliance_mode));
     printw("----------------------------------\n");
 
     Eigen::VectorXd pose = Eigen::VectorXd::Zero(6);
@@ -1094,6 +1129,7 @@ void init() {
     cx.synch_mode = SYNCH_OFF;
     cx.input_mode = INPUT_MODE_POSE;
     cx.imu_mode = IMU_ON;
+    cx.compliance_mode = COMPLIANCE_ON;//COMPLIANCE_ON;
 
 	// Send message on event channel for 'daemon initialized and running'
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
