@@ -171,6 +171,7 @@ bool advance_waypts = true; 		//< if true, allow trajectory following
 bool wait_for_global_vision_msg_at_startup = false;
 bool use_steering_method = false; 	//< if true, use a steering controller
 bool vision_updates = false;		//< if true, upate base pose from vision channel
+bool show_key_bindings = true;		//< if true, show key bindings in ncurses display
 
 const double waypt_lin_thresh = 0.03; //0.015; 		// (meters) for advancing waypoints in traj.
 const double waypt_rot_thresh = 0.05; //0.025;		// (meters) for advancing waypoints in traj.
@@ -515,14 +516,15 @@ void updateTrajectory () {
 
 /* Prints the keyboard keys and \corresponding actions to the console */
 void print_key_bindings(){
-	const char *str =
+	const char *allstr =
+	"'b': hide key bindings                                                     \n\r"
 	 "' ': toggle ON and OFF sending commands to motors                         \n\r"
 	 "'q'    : Quit                                                             \n\r"
 	 "'r'    : Reset Reference                                                  \n\r"
 	 "' '    : Start/Stop                                                       \n\r"
 	 "'d'    : Toggle debug output                                              \n\r"
 	 "'a'    : Toggle waypoint advance mode                                     \n\r"
-	 "'o'    : Toggle error integration                                     \n\r"
+	 "'o'    : Toggle error integration                                         \n\r"
 	 "'v'    : Toggle vision updates (polling base pose)                        \n\r"
 	 "'g'    : Re-read gains from file (gains-PID.txt)                          \n\r"
 	 "'1'    : Set Mode: OFF                                                    \n\r"
@@ -533,7 +535,10 @@ void print_key_bindings(){
 	 "'i'    : Keyboard control: drive forward                                  \n\r"
 	 "'k'    : Keyboard control: drive backward                                 \n\r";
 
-	printw("\t\t[KEY BINDINGS]\n\r%s\r", str);
+	 const char *shortstr =
+	 "'b': show key bindings                                                    \n\r";
+
+	printw("\t\t[KEY BINDINGS]\n\r%s\r", show_key_bindings ? allstr : shortstr);
 	return;
 }
 
@@ -628,6 +633,12 @@ void *kbhit(void *) {
 				error_integration = !error_integration;
 				break;
 			}
+			case 'b': {
+				show_key_bindings = !show_key_bindings;
+				if (!show_key_bindings)
+					clear(); // clears extra space from display
+				break;
+			}
 			default:
 				break;
 		}
@@ -700,7 +711,7 @@ void run () {
 		// clear();
 		move(0, 0);
 		printw("----------------------------------\n");
-		// print_key_bindings();
+		print_key_bindings();
 		printw("----------------------------------\n");
 		print_status(krang, cx);
 		printw("----------------------------------\n");
