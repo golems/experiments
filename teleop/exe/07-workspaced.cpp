@@ -124,12 +124,9 @@ const char* synch_mode_to_string(int mode){
 #define IMU_OFF 0          //< don't call kore::updateSensors each timestep
 #define IMU_ON 1           //< call kore::updateSensors each timestep
 
-const char* imu_mode_to_string(int mode){
-    switch(mode) {
-    case IMU_OFF: return "IMU_OFF";
-    case IMU_ON: return "IMU_ON";
-    }
-    return "UNKNOWN";
+const char* bool_to_stringOnOff(int mode){ 
+    if (mode) return "ON"; 
+    return "OFF"; 
 }
 
 /* In vel mode, gripper aims for target velocity. In pose mode, grippper
@@ -203,7 +200,7 @@ typedef struct {
     int synch_mode;         //< 3-modes off, on-left primary, on-right primary
     bool send_motor_cmds;   //< boolean on or off
     int input_mode;         //< vel or pose
-    int imu_mode;        //< int 0=off, 1=on (not bool b/c we might add more options)
+    bool imu_mode;        //< int 0=off, 1=on (not bool b/c we might add more options)
     int compliance_mode;
 
     Eigen::VectorXd ref_poses[2];   // for pose input mode
@@ -452,19 +449,6 @@ Eigen::VectorXd getCurPose(kinematics::BodyNode *gripperBodyNode){
     return Krang::transformToEuler(gripperBodyNode->getWorldTransform(), math::XYZ);
 }
 
-void toggle_imu(int mode = -1)
-{
-    if (mode >= 0)
-        cx.imu_mode = mode;
-    else
-        cx.imu_mode = 1 - cx.imu_mode;
-        
-    if (cx.imu_mode)
-        hw->mode = (Krang::Hardware::Mode)(Krang::Hardware::MODE_ALL_GRIPSCH);
-    else
-        hw->mode = (Krang::Hardware::Mode)(Krang::Hardware::MODE_ALL_GRIPSCH & ~Krang::Hardware::MODE_IMU);
-}
-
 /* Set the input mode (pose or velocity). Uses global variable cx.
  * inputMode: INPUT_MODE_POSE or INPUT_MODE_VEL */
 void setInputMode(int inputMode){
@@ -588,7 +572,11 @@ void *kbhit(void *) {
             break;            
         case 'i':
             // change sensor mode
-            toggle_imu(); break;
+            if(cx.imu_mode = !cx.imu_mode)
+                hw->setImuOn();
+            else
+                hw->setImuOff();
+            break;
         case 'g': // update the gains
             double tGain, oGain;
             readComplianceGains(&tGain, &oGain);
@@ -643,7 +631,7 @@ void print_robot_state(const Krang::Hardware* hw,
     printw("   Send commands to Motor: ");
     printw(cx.send_motor_cmds ? "ON\n" : "OFF\n");
     printw("Input Mode: %s\n\r", input_mode_to_string(cx.input_mode));
-    printw("Sensor (IMU) update Mode: %s\n\r", imu_mode_to_string(cx.imu_mode));
+    printw("Sensor (IMU) update Mode: %s\n\r", bool_to_stringOnOff(cx.imu_mode));
     printw("Compliance Mode: %s\n\r", compliance_mode_to_string(cx.compliance_mode));
     printw("----------------------------------\n");
 
@@ -860,9 +848,9 @@ void poll_cmd_channel(ach_channel_t& chan){
             else
                 closeGripper(hw->grippers[Krang::RIGHT]);
             break;
-
         case 4: 
-            toggle_imu(val);
+            if(val) hw->setImuOn();
+            else hw->setImuOff();
             break;
         default: 
             break;
@@ -1127,8 +1115,10 @@ void init() {
     assert(ACH_OK == ach_flush(&cx.channel_body_state));
 
 	// Initialize the hardware for the appropriate gripper mode
-	Krang::Hardware::Mode mode = (Krang::Hardware::Mode)(Krang::Hardware::MODE_ALL_GRIPSCH);
-	hw = new Krang::Hardware(mode, &daemon_cx, robot);
+	hw = new Krang::Hardware(Krang::Hardware::MODE_ALL_GRIPSCH, &daemon_cx, robot);
+    /* Above initialization takes the first reading from IMU. Now turn off the 
+     imu to avoid noise in IMU reading */
+    hw->setImuOff(); cx.imu_mode = false;
 
 	// Set up the workspace stuff
 	wss[Krang::LEFT] = new Krang::WorkspaceControl(robot, Krang::LEFT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
@@ -1155,7 +1145,6 @@ void init() {
     cx.send_motor_cmds = true;
     cx.synch_mode = SYNCH_OFF;
     cx.input_mode = INPUT_MODE_POSE;
-    cx.imu_mode = IMU_ON;
     cx.compliance_mode = COMPLIANCE_ON;//COMPLIANCE_ON;
 
 	// Send message on event channel for 'daemon initialized and running'
