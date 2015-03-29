@@ -517,7 +517,7 @@ void updateTrajectory () {
 /* Prints the keyboard keys and \corresponding actions to the console */
 void print_key_bindings(){
 	const char *allstr =
-	"'b': hide key bindings                                          \n\r"
+	"'b': hide key bindings                                                     \n\r"
 	 "' ': toggle ON and OFF sending commands to motors                         \n\r"
 	 "'q'    : Quit                                                             \n\r"
 	 "'r'    : Reset Reference                                                  \n\r"
@@ -536,7 +536,7 @@ void print_key_bindings(){
 	 "'k'    : Keyboard control: drive backward                                 \n\r";
 
 	 const char *shortstr =
-	 "'b': show key bindings                                          \n\r";
+	 "'b': show key bindings                                                    \n\r";
 
 	printw("\t\t[KEY BINDINGS]\n\r%s\r", show_key_bindings ? allstr : shortstr);
 	return;

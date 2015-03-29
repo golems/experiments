@@ -38,7 +38,7 @@
  * 
  * On chaning input mode, any previous data on the ACH channels is discarded.
  * VEL -> POSE: Current position is set at reference position till any new
-                pose cmd is received.
+				pose cmd is received.
  * POSE -> VEL: Target velocity is set to zero till any vel command is received.
  *
  * Channel Specifications:
@@ -65,12 +65,12 @@
  *      used.
  * 
  * Default Settings
-        . Compliance Mode - ON
-        . Input Mode - Pose
+		. Compliance Mode - ON
+		. Input Mode - Pose
  *
  *  TODOs
-        . Display current values on the screen
-        . Search for TODO in this file. Some tasks may be mentioned int the comments/
+		. Display current values on the screen
+		. Search for TODO in this file. Some tasks may be mentioned int the comments/
  *
  */
 
@@ -113,23 +113,23 @@ const char *g_default_cmd_chan_name = "cmd_workspaced";
 #define SYNCH_ON_R_PRIM 2      //< synch on with right hand primary
 
 const char* synch_mode_to_string(int mode){
-    switch(mode) {
-    case SYNCH_OFF: return "SYNCH_OFF";
-    case SYNCH_ON_L_PRIM: return "SYNCH_ON_L_PRIM";
-    case SYNCH_ON_R_PRIM: return "SYNCH_ON_R_PRIM";
-    }
-    return "UNKNOWN";
+	switch(mode) {
+	case SYNCH_OFF: return "SYNCH_OFF";
+	case SYNCH_ON_L_PRIM: return "SYNCH_ON_L_PRIM";
+	case SYNCH_ON_R_PRIM: return "SYNCH_ON_R_PRIM";
+	}
+	return "UNKNOWN";
 }
 
 #define IMU_OFF 0          //< don't call kore::updateSensors each timestep
 #define IMU_ON 1           //< call kore::updateSensors each timestep
 
 const char* imu_mode_to_string(int mode){
-    switch(mode) {
-    case IMU_OFF: return "IMU_OFF";
-    case IMU_ON: return "IMU_ON";
-    }
-    return "UNKNOWN";
+	switch(mode) {
+	case IMU_OFF: return "IMU_OFF";
+	case IMU_ON: return "IMU_ON";
+	}
+	return "UNKNOWN";
 }
 
 /* In vel mode, gripper aims for target velocity. In pose mode, grippper
@@ -138,19 +138,19 @@ const char* imu_mode_to_string(int mode){
 #define INPUT_MODE_POSE 1
 
 const char* input_mode_to_string(int mode){
-    return mode == INPUT_MODE_VEL ?
-                "VELOCITY" : (mode == INPUT_MODE_POSE ? "POSE" : "UNKNOWN");
+	return mode == INPUT_MODE_VEL ?
+				"VELOCITY" : (mode == INPUT_MODE_POSE ? "POSE" : "UNKNOWN");
 }
 
 #define COMPLIANCE_OFF 0
 #define COMPLIANCE_ON 1   
 
 const char* compliance_mode_to_string(int mode){
-    switch(mode) {
-    case COMPLIANCE_OFF: return "COMPLIANCE_OFF";
-    case COMPLIANCE_ON: return "COMPLIANCE_ON";
-    }
-    return "UNKNOWN";
+	switch(mode) {
+	case COMPLIANCE_OFF: return "COMPLIANCE_OFF";
+	case COMPLIANCE_ON: return "COMPLIANCE_ON";
+	}
+	return "UNKNOWN";
 }
 
 #define L_GRIP   0     // left gripper
@@ -158,62 +158,63 @@ const char* compliance_mode_to_string(int mode){
 
 /* Prints a row or column vector. */
 #define PRINT_VECTOR(X)                                   \
-            printw("(%d x %d) ", (X).rows(), (X).cols()); \
-            printw("[");                                  \
-            for(int i = 0; i < (X).size(); i++){          \
-                printw(((X)[i]) >= 0 ? "  " : " ");       \
-                printw("%.4f", (X)[i]);                   \
-            }                                             \
-            printw("]\n\r");
+			printw("(%d x %d) ", (X).rows(), (X).cols()); \
+			printw("[");                                  \
+			for(int i = 0; i < (X).size(); i++){          \
+				printw(((X)[i]) >= 0 ? "  " : " ");       \
+				printw("%.4f", (X)[i]);                   \
+			}                                             \
+			printw("]\n\r");
 
 
 #define PRINT_MAT(M)                                     \
-            printw("[");                                 \
-            for(int i = 0; i<(M).rows(); ++i){           \
-                printw(" [");                            \
-                for(int j = 0; j < (M).cols(); j++)      \
-                    printw(" %4.4f", (M)(i,j));          \
-                printw("]\n\r");                         \
-            }                                            \
-            printw("]\n");
+			printw("[");                                 \
+			for(int i = 0; i<(M).rows(); ++i){           \
+				printw(" [");                            \
+				for(int j = 0; j < (M).cols(); j++)      \
+					printw(" %4.4f", (M)(i,j));          \
+				printw("]\n\r");                         \
+			}                                            \
+			printw("]\n");
 
 // context struct
 typedef struct {
 	somatic_d_t d;
-    somatic_d_opts_t d_opts;
-    
-    // set by command line arguments
-    const char *lgrip_waypnts_channel_name;	// left gripper waypoints channel name
-    const char *rgrip_waypnts_channel_name;	// right gripper waypoints channel name
-    const char *lgrip_state_channel_name;
-    const char *rgrip_state_channel_name;
-    int opt_verbosity;
+	somatic_d_opts_t d_opts;
+	
+	// set by command line arguments
+	const char *lgrip_waypnts_channel_name;	// left gripper waypoints channel name
+	const char *rgrip_waypnts_channel_name;	// right gripper waypoints channel name
+	const char *lgrip_state_channel_name;
+	const char *rgrip_state_channel_name;
+	int opt_verbosity;
 
-    // channels to publish
-    ach_channel_t channel_ft[2]; // force and torque data
-    ach_channel_t channel_body_state;
+	// channels to publish
+	ach_channel_t channel_ft[2]; // force and torque data
+	ach_channel_t channel_body_state;
 
-    // channels to subscribe
-    ach_channel_t channel_ref_vel[2]; // to read ref vel in vel mode
-    ach_channel_t channel_cmd;
+	// channels to subscribe
+	ach_channel_t channel_ref_vel[2]; // to read ref vel in vel mode
+	ach_channel_t channel_cmd;
 
-    std::string init_wd; // The initial working directory
+	std::string init_wd; // The initial working directory
 
-    // set by key-bindings when daemon is running
-    int synch_mode;         //< 3-modes off, on-left primary, on-right primary
-    bool send_motor_cmds;   //< boolean on or off
-    int input_mode;         //< vel or pose
-    int imu_mode;        //< int 0=off, 1=on (not bool b/c we might add more options)
-    int compliance_mode;
+	// set by key-bindings when daemon is running
+	int synch_mode;         //< 3-modes off, on-left primary, on-right primary
+	bool send_motor_cmds;   //< boolean on or off
+	int input_mode;         //< vel or pose
+	int imu_mode;           //< int 0=off, 1=on (not bool b/c we might add more options)
+	int compliance_mode;    //< int: COMPLIANCE_OFF, COMPLIANCE_ON
+	bool show_key_bindings; //< if true, show key bindings in ncurses display
 
-    Eigen::VectorXd ref_poses[2];   // for pose input mode
-    Eigen::VectorXd ref_vel[2];     // for vel input mode
+	Eigen::VectorXd ref_poses[2];   // for pose input mode
+	Eigen::VectorXd ref_vel[2];     // for vel input mode
 
-    // store the list of waypoints. First element is the first element.
-    vector<Eigen::VectorXd> refTraj[2];
-    int numWayPtsReached;
+	// store the list of waypoints. First element is the first element.
+	vector<Eigen::VectorXd> refTraj[2];
+	int numWayPtsReached;
 
-    Eigen::MatrixXd T_off_to_pri;
+	Eigen::MatrixXd T_off_to_pri;
 
 } cx_t;
 
@@ -231,75 +232,75 @@ ach_channel_t lgrip_state_channel, rgrip_state_channel;
 
 // options
 static struct argp_option options[] = {
-    {
-        .name = "verbose",
-        .key = 'v',
-        .arg = NULL,
-        .flags = 0,
-        .doc = "Causes verbose output"
-    },
-    {
-        .name = "lgrip-waypnts",
-        .key = 'l',
-        .arg = "CHANNEL-NAME",
-        .flags = 0,
-        .doc = "ach channel name for reading left gripper waypoints in world frame"
-    },
-    {
-        .name = "rgrip-waypnts",
-        .key = 'r',
-        .arg = "CHANNEL-NAME",
-        .flags = 0,
-        .doc = "ach channel name for reading right gripper waypoints in world frame"
-    },
-    {
-        .name = "lgrip-state",
-        .key = 'a',
-        .arg = "CHANNEL-NAME",
-        .flags = 0,
-        .doc = "ach channel name to publish left gripper state in world frame"
-    },
-    {
-        .name = "rgrip-state",
-        .key = 'b',
-        .arg = "CHANNEL-NAME",
-        .flags = 0,
-        .doc = "ach channel name to publish right gripper state in world frame"
-    },
-    {
-        .name = NULL,
-        .key = 0,
-        .arg = NULL,
-        .flags = 0,
-        .doc = NULL
-    }
+	{
+		.name = "verbose",
+		.key = 'v',
+		.arg = NULL,
+		.flags = 0,
+		.doc = "Causes verbose output"
+	},
+	{
+		.name = "lgrip-waypnts",
+		.key = 'l',
+		.arg = "CHANNEL-NAME",
+		.flags = 0,
+		.doc = "ach channel name for reading left gripper waypoints in world frame"
+	},
+	{
+		.name = "rgrip-waypnts",
+		.key = 'r',
+		.arg = "CHANNEL-NAME",
+		.flags = 0,
+		.doc = "ach channel name for reading right gripper waypoints in world frame"
+	},
+	{
+		.name = "lgrip-state",
+		.key = 'a',
+		.arg = "CHANNEL-NAME",
+		.flags = 0,
+		.doc = "ach channel name to publish left gripper state in world frame"
+	},
+	{
+		.name = "rgrip-state",
+		.key = 'b',
+		.arg = "CHANNEL-NAME",
+		.flags = 0,
+		.doc = "ach channel name to publish right gripper state in world frame"
+	},
+	{
+		.name = NULL,
+		.key = 0,
+		.arg = NULL,
+		.flags = 0,
+		.doc = NULL
+	}
 };
 
 /// parser (fxn to parse single command line argument)
 static int parse_opt( int key, char *arg, struct argp_state *state) {
-    cx_t *cx = (cx_t*)state->input;
-    switch(key) {
-    case 'v':
-        cx->opt_verbosity++;
-        break;
-    case 'l':
-    	cx->lgrip_waypnts_channel_name = strdup(arg);
-    	break;
+	cx_t *cx = (cx_t*)state->input;
+	switch(key) {
+	case 'v':
+		cx->opt_verbosity++;
+		break;
+	case 'l':
+		cx->lgrip_waypnts_channel_name = strdup(arg);
+		break;
 	case 'r':
 		cx->rgrip_waypnts_channel_name = strdup(arg);
-    	break;
-    case 'a':
-        cx->lgrip_state_channel_name = strdup(arg);
-        break;
-    case 'b':
-        cx->rgrip_state_channel_name = strdup(arg);
-        break;
-    case 0:
-        break;
-    }
-    
-    somatic_d_argp_parse( key, arg, &cx->d_opts );
-    return 0;
+		break;
+	case 'a':
+		cx->lgrip_state_channel_name = strdup(arg);
+		break;
+	case 'b':
+		cx->rgrip_state_channel_name = strdup(arg);
+		break;
+	case 0:
+		break;
+	}
+	
+	somatic_d_argp_parse( key, arg, &cx->d_opts );
+	return 0;
 }
 
 /// argp program version
@@ -319,28 +320,28 @@ void printEvents();
 
 void parse_args(int argc, char* argv[])
 {
-    memset(&cx, 0, sizeof(cx));
+	memset(&cx, 0, sizeof(cx));
 
-    // default options
-    cx.lgrip_waypnts_channel_name = "krang_lgrip_waypts";
-    cx.rgrip_waypnts_channel_name = "krang_rgrip_waypts";
-    cx.lgrip_state_channel_name = "krang_lgrip_pose";
-    cx.rgrip_state_channel_name = "krang_rgrip_pose";
-    cx.d_opts.ident = "workspaced";
-    cx.d_opts.sched_rt = SOMATIC_D_SCHED_UI;
-    cx.opt_verbosity = 0;
+	// default options
+	cx.lgrip_waypnts_channel_name = "krang_lgrip_waypts";
+	cx.rgrip_waypnts_channel_name = "krang_rgrip_waypts";
+	cx.lgrip_state_channel_name = "krang_lgrip_pose";
+	cx.rgrip_state_channel_name = "krang_rgrip_pose";
+	cx.d_opts.ident = "workspaced";
+	cx.d_opts.sched_rt = SOMATIC_D_SCHED_UI;
+	cx.opt_verbosity = 0;
 
-    argp_parse(&argp, argc, argv, 0, NULL, &cx);
+	argp_parse(&argp, argc, argv, 0, NULL, &cx);
 
-    // initialize as somatic daemon
-    somatic_d_init(&cx.d, &cx.d_opts);
+	// initialize as somatic daemon
+	somatic_d_init(&cx.d, &cx.d_opts);
 
-    if( cx.opt_verbosity ) {
-        fprintf(stderr, "\n* workspaced *\n");
-        fprintf(stderr, "Verbosity:  %d\n", cx.opt_verbosity);
-        fprintf(stderr, "Left gripper waypoints ACH channel:  %s\n", cx.lgrip_waypnts_channel_name);
-        fprintf(stderr, "Right gripper waypoints ACH channel: %s\n", cx.rgrip_waypnts_channel_name);
-        fprintf(stderr,"-------\n");
+	if( cx.opt_verbosity ) {
+		fprintf(stderr, "\n* workspaced *\n");
+		fprintf(stderr, "Verbosity:  %d\n", cx.opt_verbosity);
+		fprintf(stderr, "Left gripper waypoints ACH channel:  %s\n", cx.lgrip_waypnts_channel_name);
+		fprintf(stderr, "Right gripper waypoints ACH channel: %s\n", cx.rgrip_waypnts_channel_name);
+		fprintf(stderr,"-------\n");
    }
 }
 
@@ -406,7 +407,7 @@ void destroy() {
 
 	// Stop the daemon
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
-	                SOMATIC__EVENT__CODES__PROC_STOPPING, NULL, NULL);
+					SOMATIC__EVENT__CODES__PROC_STOPPING, NULL, NULL);
 	
 	// close the channel we use for publishing visualization data
 	// somatic_d_channel_close(&daemon_cx, &vis_chan);
@@ -426,326 +427,338 @@ void destroy() {
 
 /* Prints the keyboard keys and \corresponding actions to the console */
 void print_key_bindings(){
-    printw("KEY BINDINGS\n\r%s\n\r",
-     "'m','M': toggle ON and OFF sending commands to motors                     \n\r"
-     "'z'    : Rotates among 3 synch mode. 'OFF', 'ON - left primary',          \n\r"
-     "          'ON - right primary' . If synch mode is ON, then trajectory on  \n\r"
-     "          waypoints channel for off hand is ignored.                      \n\r"
-     "'c'    : toggle COMPLIANCE mode (ON or OFF)                               \n\r"
-     "'i'    : toggle IMU mode (ON or OFF)                                      \n\r"
-     "'g'    : Re-read and update compliance gains from file                    \n\r"
-     "          (workspaced-compliance-gains.txt)                               \n\r"
-     "'q'    : Quit                                                             \n\r"
-     "'r'    : Reset Motors                                                     \n\r"
-     "'p'    : Toggle input mode between VELOCITY and POSE control              \n\r"
-     "'1'    : Close left gripper                                               \n\r"
-     "'2'    : Open left gripper                                                \n\r"
-     "'3'    : Close right gripper                                              \n\r"
-     "'4'    : Open right gripper                                               \n\r" );
-    return;
+	const char *allstr = 
+	"'b': hide key bindings                                                    \n\r"
+	"'m','M': toggle ON and OFF sending commands to motors                     \n\r"
+	"'z'    : Rotates among 3 synch mode. 'OFF', 'ON - left primary',          \n\r"
+	"          'ON - right primary' . If synch mode is ON, then trajectory on  \n\r"
+	"          waypoints channel for off hand is ignored.                      \n\r"
+	"'c'    : toggle COMPLIANCE mode (ON or OFF)                               \n\r"
+	"'i'    : toggle IMU mode (ON or OFF)                                      \n\r"
+	"'g'    : Re-read and update compliance gains from file                    \n\r"
+	"          (workspaced-compliance-gains.txt)                               \n\r"
+	"'q'    : Quit                                                             \n\r"
+	"'r'    : Reset Motors                                                     \n\r"
+	"'p'    : Toggle input mode between VELOCITY and POSE control              \n\r"
+	"'1'    : Close left gripper                                               \n\r"
+	"'2'    : Open left gripper                                                \n\r"
+	"'3'    : Close right gripper                                              \n\r"
+	"'4'    : Open right gripper                                               \n\r";
+	
+	const char *shortstr =
+	"'b': show key bindings                                                    \n\r";
+
+	printw("\t\t[KEY BINDINGS]\n\r%s\n\r", cx.show_key_bindings ? allstr : shortstr);
+	return;
 }
 
 /* Gets current pose of the gripper in World frame
  * @param gripperBodyNode : The pointer to the gripper node in the DART model
  * Returns the 6-vector pose of gripper in World frame */
 Eigen::VectorXd getCurPose(kinematics::BodyNode *gripperBodyNode){
-    return Krang::transformToEuler(gripperBodyNode->getWorldTransform(), math::XYZ);
+	return Krang::transformToEuler(gripperBodyNode->getWorldTransform(), math::XYZ);
 }
 
 void toggle_imu(int mode = -1)
 {
-    if (mode >= 0)
-        cx.imu_mode = mode;
-    else
-        cx.imu_mode = 1 - cx.imu_mode;
-        
-    if (cx.imu_mode)
-        hw->mode = (Krang::Hardware::Mode)(Krang::Hardware::MODE_ALL_GRIPSCH);
-    else
-        hw->mode = (Krang::Hardware::Mode)(Krang::Hardware::MODE_ALL_GRIPSCH & ~Krang::Hardware::MODE_IMU);
+	if (mode >= 0)
+		cx.imu_mode = mode;
+	else
+		cx.imu_mode = 1 - cx.imu_mode;
+		
+	if (cx.imu_mode)
+		hw->mode = (Krang::Hardware::Mode)(Krang::Hardware::MODE_ALL_GRIPSCH);
+	else
+		hw->mode = (Krang::Hardware::Mode)(Krang::Hardware::MODE_ALL_GRIPSCH & ~Krang::Hardware::MODE_IMU);
 }
 
 /* Set the input mode (pose or velocity). Uses global variable cx.
  * inputMode: INPUT_MODE_POSE or INPUT_MODE_VEL */
 void setInputMode(int inputMode){
-    if ((cx.input_mode = inputMode) == INPUT_MODE_VEL){
-        ach_flush(&cx.channel_ref_vel[L_GRIP]);
-        ach_flush(&cx.channel_ref_vel[R_GRIP]);
+	if ((cx.input_mode = inputMode) == INPUT_MODE_VEL){
+		ach_flush(&cx.channel_ref_vel[L_GRIP]);
+		ach_flush(&cx.channel_ref_vel[R_GRIP]);
 
-        cx.ref_vel[L_GRIP] = Eigen::VectorXd::Zero(6);
-        cx.ref_vel[R_GRIP] = Eigen::VectorXd::Zero(6);
-    }
-    else{   // pose mode
-        ach_flush(&waypts_channel[L_GRIP]);
-        ach_flush(&waypts_channel[R_GRIP]);
+		cx.ref_vel[L_GRIP] = Eigen::VectorXd::Zero(6);
+		cx.ref_vel[R_GRIP] = Eigen::VectorXd::Zero(6);
+	}
+	else{   // pose mode
+		ach_flush(&waypts_channel[L_GRIP]);
+		ach_flush(&waypts_channel[R_GRIP]);
 
-        cx.ref_poses[L_GRIP] = getCurPose(wss[Krang::LEFT]->endEffector);
-        cx.ref_poses[R_GRIP] = getCurPose(wss[Krang::RIGHT]->endEffector);
-    }
-    return;
+		cx.ref_poses[L_GRIP] = getCurPose(wss[Krang::LEFT]->endEffector);
+		cx.ref_poses[R_GRIP] = getCurPose(wss[Krang::RIGHT]->endEffector);
+	}
+	return;
 }
 
 /* Open the gripper. Uses global var daemon_cx.*/
 void openGripper(somatic_motor_t *gripper){
-    somatic_motor_reset(&daemon_cx, gripper);
-    usleep(1e4);
-    somatic_motor_setpos(&daemon_cx, gripper, SCHUNK_GRIPPER_POSITION_OPEN, 1);
-    return;
+	somatic_motor_reset(&daemon_cx, gripper);
+	usleep(1e4);
+	somatic_motor_setpos(&daemon_cx, gripper, SCHUNK_GRIPPER_POSITION_OPEN, 1);
+	return;
 }
 
 /* Close the gripper. Uses global var daemon_cx. */
 void closeGripper(somatic_motor_t *gripper){
-    somatic_motor_reset(&daemon_cx, gripper);
-    usleep(1e4);
-    somatic_motor_setpos(&daemon_cx, gripper, SCHUNK_GRIPPER_POSITION_CLOSE, 1);
-    return;
+	somatic_motor_reset(&daemon_cx, gripper);
+	usleep(1e4);
+	somatic_motor_setpos(&daemon_cx, gripper, SCHUNK_GRIPPER_POSITION_CLOSE, 1);
+	return;
 }
 
 /* [This variable should be put into cx_t. But if this is put up there, 
-    the program throws seg fault during execution] */
+	the program throws seg fault during execution] */
 std::string init_wd;
 /* Outputs the complaince gains from the file. Use global variable cx */
 void readComplianceGains(double* translationGain, double* orientationGain) {
-    std::string gains_file = init_wd + "/../data/workspaced-compliance-gains.txt";
-    ifstream file(gains_file.c_str());
+	std::string gains_file = init_wd + "/../data/workspaced-compliance-gains.txt";
+	ifstream file(gains_file.c_str());
 
-    assert(file.is_open());
-    char line [1024];
-    file.getline(line, 1024);
-    while (line[0] == '#')      // Ignore lines starting with hash
-        file.getline(line, 1024);
-    std::stringstream stream(line, std::stringstream::in);
-    size_t i = 0;
-    // double newDouble;
-    // while ((i < 8) && (stream >> newDouble)) K(i++) = newDouble;
-    stream >> *translationGain >> *orientationGain;
-    
-    file.close();
-    return;
+	assert(file.is_open());
+	char line [1024];
+	file.getline(line, 1024);
+	while (line[0] == '#')      // Ignore lines starting with hash
+		file.getline(line, 1024);
+	std::stringstream stream(line, std::stringstream::in);
+	size_t i = 0;
+	// double newDouble;
+	// while ((i < 8) && (stream >> newDouble)) K(i++) = newDouble;
+	stream >> *translationGain >> *orientationGain;
+	
+	file.close();
+	return;
 }
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 void *kbhit(void *) {
-    
-    char ch;
+	
+	char ch;
 
-    // general curses stuff
-    initscr();
-    clear();
-    noecho();                   // do not echo input to the screen
-    cbreak();                   // do not buffer by line (receive characters immediately)
-    timeout(0);                 // non-blocking getch
+	// general curses stuff
+	initscr();
+	clear();
+	noecho();                   // do not echo input to the screen
+	cbreak();                   // do not buffer by line (receive characters immediately)
+	timeout(0);                 // non-blocking getch
 
-    while(true){ 
-        ch = getch(); 
-        pthread_mutex_lock(&mutex);
-        switch (ch) {
-        case 'q': somatic_sig_received = true; break;
-        case 'r': {
-            somatic_motor_reset(&daemon_cx, hw->arms[Krang::LEFT]);
-            somatic_motor_reset(&daemon_cx, hw->arms[Krang::RIGHT]);
-        } break;
-        case 'h': {
-            cx.send_motor_cmds = false;
-            somatic_motor_halt(&daemon_cx, hw->arms[Krang::LEFT]);
-            somatic_motor_halt(&daemon_cx, hw->arms[Krang::RIGHT]);
-        } break;              
-        case 'p':
-            setInputMode(!cx.input_mode);
-            break;
-        case 'z': {
-            // change synch mode
-            Krang::Side primary, off;
-            if(cx.synch_mode == SYNCH_OFF){
-                cx.synch_mode = SYNCH_ON_L_PRIM;
-                primary = Krang::LEFT;
-                off = Krang::RIGHT;
-            }
-            else if(cx.synch_mode == SYNCH_ON_L_PRIM){
-                cx.synch_mode = SYNCH_ON_R_PRIM;
-                primary = Krang::RIGHT;
-                off = Krang::LEFT;
-            }
-            else
-                cx.synch_mode = SYNCH_OFF;
+	while(true){ 
+		ch = getch(); 
+		pthread_mutex_lock(&mutex);
+		switch (ch) {
+		case 'q': somatic_sig_received = true; break;
+		case 'r': {
+			somatic_motor_reset(&daemon_cx, hw->arms[Krang::LEFT]);
+			somatic_motor_reset(&daemon_cx, hw->arms[Krang::RIGHT]);
+		} break;
+		case 'h': {
+			cx.send_motor_cmds = false;
+			somatic_motor_halt(&daemon_cx, hw->arms[Krang::LEFT]);
+			somatic_motor_halt(&daemon_cx, hw->arms[Krang::RIGHT]);
+		} break;              
+		case 'p':
+			setInputMode(!cx.input_mode);
+			break;
+		case 'z': {
+			// change synch mode
+			Krang::Side primary, off;
+			if(cx.synch_mode == SYNCH_OFF){
+				cx.synch_mode = SYNCH_ON_L_PRIM;
+				primary = Krang::LEFT;
+				off = Krang::RIGHT;
+			}
+			else if(cx.synch_mode == SYNCH_ON_L_PRIM){
+				cx.synch_mode = SYNCH_ON_R_PRIM;
+				primary = Krang::RIGHT;
+				off = Krang::LEFT;
+			}
+			else
+				cx.synch_mode = SYNCH_OFF;
 
-            Eigen::Matrix4d T_pri_to_world = wss[primary]->endEffector->getWorldTransform();
-            Eigen::Matrix4d T_off_to_world = wss[off]->endEffector->getWorldTransform();
+			Eigen::Matrix4d T_pri_to_world = wss[primary]->endEffector->getWorldTransform();
+			Eigen::Matrix4d T_off_to_world = wss[off]->endEffector->getWorldTransform();
 
-            cx.T_off_to_pri = T_pri_to_world.inverse() * T_off_to_world;
-        } break;
-        case 'c': // toggle compliance mode
-            if(cx.compliance_mode == COMPLIANCE_ON){
-                wss[Krang::LEFT]->setComplianceOff();
-                wss[Krang::RIGHT]->setComplianceOff();
-                cx.compliance_mode = COMPLIANCE_OFF;
-            }
-            else{ // turn compliance on
-                wss[Krang::LEFT]->setComplianceOn();
-                wss[Krang::RIGHT]->setComplianceOn();
-                cx.compliance_mode = COMPLIANCE_ON;
-            }
-            break;            
-        case 'i':
-            // change sensor mode
-            toggle_imu(); break;
-        case 'g': // update the gains
-            double tGain, oGain;
-            readComplianceGains(&tGain, &oGain);
-            wss[Krang::LEFT]->updateComplianceGains(tGain, oGain);
-            wss[Krang::RIGHT]->updateComplianceGains(tGain, oGain);
-            break;
-        case 'm': case 'M': case ' ':
-            // toggle sending commands to motors
-            cx.send_motor_cmds = !cx.send_motor_cmds;
+			cx.T_off_to_pri = T_pri_to_world.inverse() * T_off_to_world;
+		} break;
+		case 'c': // toggle compliance mode
+			if(cx.compliance_mode == COMPLIANCE_ON){
+				wss[Krang::LEFT]->setComplianceOff();
+				wss[Krang::RIGHT]->setComplianceOff();
+				cx.compliance_mode = COMPLIANCE_OFF;
+			}
+			else{ // turn compliance on
+				wss[Krang::LEFT]->setComplianceOn();
+				wss[Krang::RIGHT]->setComplianceOn();
+				cx.compliance_mode = COMPLIANCE_ON;
+			}
+			break;            
+		case 'i':
+			// change sensor mode
+			toggle_imu(); break;
+		case 'g': // update the gains
+			double tGain, oGain;
+			readComplianceGains(&tGain, &oGain);
+			wss[Krang::LEFT]->updateComplianceGains(tGain, oGain);
+			wss[Krang::RIGHT]->updateComplianceGains(tGain, oGain);
+			break;
+		case 'm': case 'M': case ' ':
+			// toggle sending commands to motors
+			cx.send_motor_cmds = !cx.send_motor_cmds;
 
-            if (cx.send_motor_cmds) {
-                somatic_motor_reset(&daemon_cx, hw->arms[Krang::LEFT]);
-                somatic_motor_reset(&daemon_cx, hw->arms[Krang::RIGHT]);
-            } else {
-                Eigen::VectorXd z = Eigen::VectorXd::Zero(7);
-                somatic_motor_setvel(&daemon_cx, hw->arms[Krang::LEFT], z.data(), 7);
-                somatic_motor_setvel(&daemon_cx, hw->arms[Krang::RIGHT], z.data(), 7);
-            }
-            break;
-        case '1':   // experimental functionality for developer. 
-            closeGripper(hw->grippers[Krang::LEFT]);
-            break;
-        case '2': 
-            openGripper(hw->grippers[Krang::LEFT]);
-            break;
-        case '3': 
-            closeGripper(hw->grippers[Krang::RIGHT]);
-            break;
-        case '4': 
-            openGripper(hw->grippers[Krang::RIGHT]);
-            break;
-        default:
-            //cout<<__LINE__<<": Value of ch is :" << (int)ch <<std::endl<<'\r';
-            break;
-        }
+			if (cx.send_motor_cmds) {
+				somatic_motor_reset(&daemon_cx, hw->arms[Krang::LEFT]);
+				somatic_motor_reset(&daemon_cx, hw->arms[Krang::RIGHT]);
+			} else {
+				Eigen::VectorXd z = Eigen::VectorXd::Zero(7);
+				somatic_motor_setvel(&daemon_cx, hw->arms[Krang::LEFT], z.data(), 7);
+				somatic_motor_setvel(&daemon_cx, hw->arms[Krang::RIGHT], z.data(), 7);
+			}
+			break;
+		case '1':   // experimental functionality for developer. 
+			closeGripper(hw->grippers[Krang::LEFT]);
+			break;
+		case '2': 
+			openGripper(hw->grippers[Krang::LEFT]);
+			break;
+		case '3': 
+			closeGripper(hw->grippers[Krang::RIGHT]);
+			break;
+		case '4': 
+			openGripper(hw->grippers[Krang::RIGHT]);
+			break;
+		case 'b': {
+				cx.show_key_bindings = !cx.show_key_bindings;
+				if (!cx.show_key_bindings)
+					clear(); // clears extra space from display
+				break;
+			}
+		default:
+			//cout<<__LINE__<<": Value of ch is :" << (int)ch <<std::endl<<'\r';
+			break;
+		}
 
-        pthread_mutex_unlock(&mutex);
-    }
+		pthread_mutex_unlock(&mutex);
+	}
 }
 
 /* Prints the current status of the machine */
 void print_robot_state(const Krang::Hardware* hw,
-                       const Krang::WorkspaceControl *l_ws, 
-                       const Krang::WorkspaceControl *r_ws, 
-                       const cx_t& cx){
+					   const Krang::WorkspaceControl *l_ws, 
+					   const Krang::WorkspaceControl *r_ws, 
+					   const cx_t& cx){
 
-    printw("Compliance lin/ang gains: %f %f\n", 
-        l_ws->compliance_translation_gain,
-        l_ws->compliance_orientation_gain);
-    printw("CURRENT CONF. (use key-bindings to change)\n\r");
-    printw("   Synch Mode: %s\n\r", synch_mode_to_string(cx.synch_mode));
-    printw("   Send commands to Motor: ");
-    printw(cx.send_motor_cmds ? "ON\n" : "OFF\n");
-    printw("Input Mode: %s\n\r", input_mode_to_string(cx.input_mode));
-    printw("Sensor (IMU) update Mode: %s\n\r", imu_mode_to_string(cx.imu_mode));
-    printw("Compliance Mode: %s\n\r", compliance_mode_to_string(cx.compliance_mode));
-    printw("----------------------------------\n");
+	printw("Compliance lin/ang gains: %f %f\n", 
+		l_ws->compliance_translation_gain,
+		l_ws->compliance_orientation_gain);
+	printw("CURRENT CONF. (use key-bindings to change)\n\r");
+	printw("   Synch Mode: %s\n\r", synch_mode_to_string(cx.synch_mode));
+	printw("   Send commands to Motor: ");
+	printw(cx.send_motor_cmds ? "ON\n" : "OFF\n");
+	printw("Input Mode: %s\n\r", input_mode_to_string(cx.input_mode));
+	printw("Sensor (IMU) update Mode: %s\n\r", imu_mode_to_string(cx.imu_mode));
+	printw("Compliance Mode: %s\n\r", compliance_mode_to_string(cx.compliance_mode));
+	printw("----------------------------------\n");
 
-    Eigen::VectorXd pose = Eigen::VectorXd::Zero(6);
+	Eigen::VectorXd pose = Eigen::VectorXd::Zero(6);
 
-    printw("ROBOT STATE\n\r");
+	printw("ROBOT STATE\n\r");
 
-    // TODO the pose used exponential coordinates. Covert it to euler
-    printw("Base pose (in World Frame):\n");
-    pose = hw->robot->getConfig(Krang::dart_root_dof_ids);
-    printw("\texp:   ");
-    PRINT_VECTOR(pose)
-    printw("\teuler: ");
-    kinematics::BodyNode* baseBodyNode = hw->robot->getNode("Base");
-    pose = Krang::transformToEuler(baseBodyNode->getWorldTransform(), math::XYZ);
-    PRINT_VECTOR(pose)
+	// TODO the pose used exponential coordinates. Covert it to euler
+	printw("Base pose (in World Frame):\n");
+	pose = hw->robot->getConfig(Krang::dart_root_dof_ids);
+	printw("\texp:   ");
+	PRINT_VECTOR(pose)
+	printw("\teuler: ");
+	kinematics::BodyNode* baseBodyNode = hw->robot->getNode("Base");
+	pose = Krang::transformToEuler(baseBodyNode->getWorldTransform(), math::XYZ);
+	PRINT_VECTOR(pose)
 
-    printw("\n[Left Gripper]\n");
+	printw("\n[Left Gripper]\n");
 
-    printw(" Current Pose (in Robot Frame):\n     ");
-    pose = getCurPose(l_ws->endEffector);
-    PRINT_VECTOR(pose)
+	printw(" Current Pose (in Robot Frame):\n     ");
+	pose = getCurPose(l_ws->endEffector);
+	PRINT_VECTOR(pose)
 
-    printw(" Ref Pose (in Robot Frame):\n     ");
-    PRINT_VECTOR(cx.ref_poses[L_GRIP])
+	printw(" Ref Pose (in Robot Frame):\n     ");
+	PRINT_VECTOR(cx.ref_poses[L_GRIP])
 
-    printw(" Ref Vel (in Robot Frame):\n     ");
-    PRINT_VECTOR(cx.ref_vel[L_GRIP])
+	printw(" Ref Vel (in Robot Frame):\n     ");
+	PRINT_VECTOR(cx.ref_vel[L_GRIP])
 
-    printw(" Joint Angles:\n\r    ");
-    pose = hw->robot->getConfig(*wss[Krang::LEFT]->arm_ids);
-    PRINT_VECTOR(pose)
+	printw(" Joint Angles:\n\r    ");
+	pose = hw->robot->getConfig(*wss[Krang::LEFT]->arm_ids);
+	PRINT_VECTOR(pose)
 
-    printw("\n[Right Gripper]\n");
+	printw("\n[Right Gripper]\n");
 
-    printw(" Current Pose (in Robot Frame):\n     ");
-    pose = getCurPose(r_ws->endEffector);
-    PRINT_VECTOR(pose)
+	printw(" Current Pose (in Robot Frame):\n     ");
+	pose = getCurPose(r_ws->endEffector);
+	PRINT_VECTOR(pose)
 
-    printw(" Ref Pose (in Robot Frame):\n    ");
-    PRINT_VECTOR(cx.ref_poses[R_GRIP])
+	printw(" Ref Pose (in Robot Frame):\n    ");
+	PRINT_VECTOR(cx.ref_poses[R_GRIP])
 
-    printw(" Ref Vel (in Robot Frame):\n\r     ");
-    PRINT_VECTOR(cx.ref_vel[R_GRIP])
+	printw(" Ref Vel (in Robot Frame):\n\r     ");
+	PRINT_VECTOR(cx.ref_vel[R_GRIP])
 
-    printw(" Joint Angles:\n\r    ");
-    pose = hw->robot->getConfig(*wss[Krang::RIGHT]->arm_ids);
-    PRINT_VECTOR(pose)
+	printw(" Joint Angles:\n\r    ");
+	pose = hw->robot->getConfig(*wss[Krang::RIGHT]->arm_ids);
+	PRINT_VECTOR(pose)
 
-    printw("\n");
+	printw("\n");
 
-    printw("Force/Torque values [Left Gripper]\n    ");
-    PRINT_VECTOR(hw->fts[Krang::LEFT]->lastExternal)
+	printw("Force/Torque values [Left Gripper]\n    ");
+	PRINT_VECTOR(hw->fts[Krang::LEFT]->lastExternal)
 
-    printw("Force/Torque values [Right Gripper]\n    ");
-    PRINT_VECTOR(hw->fts[Krang::RIGHT]->lastExternal)
+	printw("Force/Torque values [Right Gripper]\n    ");
+	PRINT_VECTOR(hw->fts[Krang::RIGHT]->lastExternal)
 
-    printw("Krang Body Config\n    ");
-    pose = hw->robot->getPose();
-    PRINT_VECTOR(pose)
+	printw("Krang Body Config\n    ");
+	pose = hw->robot->getPose();
+	PRINT_VECTOR(pose)
 
-    printw("\nNum of Waypoints reached: %d\n", cx.numWayPtsReached);
+	printw("\nNum of Waypoints reached: %d\n", cx.numWayPtsReached);
 
-    return;
+	return;
 }
 
 /* Publishes eigen matrix to the given channel. This handles serialization and
  * error check while putting on the channel. */
 void publish_vector_to_channel(ach_channel_t& chan, Eigen::VectorXd& vec){
 
-    char buf[2 * sizeof(int) + vec.size() * sizeof(double)];
-    serialize_from_Matrix(vec.transpose(), buf);
+	char buf[2 * sizeof(int) + vec.size() * sizeof(double)];
+	serialize_from_Matrix(vec.transpose(), buf);
 
-    assert(ACH_OK== ach_put( &chan, buf, sizeof(buf)));
-    return;
+	assert(ACH_OK== ach_put( &chan, buf, sizeof(buf)));
+	return;
 }
 
 /* Prints the current status of the machine */
 void publish_to_channels(const Krang::Hardware* hw,
-                       const Krang::WorkspaceControl *l_ws, 
-                       const Krang::WorkspaceControl *r_ws, 
-                       cx_t& cx){
-    Eigen::VectorXd pose;;
+					   const Krang::WorkspaceControl *l_ws, 
+					   const Krang::WorkspaceControl *r_ws, 
+					   cx_t& cx){
+	Eigen::VectorXd pose;;
 
-    pose = getCurPose(l_ws->endEffector);
-    publish_vector_to_channel(lgrip_state_channel, pose);
+	pose = getCurPose(l_ws->endEffector);
+	publish_vector_to_channel(lgrip_state_channel, pose);
 
-    pose = getCurPose(r_ws->endEffector);
-    publish_vector_to_channel(rgrip_state_channel, pose);
+	pose = getCurPose(r_ws->endEffector);
+	publish_vector_to_channel(rgrip_state_channel, pose);
 
-    pose = hw->robot->getPose();
-    // remove first 6 number (pose of root node)
-    pose = pose.tail(pose.size() - 6);  
-    publish_vector_to_channel(cx.channel_body_state, pose);
+	pose = hw->robot->getPose();
+	// remove first 6 number (pose of root node)
+	pose = pose.tail(pose.size() - 6);  
+	publish_vector_to_channel(cx.channel_body_state, pose);
 
-    pose = hw->fts[Krang::LEFT]->lastExternal;
-    publish_vector_to_channel(cx.channel_ft[L_GRIP], pose);
+	pose = hw->fts[Krang::LEFT]->lastExternal;
+	publish_vector_to_channel(cx.channel_ft[L_GRIP], pose);
 
-    pose = hw->fts[Krang::RIGHT]->lastExternal;
-    publish_vector_to_channel(cx.channel_ft[R_GRIP], pose);
+	pose = hw->fts[Krang::RIGHT]->lastExternal;
+	publish_vector_to_channel(cx.channel_ft[R_GRIP], pose);
 
-    return;
+	return;
 }
 
 /**
@@ -756,29 +769,29 @@ void publish_to_channels(const Krang::Hardware* hw,
  * Returns true if next waypoints read successfully from the channel, false
  *  otherwise. */
 bool poll_waypnts_channel(ach_channel_t& chan, 
-                                    std::vector<Eigen::VectorXd>& refTraj) { 
-    size_t frame_size = 0;
-    
-    char buf[2 * sizeof(int) + MAX_NUM_WAYPTS * 6 * sizeof(double)];
+									std::vector<Eigen::VectorXd>& refTraj) { 
+	size_t frame_size = 0;
+	
+	char buf[2 * sizeof(int) + MAX_NUM_WAYPTS * 6 * sizeof(double)];
 
-    enum ach_status r = ach_get(&chan, buf, sizeof(buf), &frame_size, NULL, ACH_O_LAST);
-    if(!(r == ACH_OK || r == ACH_MISSED_FRAME))
-        return false;
+	enum ach_status r = ach_get(&chan, buf, sizeof(buf), &frame_size, NULL, ACH_O_LAST);
+	if(!(r == ACH_OK || r == ACH_MISSED_FRAME))
+		return false;
 
-    Eigen::MatrixXd refTrajM = deserialize_to_Matrix(buf);
-    if(refTrajM.cols() != 6){
-        printw("Error at Line %d: Length of way-point is not 6\n\r", __LINE__);
-        return false;
-    }
-    
-    refTraj.clear();
+	Eigen::MatrixXd refTrajM = deserialize_to_Matrix(buf);
+	if(refTrajM.cols() != 6){
+		printw("Error at Line %d: Length of way-point is not 6\n\r", __LINE__);
+		return false;
+	}
+	
+	refTraj.clear();
 
-    Eigen::VectorXd temp;
-    for(int i=0; i < refTrajM.rows(); i++){
-        temp = refTrajM.row(i);
-        refTraj.push_back(temp);
-    }
-    return true;
+	Eigen::VectorXd temp;
+	for(int i=0; i < refTrajM.rows(); i++){
+		temp = refTrajM.row(i);
+		refTraj.push_back(temp);
+	}
+	return true;
 }
 
 /**
@@ -789,26 +802,26 @@ bool poll_waypnts_channel(ach_channel_t& chan,
  * Returns true if next waypoints read successfully from the channel, false
  *  otherwise. */
 bool poll_ref_vel_channel(ach_channel_t& chan, Eigen::VectorXd& vel) { 
-    size_t frame_size = 0;  
-    char buf[2 * sizeof(int) + 6 * sizeof(double)];
+	size_t frame_size = 0;  
+	char buf[2 * sizeof(int) + 6 * sizeof(double)];
 
-    enum ach_status r = ach_get(&chan, buf, sizeof(buf), &frame_size, NULL, ACH_O_LAST);
-    if(!(r == ACH_OK || r == ACH_MISSED_FRAME))
-        return false;
+	enum ach_status r = ach_get(&chan, buf, sizeof(buf), &frame_size, NULL, ACH_O_LAST);
+	if(!(r == ACH_OK || r == ACH_MISSED_FRAME))
+		return false;
 
-    Eigen::MatrixXd velM = deserialize_to_Matrix(buf);
-    if(velM.size() != 6){
-        printw("Error at Line %d: Length of way-point is not 6\n\r", __LINE__);
-        return false;
-    }
+	Eigen::MatrixXd velM = deserialize_to_Matrix(buf);
+	if(velM.size() != 6){
+		printw("Error at Line %d: Length of way-point is not 6\n\r", __LINE__);
+		return false;
+	}
 
-    //vel = ( (velM.rows() == 6) ? velM.col(0) : velM.row(0) ) ;
-    if(velM.rows() == 6)
-        vel = velM.col(0);
-    else
-        vel = velM.row(0);
-    
-    return true;
+	//vel = ( (velM.rows() == 6) ? velM.col(0) : velM.row(0) ) ;
+	if(velM.rows() == 6)
+		vel = velM.col(0);
+	else
+		vel = velM.row(0);
+	
+	return true;
 }
 
 /* Reads the command channel and takes action. Makes changes to global 
@@ -816,60 +829,60 @@ bool poll_ref_vel_channel(ach_channel_t& chan, Eigen::VectorXd& vel) {
  *  chan :[IN] the channel to read the command from */
 void poll_cmd_channel(ach_channel_t& chan){
 
-    size_t frame_size = 0;  
-    char buf[2 * sizeof(int) + 2 * sizeof(double)];
+	size_t frame_size = 0;  
+	char buf[2 * sizeof(int) + 2 * sizeof(double)];
 
-    enum ach_status r = ach_get(&chan, buf, sizeof(buf), &frame_size, NULL, ACH_O_LAST);
-    if(!(r == ACH_OK || r == ACH_MISSED_FRAME)) return;
+	enum ach_status r = ach_get(&chan, buf, sizeof(buf), &frame_size, NULL, ACH_O_LAST);
+	if(!(r == ACH_OK || r == ACH_MISSED_FRAME)) return;
 
-    // printw("\n%d:I am inside %s()\n", __LINE__, __func__);
+	// printw("\n%d:I am inside %s()\n", __LINE__, __func__);
 
-    Eigen::MatrixXd cmdM = deserialize_to_Matrix(buf);
-    if(cmdM.size() != 2)
-        printw("Error at Line %d: Invalid message on command code\n\r", __LINE__);
+	Eigen::MatrixXd cmdM = deserialize_to_Matrix(buf);
+	if(cmdM.size() != 2)
+		printw("Error at Line %d: Invalid message on command code\n\r", __LINE__);
 
-    // printw("\n%d:I am inside %s()\n", __LINE__, __func__);
+	// printw("\n%d:I am inside %s()\n", __LINE__, __func__);
 
-    int cmdCode = int(cmdM(0) + 0.5);   // round the value
-    int val = int(cmdM(1) + 0.5);       // round the value
+	int cmdCode = int(cmdM(0) + 0.5);   // round the value
+	int val = int(cmdM(1) + 0.5);       // round the value
 
-    switch(cmdCode){ // round a command code
-        case 0: 
-            (val == 0) ? 
-                setInputMode(INPUT_MODE_POSE)
-                    : setInputMode(INPUT_MODE_VEL);
-        case 1:     // close/open both grippers
-            if(val == 0){
-                openGripper(hw->grippers[Krang::LEFT]);
-                openGripper(hw->grippers[Krang::RIGHT]);
-            }
-            else{
-                closeGripper(hw->grippers[Krang::LEFT]);
-                closeGripper(hw->grippers[Krang::RIGHT]);
-            }
-            break;
-        case 2: 
-            if(val == 0)
-                openGripper(hw->grippers[Krang::LEFT]);
-            else
-                closeGripper(hw->grippers[Krang::LEFT]);
-            break;
-        case 3: break;
-            if(val == 0)
-                openGripper(hw->grippers[Krang::RIGHT]);
-            else
-                closeGripper(hw->grippers[Krang::RIGHT]);
-            break;
+	switch(cmdCode){ // round a command code
+		case 0: 
+			(val == 0) ? 
+				setInputMode(INPUT_MODE_POSE)
+					: setInputMode(INPUT_MODE_VEL);
+		case 1:     // close/open both grippers
+			if(val == 0){
+				openGripper(hw->grippers[Krang::LEFT]);
+				openGripper(hw->grippers[Krang::RIGHT]);
+			}
+			else{
+				closeGripper(hw->grippers[Krang::LEFT]);
+				closeGripper(hw->grippers[Krang::RIGHT]);
+			}
+			break;
+		case 2: 
+			if(val == 0)
+				openGripper(hw->grippers[Krang::LEFT]);
+			else
+				closeGripper(hw->grippers[Krang::LEFT]);
+			break;
+		case 3: break;
+			if(val == 0)
+				openGripper(hw->grippers[Krang::RIGHT]);
+			else
+				closeGripper(hw->grippers[Krang::RIGHT]);
+			break;
 
-        case 4: 
-            toggle_imu(val);
-            break;
-        default: 
-            break;
-    }
+		case 4: 
+			toggle_imu(val);
+			break;
+		default: 
+			break;
+	}
 
-    printw("\nReceived cmd. cmd = %d, val = %d\n", cmdCode, val);
-    return;
+	printw("\nReceived cmd. cmd = %d, val = %d\n", cmdCode, val);
+	return;
 }
 
 /* ********************************************************************************************* */
@@ -880,23 +893,23 @@ void run() {
 	double time_last_display = aa_tm_timespec2sec(aa_tm_now());
 	double time_last = aa_tm_timespec2sec(aa_tm_now());
 
-    // set the initial target pose to same as current pose
-    // Pose of Gripper in World Frame
-    Eigen::Matrix4d T_gripper_to_world;
-    T_gripper_to_world =  wss[Krang::LEFT]->endEffector->getWorldTransform();
-    cx.ref_poses[L_GRIP] = Krang::transformToEuler(T_gripper_to_world, math::XYZ);
+	// set the initial target pose to same as current pose
+	// Pose of Gripper in World Frame
+	Eigen::Matrix4d T_gripper_to_world;
+	T_gripper_to_world =  wss[Krang::LEFT]->endEffector->getWorldTransform();
+	cx.ref_poses[L_GRIP] = Krang::transformToEuler(T_gripper_to_world, math::XYZ);
 
-    T_gripper_to_world = wss[Krang::RIGHT]->endEffector->getWorldTransform();
-    cx.ref_poses[R_GRIP] = Krang::transformToEuler(T_gripper_to_world, math::XYZ);
+	T_gripper_to_world = wss[Krang::RIGHT]->endEffector->getWorldTransform();
+	cx.ref_poses[R_GRIP] = Krang::transformToEuler(T_gripper_to_world, math::XYZ);
 
-    cx.ref_vel[L_GRIP] = Eigen::VectorXd::Zero(6);
-    cx.ref_vel[R_GRIP] = Eigen::VectorXd::Zero(6);
+	cx.ref_vel[L_GRIP] = Eigen::VectorXd::Zero(6);
+	cx.ref_vel[R_GRIP] = Eigen::VectorXd::Zero(6);
 
-    Eigen::VectorXd x; // current position of the gripper
+	Eigen::VectorXd x; // current position of the gripper
 
 	while(!somatic_sig_received) {
 
-        pthread_mutex_lock(&mutex);     
+		pthread_mutex_lock(&mutex);     
 
 		Krang::curses_display_row = CURSES_DEBUG_DISPLAY_START;
 
@@ -915,7 +928,7 @@ void run() {
 		wss[Krang::RIGHT]->debug_to_curses = debug_print_this_it;
 
 		/* Read the robot state from sensors. This includes reading joint 
-           angles for arms. It also update internal kinematics. */
+		   angles for arms. It also update internal kinematics. */
 		hw->updateSensors(time_delta);
 
 		// Check for too high currents
@@ -941,50 +954,50 @@ void run() {
 			Krang::Side sde_other = (sde==Krang::LEFT) ? Krang::RIGHT : Krang::LEFT;
 			Eigen::VectorXd q = robot->getConfig(*wss[sde]->arm_ids);
 
-            /* Get current pose of the gripper */
-            x = getCurPose(wss[sde]->endEffector);
+			/* Get current pose of the gripper */
+			x = getCurPose(wss[sde]->endEffector);
 
-            Eigen::VectorXd qdot_jacobian;
+			Eigen::VectorXd qdot_jacobian;
 
 			// Nullspace: construct a qdot that the jacobian will bias toward using the nullspace
 			nullspace_qdot_refs[sde] = (nullspace_q_refs[sde] - q).cwiseProduct(nullspace_q_masks[sde]);
 
-            if(cx.input_mode == INPUT_MODE_VEL) {
-                // write here code
-                Eigen::VectorXd xDot = cx.ref_vel[side];
+			if(cx.input_mode == INPUT_MODE_VEL) {
+				// write here code
+				Eigen::VectorXd xDot = cx.ref_vel[side];
 
-                // if (synch mode on) and (it is off hand) then follow primary hand
-                if ((cx.synch_mode == SYNCH_ON_L_PRIM && sde == Krang::RIGHT) ||
-                      (cx.synch_mode == SYNCH_ON_R_PRIM && sde == Krang::LEFT))
-                        xDot = cx.ref_vel[1-side];
+				// if (synch mode on) and (it is off hand) then follow primary hand
+				if ((cx.synch_mode == SYNCH_ON_L_PRIM && sde == Krang::RIGHT) ||
+					  (cx.synch_mode == SYNCH_ON_R_PRIM && sde == Krang::LEFT))
+						xDot = cx.ref_vel[1-side];
 
-                
-                /* passing time argument as 1.
-                  We need to get qdot from xdot using jacobian and time is not 
-                  required. But kore seems to be inefficient. Reseting the 
-                  reference transform passing time as 1 is just a hacky way to
-                  do, till kore is upgraded (See workspace.c in kore to 
-                  understand what's happening). */
-                wss[sde]->resetReferenceTransform();
-                wss[sde]->updateFromXdot(xDot, hw->fts[sde]->lastExternal,
-                                          nullspace_qdot_refs[sde], 1, qdot_jacobian);
-            }
+				
+				/* passing time argument as 1.
+				  We need to get qdot from xdot using jacobian and time is not 
+				  required. But kore seems to be inefficient. Reseting the 
+				  reference transform passing time as 1 is just a hacky way to
+				  do, till kore is upgraded (See workspace.c in kore to 
+				  understand what's happening). */
+				wss[sde]->resetReferenceTransform();
+				wss[sde]->updateFromXdot(xDot, hw->fts[sde]->lastExternal,
+										  nullspace_qdot_refs[sde], 1, qdot_jacobian);
+			}
 
-            else { // Apply K_p and get velocity in task space              
-                Eigen::MatrixXd T_ref;
-                T_ref = Krang::eulerToTransform(cx.ref_poses[side], math::XYZ);
+			else { // Apply K_p and get velocity in task space              
+				Eigen::MatrixXd T_ref;
+				T_ref = Krang::eulerToTransform(cx.ref_poses[side], math::XYZ);
 
-                
-                // if (synch mode on) and (it is off hand) then follow primary hand
-                if ((cx.synch_mode == SYNCH_ON_L_PRIM && sde == Krang::RIGHT) ||
-                      (cx.synch_mode == SYNCH_ON_R_PRIM && sde == Krang::LEFT)){
-                    
-                    T_ref = Krang::eulerToTransform(cx.ref_poses[1-side], math::XYZ);
-                    T_ref = T_ref * cx.T_off_to_pri;        
-                }
-                wss[sde]->updateFromUIPos(T_ref, hw->fts[sde]->lastExternal,
-                                          nullspace_qdot_refs[sde], qdot_jacobian);
-            }
+				
+				// if (synch mode on) and (it is off hand) then follow primary hand
+				if ((cx.synch_mode == SYNCH_ON_L_PRIM && sde == Krang::RIGHT) ||
+					  (cx.synch_mode == SYNCH_ON_R_PRIM && sde == Krang::LEFT)){
+					
+					T_ref = Krang::eulerToTransform(cx.ref_poses[1-side], math::XYZ);
+					T_ref = T_ref * cx.T_off_to_pri;        
+				}
+				wss[sde]->updateFromUIPos(T_ref, hw->fts[sde]->lastExternal,
+										  nullspace_qdot_refs[sde], qdot_jacobian);
+			}
 
 
 			// make sure we're not going too fast
@@ -1003,66 +1016,66 @@ void run() {
 			if(cx.send_motor_cmds)
 				somatic_motor_setvel(&daemon_cx, hw->arms[sde], qdot_apply.data(), 7);
 
-                    // Check for messages on the waypoint channels
-           
-            bool r;
-            r = poll_waypnts_channel(waypts_channel[side], cx.refTraj[side]);
-            if (r == true){ // update ref pose
-                printw("Waypoints channel polled. \n\r");
-                if (! cx.refTraj[side].empty()){
-                    cx.ref_poses[side] = cx.refTraj[side][0];
-                    cx.refTraj[side].erase(cx.refTraj[side].begin());
-                }
-            }
+					// Check for messages on the waypoint channels
+		   
+			bool r;
+			r = poll_waypnts_channel(waypts_channel[side], cx.refTraj[side]);
+			if (r == true){ // update ref pose
+				printw("Waypoints channel polled. \n\r");
+				if (! cx.refTraj[side].empty()){
+					cx.ref_poses[side] = cx.refTraj[side][0];
+					cx.refTraj[side].erase(cx.refTraj[side].begin());
+				}
+			}
 
-            poll_ref_vel_channel(cx.channel_ref_vel[side], cx.ref_vel[side]);
+			poll_ref_vel_channel(cx.channel_ref_vel[side], cx.ref_vel[side]);
 
-            /* Test if target position has been reached by checking if current 
-            pose is within some finite neighbourhood of target pose and if 
-            reached update the ref pose to next waypoint in the trajectory. */
-            if (abs(cx.ref_poses[side][0] - x[0]) < 0.01 &&    // x-dir 1 cm
-                abs(cx.ref_poses[side][1] - x[1]) < 0.01 &&    // y-dir 1 cm
-                abs(cx.ref_poses[side][2] - x[2]) < 0.01 &&    // z-dir 1 cm 
-                abs(cx.ref_poses[side][3] - x[3]) < 0.3  &&    // roll  0.3 rad
-                abs(cx.ref_poses[side][4] - x[4]) < 0.3  &&    // pitch 0.3 rad
-                abs(cx.ref_poses[side][5] - x[5]) < 0.3) {     // yaw   0.3 rad
-               
-                if (! cx.refTraj[side].empty()){
-                    cx.numWayPtsReached++;
-                    cx.ref_poses[side] = cx.refTraj[side][0];
-                    cx.refTraj[side].erase(cx.refTraj[side].begin());
-                }
-            }
+			/* Test if target position has been reached by checking if current 
+			pose is within some finite neighbourhood of target pose and if 
+			reached update the ref pose to next waypoint in the trajectory. */
+			if (abs(cx.ref_poses[side][0] - x[0]) < 0.01 &&    // x-dir 1 cm
+				abs(cx.ref_poses[side][1] - x[1]) < 0.01 &&    // y-dir 1 cm
+				abs(cx.ref_poses[side][2] - x[2]) < 0.01 &&    // z-dir 1 cm 
+				abs(cx.ref_poses[side][3] - x[3]) < 0.3  &&    // roll  0.3 rad
+				abs(cx.ref_poses[side][4] - x[4]) < 0.3  &&    // pitch 0.3 rad
+				abs(cx.ref_poses[side][5] - x[5]) < 0.3) {     // yaw   0.3 rad
+			   
+				if (! cx.refTraj[side].empty()){
+					cx.numWayPtsReached++;
+					cx.ref_poses[side] = cx.refTraj[side][0];
+					cx.refTraj[side].erase(cx.refTraj[side].begin());
+				}
+			}
 		}
 
-        poll_cmd_channel(cx.channel_cmd);
+		poll_cmd_channel(cx.channel_cmd);
 
-        //std::cout<<"Left gripper pose in world frame" << std::endl<<'\r';
-        //std::cout<<cx.ref_poses[L_GRIP] <<std::endl<<'\r';
+		//std::cout<<"Left gripper pose in world frame" << std::endl<<'\r';
+		//std::cout<<cx.ref_poses[L_GRIP] <<std::endl<<'\r';
 
-        // print various things to the output
-        move(0, 0);
-        //clear();
-        printw("----------------------------------\n");
-        print_key_bindings();
-        printw("----------------------------------\n");
-        print_robot_state(hw, wss[Krang::LEFT], wss[Krang::RIGHT], cx);
-        printw("----------------------------------\n");
-        //printEvents();
-        printw("----------------------------------\n");
-        refresh();  // refresh the ncurses screen
+		// print various things to the output
+		move(0, 0);
+		//clear();
+		printw("----------------------------------\n");
+		print_key_bindings();
+		printw("----------------------------------\n");
+		print_robot_state(hw, wss[Krang::LEFT], wss[Krang::RIGHT], cx);
+		printw("----------------------------------\n");
+		//printEvents();
+		printw("----------------------------------\n");
+		refresh();  // refresh the ncurses screen
 
-        // publish the left gripper and right gripper states on the ACH channels.
-        //publish_gripper_state(lgrip_state_channel, wss[Krang::LEFT]->endEffector);
-        //publish_gripper_state(rgrip_state_channel, wss[Krang::RIGHT]->endEffector);
-        publish_to_channels(hw, wss[Krang::LEFT], wss[Krang::RIGHT], cx);
+		// publish the left gripper and right gripper states on the ACH channels.
+		//publish_gripper_state(lgrip_state_channel, wss[Krang::LEFT]->endEffector);
+		//publish_gripper_state(rgrip_state_channel, wss[Krang::RIGHT]->endEffector);
+		publish_to_channels(hw, wss[Krang::LEFT], wss[Krang::RIGHT], cx);
 
 		// And sleep to fill out the loop period so we don't eat the entire CPU
 		double time_loopend = aa_tm_timespec2sec(aa_tm_now());
 		double time_sleep = (1.0 / LOOP_FREQUENCY) - (time_loopend - time_now);
 		int time_sleep_usec = std::max(0, (int)(time_sleep * 1e6));
 
-        pthread_mutex_unlock(&mutex);
+		pthread_mutex_unlock(&mutex);
 
 		usleep(time_sleep_usec);
 	}		
@@ -1079,9 +1092,9 @@ void init() {
 	assert((world != NULL) && "Could not find the world");
 	robot = world->getSkeleton("Krang");
 
-    // Set pose of base in world frame as (0, 0, 0, 0, 0, 0)
-    //Eigen::VectorXd basePose = Eigen::VectorXd::Zero(6);
-    //robot->setConfig(Krang::dart_root_dof_ids, basePose);
+	// Set pose of base in world frame as (0, 0, 0, 0, 0, 0)
+	//Eigen::VectorXd basePose = Eigen::VectorXd::Zero(6);
+	//robot->setConfig(Krang::dart_root_dof_ids, basePose);
 
 	// Initialize somatic
 	somatic_d_opts_t daemon_opt;
@@ -1097,34 +1110,34 @@ void init() {
 	assert(ACH_OK == ach_open(&waypts_channel[R_GRIP], cx.rgrip_waypnts_channel_name, NULL ));
 	assert(ACH_OK == ach_flush(&waypts_channel[R_GRIP]));
 
-    // Initialize ACH channels for reading reference velocity
-    assert(ACH_OK == ach_open(&cx.channel_ref_vel[L_GRIP], "krang_lgrip_ref_vel", NULL ));
-    assert(ACH_OK == ach_flush(&cx.channel_ref_vel[L_GRIP]));
+	// Initialize ACH channels for reading reference velocity
+	assert(ACH_OK == ach_open(&cx.channel_ref_vel[L_GRIP], "krang_lgrip_ref_vel", NULL ));
+	assert(ACH_OK == ach_flush(&cx.channel_ref_vel[L_GRIP]));
 
-    assert(ACH_OK == ach_open(&cx.channel_ref_vel[R_GRIP], "krang_rgrip_ref_vel", NULL ));
-    assert(ACH_OK == ach_flush(&cx.channel_ref_vel[R_GRIP]));
+	assert(ACH_OK == ach_open(&cx.channel_ref_vel[R_GRIP], "krang_rgrip_ref_vel", NULL ));
+	assert(ACH_OK == ach_flush(&cx.channel_ref_vel[R_GRIP]));
 
-    // Initialize ACH channels for commands
-    assert(ACH_OK == ach_open(&cx.channel_cmd, g_default_cmd_chan_name, NULL ));
-    assert(ACH_OK == ach_flush(&cx.channel_cmd));
+	// Initialize ACH channels for commands
+	assert(ACH_OK == ach_open(&cx.channel_cmd, g_default_cmd_chan_name, NULL ));
+	assert(ACH_OK == ach_flush(&cx.channel_cmd));
 
-    // Initialize ACH channels for publishing state of left and right grippers
-    assert(ACH_OK == ach_open(&lgrip_state_channel, cx.lgrip_state_channel_name, NULL));
-    assert(ACH_OK == ach_flush(&lgrip_state_channel));
+	// Initialize ACH channels for publishing state of left and right grippers
+	assert(ACH_OK == ach_open(&lgrip_state_channel, cx.lgrip_state_channel_name, NULL));
+	assert(ACH_OK == ach_flush(&lgrip_state_channel));
 
-    assert(ACH_OK == ach_open(&rgrip_state_channel, cx.rgrip_state_channel_name, NULL));
-    assert(ACH_OK == ach_flush(&rgrip_state_channel));
+	assert(ACH_OK == ach_open(&rgrip_state_channel, cx.rgrip_state_channel_name, NULL));
+	assert(ACH_OK == ach_flush(&rgrip_state_channel));
 
-    // Initialize ACH channels for publishing force/torque values
-    assert(ACH_OK == ach_open(&cx.channel_ft[L_GRIP], "krang_lgrip_ft", NULL));
-    assert(ACH_OK == ach_flush(&cx.channel_ft[L_GRIP]));
+	// Initialize ACH channels for publishing force/torque values
+	assert(ACH_OK == ach_open(&cx.channel_ft[L_GRIP], "krang_lgrip_ft", NULL));
+	assert(ACH_OK == ach_flush(&cx.channel_ft[L_GRIP]));
 
-    assert(ACH_OK == ach_open(&cx.channel_ft[R_GRIP], "krang_rgrip_ft", NULL));
-    assert(ACH_OK == ach_flush(&cx.channel_ft[R_GRIP]));
+	assert(ACH_OK == ach_open(&cx.channel_ft[R_GRIP], "krang_rgrip_ft", NULL));
+	assert(ACH_OK == ach_flush(&cx.channel_ft[R_GRIP]));
 
-    // Initialize ACH channels for publishing body state
-    assert(ACH_OK == ach_open(&cx.channel_body_state, "krang_body_state", NULL));
-    assert(ACH_OK == ach_flush(&cx.channel_body_state));
+	// Initialize ACH channels for publishing body state
+	assert(ACH_OK == ach_open(&cx.channel_body_state, "krang_body_state", NULL));
+	assert(ACH_OK == ach_flush(&cx.channel_body_state));
 
 	// Initialize the hardware for the appropriate gripper mode
 	Krang::Hardware::Mode mode = (Krang::Hardware::Mode)(Krang::Hardware::MODE_ALL_GRIPSCH);
@@ -1132,11 +1145,11 @@ void init() {
 
 	// Set up the workspace stuff
 	wss[Krang::LEFT] = new Krang::WorkspaceControl(robot, Krang::LEFT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
-	                                               SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN,
-	                                               COMPLIANCE_TRANSLATION_GAIN, COMPLIANCE_ORIENTATION_GAIN);
+												   SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN,
+												   COMPLIANCE_TRANSLATION_GAIN, COMPLIANCE_ORIENTATION_GAIN);
 	wss[Krang::RIGHT] = new Krang::WorkspaceControl(robot, Krang::RIGHT, K_WORKERR_P, NULLSPACE_GAIN, DAMPING_GAIN, 
-	                                                SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN,
-	                                                COMPLIANCE_TRANSLATION_GAIN, COMPLIANCE_ORIENTATION_GAIN);
+													SPACENAV_TRANSLATION_GAIN, SPACENAV_ORIENTATION_GAIN,
+													COMPLIANCE_TRANSLATION_GAIN, COMPLIANCE_ORIENTATION_GAIN);
 
 	// set up the relative transform between the hands
 	Trel_pri_to_off = wss[primary_hand]->Tref.inverse() * wss[off_hand]->Tref;
@@ -1147,30 +1160,31 @@ void init() {
 	nullspace_q_masks[Krang::LEFT] = (Krang::Vector7d()  << 0,    0, 0,    1, 0,    0, 0).finished();
 	nullspace_q_masks[Krang::RIGHT] = (Krang::Vector7d() << 0,    0, 0,    1, 0,    0, 0).finished();
 
-    // Create a thread to wait for user input
-    pthread_t kbhitThread;
-    pthread_create(&kbhitThread, NULL, &kbhit, NULL);
+	// Create a thread to wait for user input
+	pthread_t kbhitThread;
+	pthread_create(&kbhitThread, NULL, &kbhit, NULL);
 
-    // Intial the context
-    cx.send_motor_cmds = true;
-    cx.synch_mode = SYNCH_OFF;
-    cx.input_mode = INPUT_MODE_POSE;
-    cx.imu_mode = IMU_ON;
-    cx.compliance_mode = COMPLIANCE_ON;//COMPLIANCE_ON;
+	// Intial the context
+	cx.send_motor_cmds = true;
+	cx.synch_mode = SYNCH_OFF;
+	cx.input_mode = INPUT_MODE_POSE;
+	cx.imu_mode = IMU_ON;
+	cx.compliance_mode = COMPLIANCE_ON;//COMPLIANCE_ON;
+	cx.show_key_bindings = true;
 
 	// Send message on event channel for 'daemon initialized and running'
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
-	                SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
+					SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
 }
 
 /* ******************************************************************************************** */
 /// The main thread
 int main(int argc, char* argv[]) {
 
-    /* Store the current working directory since somatic annoyingly changes it */
-    char temp[1024];
-    init_wd = getcwd(temp, 1024) ? std::string( temp ) : std::string("");
-    
+	/* Store the current working directory since somatic annoyingly changes it */
+	char temp[1024];
+	init_wd = getcwd(temp, 1024) ? std::string( temp ) : std::string("");
+	
 
 	// parse command line arguments
 	parse_args(argc, argv);
@@ -1187,23 +1201,23 @@ One function records the event. Another functions prints the events. Prev events
 may be over-written with new ones. Current it supports recording only last
 event. It can be extended to record more events. */
 typedef struct {
-    char events[10][256];
-    unsigned int numEvents;
-    int start;
+	char events[10][256];
+	unsigned int numEvents;
+	int start;
 } EventQ_t;
 
 EventQ_t g_EventQ {.events = {0}, .numEvents = 0, .start = 0};
 
 void recordEvent(const char* event){
-    strncpy(g_EventQ.events[g_EventQ.start], event, 256);
-    g_EventQ.start = (g_EventQ.start+1)%10;
-    g_EventQ.numEvents++;
-    return;
+	strncpy(g_EventQ.events[g_EventQ.start], event, 256);
+	g_EventQ.start = (g_EventQ.start+1)%10;
+	g_EventQ.numEvents++;
+	return;
 }
 
 void printEvents(){
-    printw("EVENTS\n");
-    for(int i=0; i<10; i++)
-        printw("    %d: %s\n", g_EventQ.numEvents + i, g_EventQ.events[(g_EventQ.start + i)%10]);
-    return;
+	printw("EVENTS\n");
+	for(int i=0; i<10; i++)
+		printw("    %d: %s\n", g_EventQ.numEvents + i, g_EventQ.events[(g_EventQ.start + i)%10]);
+	return;
 }
