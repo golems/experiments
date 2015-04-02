@@ -344,7 +344,7 @@ void parse_args(int argc, char* argv[])
 
 // initializers for the workspace control constants
 const double K_WORKERR_P = 1.00;
-const double NULLSPACE_GAIN = 0.1;
+const double NULLSPACE_GAIN = 0.5; //0.1;
 const double DAMPING_GAIN = 0.005;
 const double SPACENAV_ORIENTATION_GAIN = 0.50; // maximum 50 cm per second from spacenav
 const double SPACENAV_TRANSLATION_GAIN = 0.25; // maximum .25 radians per second from spacenav
@@ -424,28 +424,26 @@ void destroy() {
 
 /* Prints the keyboard keys and \corresponding actions to the console */
 void print_key_bindings(){
-	const char *allstr = 
-	"'b': hide key bindings                                                    \n\r"
-	"'m','M': toggle ON and OFF sending commands to motors                     \n\r"
-	"'z'    : Rotates among 3 synch mode. 'OFF', 'ON - left primary',          \n\r"
-	"          'ON - right primary' . If synch mode is ON, then trajectory on  \n\r"
-	"          waypoints channel for off hand is ignored.                      \n\r"
-	"'c'    : toggle COMPLIANCE mode (ON or OFF)                               \n\r"
-	"'i'    : toggle IMU mode (ON or OFF)                                      \n\r"
-	"'g'    : Re-read and update compliance gains from file                    \n\r"
-	"          (workspaced-compliance-gains.txt)                               \n\r"
-	"'q'    : Quit                                                             \n\r"
-	"'r'    : Reset Motors                                                     \n\r"
-	"'p'    : Toggle input mode between VELOCITY and POSE control              \n\r"
-	"'1'    : Close left gripper                                               \n\r"
-	"'2'    : Open left gripper                                                \n\r"
-	"'3'    : Close right gripper                                              \n\r"
-	"'4'    : Open right gripper                                               \n\r";
-	
-	const char *shortstr =
-	"'b': show key bindings                                                    \n\r";
+	printw("\t\t[KEY BINDINGS]");
+	if(!cx.show_key_bindings)
+		{printw("    (Press 'b' to show)\n"); return;}
 
-	printw("\t\t[KEY BINDINGS]\n\r%s\n\r", cx.show_key_bindings ? allstr : shortstr);
+	printw("(Press 'b' to show)\n%s", 
+	 "'m','M': toggle ON and OFF sending commands to motors                     \n"
+	 "'z'    : Rotates among 3 synch mode. 'OFF', 'ON - left primary',          \n"
+	 "          'ON - right primary' . If synch mode is ON, then trajectory on  \n"
+	 "          waypoints channel for off hand is ignored.                      \n"
+	 "'c'    : toggle COMPLIANCE mode (ON or OFF)                               \n"
+	 "'i'    : toggle IMU mode (ON or OFF)                                      \n"
+	 "'g'    : Re-read and update compliance gains from file                    \n"
+	 "          (workspaced-compliance-gains.txt)                               \n"
+	 "'q'    : Quit                                                             \n"
+	 "'r'    : Reset Motors                                                     \n"
+	 "'p'    : Toggle input mode between VELOCITY and POSE control              \n"
+	 "'1'    : Close left gripper                                               \n"
+	 "'2'    : Open left gripper                                                \n"
+	 "'3'    : Close right gripper                                              \n"
+	 "'4'    : Open right gripper                                               \n");
 	return;
 }
 
@@ -472,6 +470,9 @@ void setInputMode(int inputMode){
 
 		cx.ref_poses[L_GRIP] = getCurPose(wss[Krang::LEFT]->endEffector);
 		cx.ref_poses[R_GRIP] = getCurPose(wss[Krang::RIGHT]->endEffector);
+
+		cx.refTraj[L_GRIP].clear();
+		cx.refTraj[R_GRIP].clear();
 	}
 	return;
 }
@@ -620,6 +621,9 @@ void *kbhit(void *) {
         case '4': 
             openGripper(hw->grippers[Krang::RIGHT]);
             break;
+        case '9':
+
+        	break;
         default:
             //cout<<__LINE__<<": Value of ch is :" << (int)ch <<std::endl<<'\r';
             break;
@@ -640,11 +644,11 @@ void print_robot_state(const Krang::Hardware* hw,
         l_ws->compliance_orientation_gain);
     printw("CURRENT CONF. (use key-bindings to change)\n\r");
     printw("   Synch Mode: %s\n\r", synch_mode_to_string(cx.synch_mode));
-    printw("   Send commands to Motor: ");
+    printw("   Send commands to Motor:");
     printw(cx.send_motor_cmds ? "ON\n" : "OFF\n");
-    printw("Input Mode: %s\n\r", input_mode_to_string(cx.input_mode));
-    printw("Sensor (IMU) update Mode: %s\n\r", bool_to_stringOnOff(cx.imu_mode));
-    printw("Compliance Mode: %s\n\r", compliance_mode_to_string(cx.compliance_mode));
+    printw("    Input Mode: %s\n\r", input_mode_to_string(cx.input_mode));
+    printw("    Sensor (IMU) update Mode: IMU_%s\n\r", bool_to_stringOnOff(cx.imu_mode));
+    printw("    Compliance Mode: %s\n\r", compliance_mode_to_string(cx.compliance_mode));
     printw("----------------------------------\n");
 
 	Eigen::VectorXd pose = Eigen::VectorXd::Zero(6);
@@ -970,7 +974,7 @@ void run() {
 										  nullspace_qdot_refs[sde], 1, qdot_jacobian);
 			}
 
-			else { // Apply K_p and get velocity in task space              
+			else { // Pose mode. Apply K_p and get velocity in task space              
 				Eigen::MatrixXd T_ref;
 				T_ref = Krang::eulerToTransform(cx.ref_poses[side], math::XYZ);
 
@@ -1020,9 +1024,9 @@ void run() {
 			/* Test if target position has been reached by checking if current 
 			pose is within some finite neighbourhood of target pose and if 
 			reached update the ref pose to next waypoint in the trajectory. */
-			if (abs(cx.ref_poses[side][0] - x[0]) < 0.01 &&    // x-dir 1 cm
-				abs(cx.ref_poses[side][1] - x[1]) < 0.01 &&    // y-dir 1 cm
-				abs(cx.ref_poses[side][2] - x[2]) < 0.01 &&    // z-dir 1 cm 
+			if (abs(cx.ref_poses[side][0] - x[0]) < 0.03 &&    // x-dir 1 cm
+				abs(cx.ref_poses[side][1] - x[1]) < 0.03 &&    // y-dir 1 cm
+				abs(cx.ref_poses[side][2] - x[2]) < 0.03 &&    // z-dir 1 cm 
 				abs(cx.ref_poses[side][3] - x[3]) < 0.3  &&    // roll  0.3 rad
 				abs(cx.ref_poses[side][4] - x[4]) < 0.3  &&    // pitch 0.3 rad
 				abs(cx.ref_poses[side][5] - x[5]) < 0.3) {     // yaw   0.3 rad
@@ -1144,10 +1148,12 @@ void init() {
 	Trel_pri_to_off = wss[primary_hand]->Tref.inverse() * wss[off_hand]->Tref;
 
 	// set up nullspace stuff
-	nullspace_q_refs[Krang::LEFT] = (Krang::Vector7d()   << 0, -1.0, 0, -0.5, 0, -0.8, 0).finished();
-	nullspace_q_refs[Krang::RIGHT] = (Krang::Vector7d()  << 0,  1.0, 0,  0.5, 0,  0.8, 0).finished();
-	nullspace_q_masks[Krang::LEFT] = (Krang::Vector7d()  << 0,    0, 0,    1, 0,    0, 0).finished();
-	nullspace_q_masks[Krang::RIGHT] = (Krang::Vector7d() << 0,    0, 0,    1, 0,    0, 0).finished();
+	//nullspace_q_refs[Krang::LEFT] = (Krang::Vector7d()   << 0, -1.0, 0, -0.5, 0, -0.8, 0).finished();
+	nullspace_q_refs[Krang::LEFT] = (Krang::Vector7d()   << 0.88, -1.0, 0, -0.5, 0, -0.8, 0).finished();
+	nullspace_q_refs[Krang::RIGHT] = (Krang::Vector7d()  << -0.88,  1.0, 0,  0.5, 0,  0.8, 0).finished();
+	//nullspace_q_masks[Krang::LEFT] = (Krang::Vector7d()  << 0,    0, 0,    1, 0,    0, 0).finished();
+	nullspace_q_masks[Krang::LEFT] = (Krang::Vector7d()  << 1, 0, 0, 1, 0, 0, 0).finished();
+	nullspace_q_masks[Krang::RIGHT] = (Krang::Vector7d() << 1, 0, 0, 1, 0, 0, 0).finished();
 
 	// Create a thread to wait for user input
 	pthread_t kbhitThread;
