@@ -180,8 +180,8 @@ const double kbd_rot_incr = 0.1;
 
 bool error_integration = false;
 Eigen::Vector3d int_err;			//< accumulator for integral error (x,y,theta in robot frame)
-double u_hard_max = 18.0;			//< never write values higher than this
-double u_spin_max = 18.0; 			//< thershold on spin contribution
+double u_hard_max = 22.0;			//< never write values higher than this
+double u_spin_max = 20.0; 			//< thershold on spin contribution
 double u_lin_max = 15.0; 			//< threshold on linear contribution
 
 /* ******************************************************************************************** */
@@ -370,12 +370,15 @@ Vector6d computeError(const Vector6d& state, const Vector6d& refstate, bool rota
 		double refpos_angle = atan2(err[1], err[0]); 					//< angle towards current waypoint
 		double refpos_dist = err.segment(0,2).norm(); 					//< linear distance to current waypoint
 		double refpos_angle_err = unwrap(refpos_angle - state[2]); 		//< heading error 
-		double ref_xerr_robot = (rot.inverse() * err.segment(0,2))[0]; 	//< small negative x error in robot frame
+		double ref_xerr_robot = (rot.inverse() * err.segment(0,2))[0]; 	//< x error in robot frame
 
-		if (refpos_dist > waypt_lin_thresh * 3				//< if we're far from the waypoint
-			&& ref_xerr_robot > -waypt_lin_thresh * 3) 		//< ignores minor overshooting
-			err[2] = refpos_angle_err; 						//< only worry about turning towards it
-		
+		if (refpos_dist > waypt_lin_thresh * 3	&&		//< if we're far from the waypoint
+		   (ref_xerr_robot > 0 || ref_xerr_robot < -waypt_lin_thresh * 3)) //< but not just a little ahead of it (ignores minor overshooting)
+			err[2] = refpos_angle_err; 						//< then only worry about turning towards it
+		printw("refpos_dist: %lf (thresh: %lf)\n", refpos_dist, waypt_lin_thresh*3);
+		printw("ref_xerr_robot: %lf(thresh: %lf)\n", ref_xerr_robot, -waypt_lin_thresh*3);
+		printw("refpos_angle_err: %lf\n", refpos_angle_err);
+		printw("steering cond test: %d\n", refpos_dist > waypt_lin_thresh * 3 && ref_xerr_robot > -waypt_lin_thresh * 3);
 		if (err[2] > waypt_rot_thresh * 3)
 			err.segment(0,2).setZero(); 					//< zero all translation controls if we're rotating
 	}
@@ -527,6 +530,7 @@ void print_key_bindings(){
 	 "'o'    : Toggle error integration                                         \n\r"
 	 "'v'    : Toggle vision updates (polling base pose)                        \n\r"
 	 "'g'    : Re-read gains from file (gains-PID.txt)                          \n\r"
+	 "'s'    : Use steering-method in controller (turns towards reference)      \n\r"
 	 "'1'    : Set Mode: OFF                                                    \n\r"
 	 "'2'    : Set Mode: KEYBOARD                                               \n\r"
 	 "'3'    : Set Mode: TRAJECTORY                                             \n\r"
@@ -639,6 +643,10 @@ void *kbhit(void *) {
 					clear(); // clears extra space from display
 				break;
 			}
+			case 's': {
+				use_steering_method = !use_steering_method;
+				break;
+			}
 			default:
 				break;
 		}
@@ -660,6 +668,9 @@ void print_status(const Krang::Hardware* hw, const cx_t& cx)
 		case 2: printw("KEYBOARD\n"); break;
 		case 3: printw("TRAJECTORY-FOLLOWING\n"); break;
 	}
+
+	printw("Steering method:\t\t");
+	printw(use_steering_method ? "ON\n" : "OFF\n");
 
 	printw("Allow waypoint advance:\t\t");
 	printw(advance_waypts ? "ON\n" : "OFF\n");
@@ -786,7 +797,7 @@ void run () {
 
 						if(trajIdx == trajectory.size() - 1) {
 							// mode = 1;
-							error_integration = false;
+							// error_integration = false;
 						}
 				}
 				}
