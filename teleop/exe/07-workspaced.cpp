@@ -348,8 +348,8 @@ const double NULLSPACE_GAIN = 0.5; //0.1;
 const double DAMPING_GAIN = 0.005;
 const double SPACENAV_ORIENTATION_GAIN = 0.50; // maximum 50 cm per second from spacenav
 const double SPACENAV_TRANSLATION_GAIN = 0.25; // maximum .25 radians per second from spacenav
-const double COMPLIANCE_TRANSLATION_GAIN = 0.003; // 0.002;
-const double COMPLIANCE_ORIENTATION_GAIN = 0.03; // 0.10;
+const double COMPLIANCE_TRANSLATION_GAIN = 0.001; // 0.002;
+const double COMPLIANCE_ORIENTATION_GAIN = 0.01; // 0.10;
 const double HAND_OVER_HAND_SPEED = 0.05; // 3 cm per second when going hand-over-hand
 
 // various rate limits - be nice to other programs
@@ -1027,9 +1027,9 @@ void run() {
 			if (abs(cx.ref_poses[side][0] - x[0]) < 0.03 &&    // x-dir 1 cm
 				abs(cx.ref_poses[side][1] - x[1]) < 0.03 &&    // y-dir 1 cm
 				abs(cx.ref_poses[side][2] - x[2]) < 0.03 &&    // z-dir 1 cm 
-				abs(cx.ref_poses[side][3] - x[3]) < 0.3  &&    // roll  0.3 rad
-				abs(cx.ref_poses[side][4] - x[4]) < 0.3  &&    // pitch 0.3 rad
-				abs(cx.ref_poses[side][5] - x[5]) < 0.3) {     // yaw   0.3 rad
+				abs(cx.ref_poses[side][3] - x[3]) < 0.15  &&    // roll  0.3 rad
+				abs(cx.ref_poses[side][4] - x[4]) < 0.15  &&    // pitch 0.3 rad
+				abs(cx.ref_poses[side][5] - x[5]) < 0.15) {     // yaw   0.3 rad
 			   
 				if (! cx.refTraj[side].empty()){
 					cx.numWayPtsReached++;
