@@ -196,6 +196,7 @@ vector <Vector6d> trajectory;		//< the goal trajectory
 const size_t max_traj_msg_len = 170;
 size_t trajIdx = 0;
 
+/// for debugging
 deque<Vector6d> state_hist;		//< state history for filtering
 const int state_hist_len = 10;	//< max number of states in history
 deque<Vector6d> err_hist;		//< error history for integral control
@@ -215,6 +216,8 @@ pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;	//< mutex to update gains
 double unwrap(double angle) 
 {
 	return fmod(angle + M_PI, 2 * M_PI) - M_PI;
+	// return ((angle + M_PI) % (2 * M_PI)) - M_PI;
+	// return angle - 2 * M_PI * floor( angle / (2 * M_PI) );
 }
 
 /// Read file for gains
@@ -344,10 +347,12 @@ void updateState(Eigen::Vector4d& wheel_state, Eigen::Vector4d& last_wheel_state
 	state[0] += dlin * cos(last_theta);				//< x
 	state[1] += dlin * sin(last_theta);				//< y
 	state[2] += dtheta;								//< theta
+	state[2] = unwrap(state[2]);
 	state[3] = wheel_state[2] * cos(last_theta); 	//< xdot
 	state[4] = wheel_state[2] * sin(last_theta); 	//< ydot
 	state[5] = wheel_state[3];						//< thetadot
 
+	/// for debugging
 	state_hist.push_front(state);
 	if (state_hist.size() > state_hist_len)
 		state_hist.pop_back();
@@ -905,6 +910,15 @@ void destroy()
 /* ******************************************************************************************** */
 /// The main thread
 int main(int argc, char* argv[]) {
+	// int n=100;
+	// double start=-10;
+	// double end=10;
+	// for (int i=0; i<n; i++) {
+	// 	double angle = start+i*(end-start)/n;
+	// 	cout << i << ": angle=" << angle << ", unwraped: " << unwrap(angle) << endl;
+	// }
+	// return 0;
+
 	init_wd = getcwd_str();
 
 	// parse command line arguments
