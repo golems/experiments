@@ -1,3 +1,30 @@
+/*
+ * Copyright (c) 2011, Georgia Tech Research Corporation
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without modification, are permitted
+ * provided that the following conditions are met:
+ *
+ *     * Redistributions of source code must retain the above copyright notice, this list of
+ *       conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright notice, this list of
+ *       conditions and the following disclaimer in the documentation and/or other materials
+ *       provided with the distribution.
+ *     * Neither the name of the Georgia Tech Research Corporation nor the names of its
+ *       contributors may be used to endorse or promote products derived from this software without
+ *       specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY GEORGIA TECH RESEARCH CORPORATION ''AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ * FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL GEORGIA TECH RESEARCH
+ * CORPORATION BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+ * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ */
+
 /**
  * @file basenavd.cpp
  * @author Jon Scholz, Can Erdogan
@@ -76,6 +103,7 @@ typedef struct {
 	const char *opt_base_state_chan_name;
 	const char *opt_base_pose_chan_name;
 	const char *opt_base_waypts_chan_name;
+	const char *opt_base_cmd_chan_name;
 	int opt_verbosity;
 } cx_t;
 
@@ -146,6 +174,9 @@ static int parse_opt( int key, char *arg, struct argp_state *state) {
 	case 'w':
 		cx->opt_base_waypts_chan_name = strdup( arg );
 		break;
+	case 'c':
+		cx->opt_base_cmd_chan_name = strdup( arg );
+		break;
 	case 0:
 		break;
 	}
@@ -156,7 +187,7 @@ static int parse_opt( int key, char *arg, struct argp_state *state) {
 }
 
 /* ******************************************************************************************** */
-ach_channel_t state_chan, vision_chan, base_waypts_chan;
+ach_channel_t state_chan, vision_chan, base_waypts_chan, cmd_chan;
 cx_t cx;							//< the arg parse struct
 Krang::Hardware* krang;				//< Interface for the motor and sensors on the hardware
 simulation::World* world;			//< the world representation in dart
@@ -171,6 +202,7 @@ bool advance_waypts = true; 		//< if true, allow trajectory following
 bool wait_for_global_vision_msg_at_startup = false;
 bool use_steering_method = false; 	//< if true, use a steering controller
 bool vision_updates = false;		//< if true, upate base pose from vision channel
+bool odom_updates = true;			//< if true, upate base pose from wheel odometry
 bool show_key_bindings = true;		//< if true, show key bindings in ncurses display
 
 const double waypt_lin_thresh = 0.03; //0.015; 		// (meters) for advancing waypoints in traj.
@@ -214,10 +246,9 @@ pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;	//< mutex to update gains
  * Returns the angle expressed in radians between -Pi and Pi
  */ 
 double unwrap(double angle) 
-{
-	return fmod(angle + M_PI, 2 * M_PI) - M_PI;
-	// return ((angle + M_PI) % (2 * M_PI)) - M_PI;
-	// return angle - 2 * M_PI * floor( angle / (2 * M_PI) );
+{	
+	int osign = angle >= 0 ? 1 : -1;
+	return osign * (fmod(abs(angle) + M_PI, 2 * M_PI) - M_PI);
 }
 
 /// Read file for gains
@@ -248,7 +279,7 @@ void setReference(Vector6d& newRef) {
 
 /*
  * Updates the pose params of the robots state from vision messages
-
+ * 
  * @param block: if true, wait for a message to come in before returning
  * @param reset_reference: if true, set the reference to the new state if 
  * 		a message is received.  This is a safety for keeping the robot from
@@ -281,6 +312,83 @@ void poll_vision_channel(bool block, bool reset_reference=true)
 	// never change the state without resetting the reference!(?)
 	if (reset_reference)
 		setReference(state);
+
+	// debugging:
+	// static bool init = false;
+	// if (!init) {
+	// 	state.head(3) = M.row(0).head(3); // M.topLeftCorner(1,3);
+	// 	setReference(state);
+	// 	init = true;
+	// }
+	// fprintf(log_file, "%2.4lf, %2.4lf, %2.4lf, %2.4lf, %2.4lf, %2.4lf \n", 
+	// 	state(0), state(1), state(2), M(0,0), M(0,1), M(0,2));
+	// fflush(log_file);
+}
+
+/* Reads the command channel and takes action. 
+ * chan :[IN] the channel to read the command from
+ * 
+ * Command messages are 1x2 trajectory messages that get rounded
+ * to ints, and are parsed as (cmd-code, cmd-value) tuples.
+ * 
+ * Currently supported commands:
+ * code 0: toggle odometry updating
+ * 		val=0: off, val=1: on
+ * 
+ * code 1: toggle vision updating
+ * 		val=0: off, val=1: on
+ * 
+ * code 2: single vision update
+ * 		[value N/A]
+ */
+void poll_cmd_channel(){
+
+	size_t frame_size = 0;  
+	char buf[2 * sizeof(int) + 2 * sizeof(double)];
+
+	enum ach_status r = ach_get(&cmd_chan, buf, sizeof(buf), &frame_size, NULL, ACH_O_LAST);
+	if(!(r == ACH_OK || r == ACH_MISSED_FRAME)) return;
+
+	// printw("\n%d:I am inside %s()\n", __LINE__, __func__);
+
+	Eigen::MatrixXd cmdM = deserialize_to_Matrix(buf);
+	if(cmdM.size() != 2)
+		printw("Error at Line %d: Invalid message on command code\n\r", __LINE__);
+
+	// printw("\n%d:I am inside %s()\n", __LINE__, __func__);
+
+	int cmdCode = int(cmdM(0) + 0.5);   // round the value
+	int val = int(cmdM(1) + 0.5);       // round the value
+
+	switch(cmdCode){ 
+		case 0: { // toggle odometry updating
+			if (val == 0)
+				odom_updates = false;
+			else if (val == 1)
+				odom_updates = true;
+			else
+				printw("Error at Line %d: Invalid message on command code\n\r", __LINE__);
+			break;
+		}
+		case 1: { // toggle vision updating
+			if (val == 0)
+				vision_updates = false;
+			else if (val == 1)
+				vision_updates = true;
+			else
+				printw("Error at Line %d: Invalid message on command code\n\r", __LINE__);
+			break;
+		}
+		case 2:	{ // single vision update
+			poll_vision_channel(false, false);
+			break;
+		}
+		default: 
+			break;
+	}
+
+	printw("\nReceived cmd. cmd = %d, val = %d\n", cmdCode, val);
+	return;
 }
 
 /* ******************************************************************************************** */
@@ -394,7 +502,9 @@ Vector6d computeError(const Vector6d& state, const Vector6d& refstate, bool rota
 		err.segment(3,2) = rot.inverse() * err.segment(3,2); //< rotate velocity error to robot frame	
 	}
 
-	// fprintf(log_file, "%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t \n", 
+	// fprintf(log_file, "%2.4lf, %2.4lf, %2.4lf, %2.4lf, %2.4lf, %2.4lf, ", 
+	// 	state(0), state(1), state(2), state(3), state(4), state(5));
+	// fprintf(log_file, "%2.4lf, %2.4lf, %2.4lf, %2.4lf, %2.4lf, %2.4lf,  \n", 
 	// 	err(0), err(1), err(2), err(3), err(4), err(5));
 	// fflush(log_file);
 	return err;
@@ -532,8 +642,9 @@ void print_key_bindings(){
 	 "' '    : Start/Stop                                                       \n\r"
 	 "'d'    : Toggle debug output                                              \n\r"
 	 "'a'    : Toggle waypoint advance mode                                     \n\r"
-	 "'o'    : Toggle error integration                                         \n\r"
+	 "'u'    : Toggle error integration                                         \n\r"
 	 "'v'    : Toggle vision updates (polling base pose)                        \n\r"
+	 "'o'    : Toggle odometry                                                  \n\r"
 	 "'g'    : Re-read gains from file (gains-PID.txt)                          \n\r"
 	 "'s'    : Use steering-method in controller (turns towards reference)      \n\r"
 	 "'1'    : Set Mode: OFF                                                    \n\r"
@@ -596,6 +707,10 @@ void *kbhit(void *) {
 					poll_vision_channel(true, true);
 				break;
 			}
+			case 'o': {
+				odom_updates = !odom_updates;
+				break;
+			}
 			case ' ': {
 				start = !start;
 				break;
@@ -638,7 +753,7 @@ void *kbhit(void *) {
 				int_err.setZero();
 				break;
 			}
-			case 'o': {
+			case 'u': {
 				error_integration = !error_integration;
 				break;
 			}
@@ -665,7 +780,7 @@ void print_status(const Krang::Hardware* hw, const cx_t& cx)
 	printw("\t\t[STATUS]\n");
 	
 	printw("Sending motor commands:\t\t");
-    printw(start ? "ON\n" : "OFF\n");
+	printw(start ? "ON\n" : "OFF\n");
 	
 	printw("Control mode:\t\t\t");
 	switch (mode) {
@@ -685,6 +800,9 @@ void print_status(const Krang::Hardware* hw, const cx_t& cx)
 
 	printw("Vision updates:\t\t\t");
 	printw(vision_updates ? "ON\n" : "OFF\n");
+
+	printw("Odometry updates:\t\t");
+	printw(odom_updates ? "ON\n" : "OFF\n");
 
 	printw("Debug output:\t\t\t");
 	printw(dbg ? "ON\n" : "OFF\n");
@@ -744,14 +862,19 @@ void run () {
 		double dt = (double)aa_tm_timespec2sec(aa_tm_sub(t_now, t_prev));	
 		t_prev = t_now;
 
+		// poll cmd_chan for updates 
+		poll_cmd_channel();
+
 		// poll krang_vision for updates to state before odometry updates
 		if (vision_updates) 
 			poll_vision_channel(false, false); //mode == MODE_OFF || mode == MODE_KBD); // don't reset reference if executing traj
 
 		// Get the state and update odometry
-		last_wheel_state = wheel_state;
-		updateWheelsState(wheel_state, dt); 
-		updateState(wheel_state, last_wheel_state, state);
+		if (odom_updates) {
+			last_wheel_state = wheel_state;
+			updateWheelsState(wheel_state, dt); 
+			updateState(wheel_state, last_wheel_state, state);	
+		}
 
 		// Send the state
 		if(true) {
@@ -826,6 +949,7 @@ void parse_args(int argc, char* argv[])
 	cx.opt_base_state_chan_name = "krang_base_state";
 	cx.opt_base_pose_chan_name = "vision_krang_pose";
 	cx.opt_base_waypts_chan_name = "krang_base_waypts";
+	cx.opt_base_cmd_chan_name = "cmd_basenavd";
 	cx.d_opts.ident = "basenavd";
 	cx.d_opts.sched_rt = SOMATIC_D_SCHED_UI;
 	cx.opt_verbosity = 0;
@@ -841,6 +965,7 @@ void parse_args(int argc, char* argv[])
 		fprintf(stderr, "krang base state channel:      %s\n", cx.opt_base_state_chan_name);
 		fprintf(stderr, "krang base pose channel:      %s\n", cx.opt_base_pose_chan_name);
 		fprintf(stderr, "krang base waypoints channel:      %s\n", cx.opt_base_waypts_chan_name);
+		fprintf(stderr, "basenavd command channel:      %s\n", cx.opt_base_cmd_chan_name);
 		fprintf(stderr,"-------\n");
    }
 }
@@ -873,6 +998,11 @@ void init()
 	r = ach_open(&base_waypts_chan, cx.opt_base_waypts_chan_name, NULL );
 	assert(ACH_OK == r);
 	r = ach_flush(&base_waypts_chan);
+
+	// Open channel to receive basenavd commands
+	r = ach_open(&cmd_chan, cx.opt_base_cmd_chan_name, NULL );
+	assert(ACH_OK == r);
+	r = ach_flush(&cmd_chan);
 
 	// Receive the current state from vision
 	if (wait_for_global_vision_msg_at_startup) {
