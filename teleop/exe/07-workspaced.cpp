@@ -153,7 +153,7 @@ const char* compliance_mode_to_string(int mode){
 #define L_GRIP   0     // left gripper
 #define R_GRIP   1     // right gripper
 
-/* Prints a row or column vector. */
+/* Prints a Eigen row or column vector. */
 #define PRINT_VECTOR(X)                                   \
 			printw("(%d x %d) ", (X).rows(), (X).cols()); \
 			printw("[");                                  \
@@ -163,6 +163,14 @@ const char* compliance_mode_to_string(int mode){
 			}                                             \
 			printw("]\n\r");
 
+/* Prints a array of floats */
+#define PRINT_ARRAY_FLOAT(X, N)                           \
+			printw("[");                                  \
+			for(int i = 0; i < N; i++){                   \
+				printw(((X)[i]) >= 0 ? "  " : " ");       \
+				printw("%.4f", (X)[i]);                   \
+			}                                             \
+			printw("]\n\r");
 
 #define PRINT_MAT(M)                                     \
 			printw("[");                                 \
@@ -212,6 +220,9 @@ typedef struct {
 	int numWayPtsReached;
 
 	Eigen::MatrixXd T_off_to_pri;
+
+	// max currents till now
+	float maxCurrent[2][7];
 
 } cx_t;
 
@@ -709,6 +720,15 @@ void print_robot_state(const Krang::Hardware* hw,
 	pose = hw->robot->getPose();
 	PRINT_VECTOR(pose)
 
+	printw("Current (Amps) [Left]: ");
+	PRINT_ARRAY_FLOAT(hw->arms[Krang::LEFT]->cur, 7)
+	printw("Max (Amps) [Left]: ");
+	PRINT_ARRAY_FLOAT(cx.maxCurrent[L_GRIP], 7)
+	printw("Current (Amps) [Right]: ");
+	PRINT_ARRAY_FLOAT(hw->arms[Krang::RIGHT]->cur, 7)
+	printw("Max (Amps) [Right]: ");
+	PRINT_ARRAY_FLOAT(cx.maxCurrent[R_GRIP], 7)
+
 	printw("\nNum of Waypoints reached: %d\n", cx.numWayPtsReached);
 
 	return;
@@ -936,6 +956,12 @@ void run() {
 			// exit(EXIT_FAILURE);
 		}
 
+		// update max currents till now
+		for (int i=0; i<7; i++){
+			cx.maxCurrent[L_GRIP][i] = fmax(cx.maxCurrent[L_GRIP][i], abs(hw->arms[Krang::LEFT]->cur[i]));
+			cx.maxCurrent[R_GRIP][i] = fmax(cx.maxCurrent[R_GRIP][i], abs(hw->arms[Krang::RIGHT]->cur[i]));
+		}
+
 		// ========================================================================================
 		// Perform workspace for each arm, changing the input for right arm based on synch mode
 
@@ -1004,11 +1030,13 @@ void run() {
 			Eigen::VectorXd qdot_apply = qdot_avoid + qdot_jacobian;
 
 			// and apply that to the arm
+			//qdot_apply << 0,0,0,0,0,0,0;
+			//somatic_motor_reset(&daemon_cx, hw->arms[sde]);
+			//usleep(1e6);
 			if(cx.send_motor_cmds)
 				somatic_motor_setvel(&daemon_cx, hw->arms[sde], qdot_apply.data(), 7);
 
-					// Check for messages on the waypoint channels
-		   
+			// Check for messages on the waypoint channels
 			bool r;
 			r = poll_waypnts_channel(waypts_channel[side], cx.refTraj[side]);
 			if (r == true){ // update ref pose
@@ -1152,8 +1180,8 @@ void init() {
 	nullspace_q_refs[Krang::LEFT] = (Krang::Vector7d()   << 0.88, -1.0, 0, -0.5, 0, -0.8, 0).finished();
 	nullspace_q_refs[Krang::RIGHT] = (Krang::Vector7d()  << -0.88,  1.0, 0,  0.5, 0,  0.8, 0).finished();
 	//nullspace_q_masks[Krang::LEFT] = (Krang::Vector7d()  << 0,    0, 0,    1, 0,    0, 0).finished();
-	nullspace_q_masks[Krang::LEFT] = (Krang::Vector7d()  << 1, 0, 0, 1, 0, 0, 0).finished();
-	nullspace_q_masks[Krang::RIGHT] = (Krang::Vector7d() << 1, 0, 0, 1, 0, 0, 0).finished();
+	nullspace_q_masks[Krang::LEFT] = (Krang::Vector7d()  << 1, 0, 0, 0, 0, 0, 0).finished();
+	nullspace_q_masks[Krang::RIGHT] = (Krang::Vector7d() << 1, 0, 0, 0, 0, 0, 0).finished();
 
 	// Create a thread to wait for user input
 	pthread_t kbhitThread;
@@ -1165,6 +1193,8 @@ void init() {
     cx.input_mode = INPUT_MODE_POSE;
     cx.compliance_mode = COMPLIANCE_ON;//COMPLIANCE_ON;
 	cx.show_key_bindings = true;
+
+	for(int i=0; i<7; i++) cx.maxCurrent[L_GRIP][i] = cx.maxCurrent[R_GRIP][i] = 0.0;
 
 	// Send message on event channel for 'daemon initialized and running'
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
