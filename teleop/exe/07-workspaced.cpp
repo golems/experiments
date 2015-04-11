@@ -190,8 +190,10 @@ typedef struct {
 	// set by command line arguments
 	const char *lgrip_waypnts_channel_name;	// left gripper waypoints channel name
 	const char *rgrip_waypnts_channel_name;	// right gripper waypoints channel name
-	const char *lgrip_state_channel_name;
-	const char *rgrip_state_channel_name;
+	const char *lgrip_pose_channel_name;
+	const char *rgrip_pose_channel_name;
+	const char *lpincher_state_channel_name;
+	const char *rpincher_state_channel_name;
 	int opt_verbosity;
 
 	// channels to publish
@@ -236,7 +238,7 @@ ach_channel_t waypts_channel[2];
 
 // TODO: move the channels into the context struct
 // channels for publishing state
-ach_channel_t lgrip_state_channel, rgrip_state_channel; 
+ach_channel_t lgrip_pose_channel, rgrip_pose_channel, lpincher_state_channel, rpincher_state_channel; 
 
 // options
 static struct argp_option options[] = {
@@ -262,18 +264,18 @@ static struct argp_option options[] = {
 		.doc = "ach channel name for reading right gripper waypoints in world frame"
 	},
 	{
-		.name = "lgrip-state",
+		.name = "lgrip-pose",
 		.key = 'a',
 		.arg = "CHANNEL-NAME",
 		.flags = 0,
-		.doc = "ach channel name to publish left gripper state in world frame"
+		.doc = "ach channel name to publish left gripper pose in world frame"
 	},
 	{
-		.name = "rgrip-state",
+		.name = "rgrip-pose",
 		.key = 'b',
 		.arg = "CHANNEL-NAME",
 		.flags = 0,
-		.doc = "ach channel name to publish right gripper state in world frame"
+		.doc = "ach channel name to publish right gripper pose in world frame"
 	},
 	{
 		.name = NULL,
@@ -298,10 +300,16 @@ static int parse_opt( int key, char *arg, struct argp_state *state) {
 		cx->rgrip_waypnts_channel_name = strdup(arg);
 		break;
 	case 'a':
-		cx->lgrip_state_channel_name = strdup(arg);
+		cx->lgrip_pose_channel_name = strdup(arg);
 		break;
 	case 'b':
-		cx->rgrip_state_channel_name = strdup(arg);
+		cx->rgrip_pose_channel_name = strdup(arg);
+		break;
+	case 'c':
+		cx->lpincher_state_channel_name = strdup(arg);
+		break;
+	case 'd':
+		cx->rpincher_state_channel_name = strdup(arg);
 		break;
 	case 0:
 		break;
@@ -333,8 +341,10 @@ void parse_args(int argc, char* argv[])
 	// default options
 	cx.lgrip_waypnts_channel_name = "krang_lgrip_waypts";
 	cx.rgrip_waypnts_channel_name = "krang_rgrip_waypts";
-	cx.lgrip_state_channel_name = "krang_lgrip_pose";
-	cx.rgrip_state_channel_name = "krang_rgrip_pose";
+	cx.lgrip_pose_channel_name = "krang_lgrip_pose";
+	cx.rgrip_pose_channel_name = "krang_rgrip_pose";
+	cx.lpincher_state_channel_name = "krang_lpincher_state";
+	cx.rpincher_state_channel_name = "krang_rpincher_state";
 	cx.d_opts.ident = "workspaced";
 	cx.d_opts.sched_rt = SOMATIC_D_SCHED_UI;
 	cx.opt_verbosity = 0;
@@ -463,6 +473,16 @@ void print_key_bindings(){
  * Returns the 6-vector pose of gripper in World frame */
 Eigen::VectorXd getCurPose(kinematics::BodyNode *gripperBodyNode){
 	return Krang::transformToEuler(gripperBodyNode->getWorldTransform(), math::XYZ);
+}
+
+/* Gets current state of the pincher (position and velocity)
+ * @param gripper : The pointer to the pincher motor message
+ * Returns the 2-vector [pos, vel] containing the pincher state */
+Eigen::VectorXd getCurPincherState(somatic_motor_t* pincher)
+{
+	Eigen::VectorXd gripper_state(2);
+	gripper_state << pincher->pos[0], pincher->vel[0];
+	return gripper_state;
 }
 
 /* Set the input mode (pose or velocity). Uses global variable cx.
@@ -664,6 +684,7 @@ void print_robot_state(const Krang::Hardware* hw,
     printw("----------------------------------\n");
 
 	Eigen::VectorXd pose = Eigen::VectorXd::Zero(6);
+	Eigen::VectorXd pincher_state = Eigen::VectorXd::Zero(2);
 
 	printw("ROBOT STATE\n\r");
 
@@ -693,6 +714,10 @@ void print_robot_state(const Krang::Hardware* hw,
 	pose = hw->robot->getConfig(*wss[Krang::LEFT]->arm_ids);
 	PRINT_VECTOR(pose)
 
+	printw(" Pincher state [pos, vel]:\n\r    ");
+	pincher_state = getCurPincherState(hw->grippers[Krang::LEFT]);
+	PRINT_VECTOR(pincher_state)
+
 	printw("\n[Right Gripper]\n");
 
 	printw(" Current Pose (in Robot Frame):\n     ");
@@ -708,6 +733,10 @@ void print_robot_state(const Krang::Hardware* hw,
 	printw(" Joint Angles:\n\r    ");
 	pose = hw->robot->getConfig(*wss[Krang::RIGHT]->arm_ids);
 	PRINT_VECTOR(pose)
+
+	printw(" Pincher state [pos, vel]:\n\r    ");
+	pincher_state = getCurPincherState(hw->grippers[Krang::RIGHT]);
+	PRINT_VECTOR(pincher_state)
 
 	printw("\n");
 
@@ -751,17 +780,24 @@ void publish_to_channels(const Krang::Hardware* hw,
 					   const Krang::WorkspaceControl *l_ws, 
 					   const Krang::WorkspaceControl *r_ws, 
 					   cx_t& cx){
-	Eigen::VectorXd pose;;
+	Eigen::VectorXd pose;
+	Eigen::VectorXd pincher_state;
 
 	pose = getCurPose(l_ws->endEffector);
-	publish_vector_to_channel(lgrip_state_channel, pose);
+	publish_vector_to_channel(lgrip_pose_channel, pose);
 
 	pose = getCurPose(r_ws->endEffector);
-	publish_vector_to_channel(rgrip_state_channel, pose);
+	publish_vector_to_channel(rgrip_pose_channel, pose);
+
+	pincher_state = getCurPincherState(hw->grippers[Krang::LEFT]);
+	publish_vector_to_channel(lpincher_state_channel, pincher_state);
+
+	pincher_state = getCurPincherState(hw->grippers[Krang::RIGHT]);
+	publish_vector_to_channel(rpincher_state_channel, pincher_state);
 
 	pose = hw->robot->getPose();
 	// remove first 6 number (pose of root node)
-	pose = pose.tail(pose.size() - 6);  
+	// pose = pose.tail(pose.size() - 6);  
 	publish_vector_to_channel(cx.channel_body_state, pose);
 
 	pose = hw->fts[Krang::LEFT]->lastExternal;
@@ -1086,8 +1122,6 @@ void run() {
 		refresh();  // refresh the ncurses screen
 
 		// publish the left gripper and right gripper states on the ACH channels.
-		//publish_gripper_state(lgrip_state_channel, wss[Krang::LEFT]->endEffector);
-		//publish_gripper_state(rgrip_state_channel, wss[Krang::RIGHT]->endEffector);
 		publish_to_channels(hw, wss[Krang::LEFT], wss[Krang::RIGHT], cx);
 
 		// And sleep to fill out the loop period so we don't eat the entire CPU
@@ -1141,12 +1175,19 @@ void init() {
 	assert(ACH_OK == ach_open(&cx.channel_cmd, g_default_cmd_chan_name, NULL ));
 	assert(ACH_OK == ach_flush(&cx.channel_cmd));
 
-	// Initialize ACH channels for publishing state of left and right grippers
-	assert(ACH_OK == ach_open(&lgrip_state_channel, cx.lgrip_state_channel_name, NULL));
-	assert(ACH_OK == ach_flush(&lgrip_state_channel));
+	// Initialize ACH channels for publishing pose of left and right grippers
+	assert(ACH_OK == ach_open(&lgrip_pose_channel, cx.lgrip_pose_channel_name, NULL));
+	assert(ACH_OK == ach_flush(&lgrip_pose_channel));
 
-	assert(ACH_OK == ach_open(&rgrip_state_channel, cx.rgrip_state_channel_name, NULL));
-	assert(ACH_OK == ach_flush(&rgrip_state_channel));
+	assert(ACH_OK == ach_open(&rgrip_pose_channel, cx.rgrip_pose_channel_name, NULL));
+	assert(ACH_OK == ach_flush(&rgrip_pose_channel));
+
+	// Initialize ACH channels for publishing state of left and right grippers
+	assert(ACH_OK == ach_open(&lpincher_state_channel, cx.lpincher_state_channel_name, NULL));
+	assert(ACH_OK == ach_flush(&lpincher_state_channel));
+
+	assert(ACH_OK == ach_open(&rpincher_state_channel, cx.rpincher_state_channel_name, NULL));
+	assert(ACH_OK == ach_flush(&rpincher_state_channel));
 
 	// Initialize ACH channels for publishing force/torque values
 	assert(ACH_OK == ach_open(&cx.channel_ft[L_GRIP], "krang_lgrip_ft", NULL));
