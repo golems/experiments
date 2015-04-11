@@ -632,8 +632,9 @@ void *kbhit(void *) {
         case '4': 
             openGripper(hw->grippers[Krang::RIGHT]);
             break;
-        case '9':
-
+        case '9': // debugging functionality
+        	cx.send_motor_cmds = false;
+			somatic_motor_halt(&daemon_cx, hw->arms[Krang::LEFT]);
         	break;
         default:
             //cout<<__LINE__<<": Value of ch is :" << (int)ch <<std::endl<<'\r';
