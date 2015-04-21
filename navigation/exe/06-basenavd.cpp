@@ -198,7 +198,8 @@ bool start = false; 				//< send motor velocities
 bool dbg = false;					//< print debug output
 bool update_gains = false; 			//< if true, read new gains from the text file
 size_t mode = 1;					//< 0 sitting, 1 keyboard commands, 2 trajectory following
-bool advance_waypts = true; 		//< if true, allow trajectory following
+bool err_advance_waypts = true; 		//< if true, allow trajectory advance on waypoint error
+bool time_advance_waypts = true; 		//< if true, allow trajectory advance on timeouts
 bool wait_for_global_vision_msg_at_startup = false;
 bool use_steering_method = false; 	//< if true, use a steering controller
 bool vision_updates = false;		//< if true, upate base pose from vision channel
@@ -225,6 +226,9 @@ Eigen::Vector4d wheel_state;		//< wheel pos and vels in radians (lphi, lphi., rp
 Eigen::Vector4d last_wheel_state; 	//< last wheel state used to update the state 
 Eigen::VectorXd K = Eigen::VectorXd::Zero(8);	//< the gains for x and th of the state. y is ignored.
 vector <Vector6d> trajectory;		//< the goal trajectory	
+vector <double> timeouts; 			//< associated list of timeouts (optional)
+struct timespec ref_timestart;		//< timespec for trajectory timeout mode
+double ref_timeout; 				//< the timeout for the current reference 
 const size_t max_traj_msg_len = 170;
 size_t trajIdx = 0;
 
@@ -609,17 +613,27 @@ void updateTrajectory () {
 	// Update: now that we're unpacking to Eigen, could plug matrix in for 
 	// traj and create refState (with vels) in run loop, but why bother?
 	trajectory.clear();
+	timeouts.clear();
+	ref_timestart = aa_tm_now();
 	Eigen::MatrixXd poses = deserialize_to_Matrix(buf);
 	for(size_t i = 0; i < poses.rows(); i++) {
 		Vector6d newRefState;
-		//newRefState << poses[i][0], poses[i][1], poses[i][2], 0.0, 0.0, 0.0;
 		newRefState << poses(i,0), poses(i,1), poses(i,2), 0.0, 0.0, 0.0;
 		trajectory.push_back(newRefState);
+
+		// if a 4th element was provided, it's a timestamp
+		if (poses.cols() > 3)
+			timeouts.push_back(poses(i,3));
+		else
+			timeouts.push_back(0.0);
 	}
 	static int tctr = 0;
-	// cout << "updating trajectory from poses" << poses << endl;
-	// if (dbg)
-	// 	printw("updating trajectory from poses:\n"); PRINT_MAT(poses)
+	if (dbg) {
+		printw("updating trajectory from poses:\n"); PRINT_MAT(poses)
+		printw("associated timeouts:\n"); 
+		for (int i=0; i<timeouts.size(); i++)
+			printw(" %lf ", timeouts[i]);
+	}
 	tctr++;
 
 	// Update the reference state
@@ -641,7 +655,8 @@ void print_key_bindings(){
 	 "'r'    : Reset Reference                                                  \n\r"
 	 "' '    : Start/Stop                                                       \n\r"
 	 "'d'    : Toggle debug output                                              \n\r"
-	 "'a'    : Toggle waypoint advance mode                                     \n\r"
+	 "'e'    : Toggle error waypoint advance mode                               \n\r"
+	 "'t'    : Toggle timeout waypoint advance mode                             \n\r"
 	 "'u'    : Toggle error integration                                         \n\r"
 	 "'v'    : Toggle vision updates (polling base pose)                        \n\r"
 	 "'o'    : Toggle odometry                                                  \n\r"
@@ -697,8 +712,12 @@ void *kbhit(void *) {
 				dbg = !dbg;
 				break;
 			}
-			case 'a': {
-				advance_waypts = !advance_waypts;
+			case 'e': {
+				err_advance_waypts = !err_advance_waypts;
+				break;
+			}
+			case 't': {
+				time_advance_waypts = !time_advance_waypts;
 				break;
 			}
 			case 'v': {
@@ -792,8 +811,11 @@ void print_status(const Krang::Hardware* hw, const cx_t& cx)
 	printw("Steering method:\t\t");
 	printw(use_steering_method ? "ON\n" : "OFF\n");
 
-	printw("Allow waypoint advance:\t\t");
-	printw(advance_waypts ? "ON\n" : "OFF\n");
+	printw("Waypoint error advance:\t\t");
+	printw(err_advance_waypts ? "ON\n" : "OFF\n");
+
+	printw("Waypoint time advance:\t\t");
+	printw(time_advance_waypts ? "ON\n" : "OFF\n");
 
 	printw("Error integration:\t\t");
 	printw(error_integration ? "ON\n" : "OFF\n");
@@ -906,7 +928,14 @@ void run () {
 				double rot_error = abs(err[2]); 	//< angular distance to current waypoint
 
 				bool reached = ((lin_error < waypt_lin_thresh)) && (rot_error < waypt_rot_thresh);
-				
+
+				bool timeout = false;
+				if (time_advance_waypts) {
+					double ref_dt = (double)aa_tm_timespec2sec(aa_tm_sub(t_now, ref_timestart));	
+					if (ref_dt > ref_timeout)
+						timeout = true;
+				}			
+
 				if(dbg) {
 					printw("lin_error: %f (thresh=%f)\n", lin_error, waypt_lin_thresh); 
 					printw("rot_error: %f (thresh=%f)\n", rot_error, waypt_rot_thresh); 
@@ -914,20 +943,18 @@ void run () {
 						(lin_error < waypt_lin_thresh), (rot_error < waypt_rot_thresh));
 				} 
 
-				if (reached) {
+				if ((reached && err_advance_waypts) || (timeout && time_advance_waypts)) {
 					// reset integral stuff whenever we reach any reference
 					int_err.setZero();
 
-					if (advance_waypts) {
-						// advance the reference index in the trajectory, or stop if done		
-						trajIdx = min((trajIdx + 1), (trajectory.size() - 1));
-						setReference(trajectory[trajIdx]);
+					// advance the reference index in the trajectory, or stop if done		
+					trajIdx = min((trajIdx + 1), (trajectory.size() - 1));
+					setReference(trajectory[trajIdx]);
 
-						if(trajIdx == trajectory.size() - 1) {
-							// mode = 1;
-							// error_integration = false;
-						}
-				}
+					if (time_advance_waypts) {
+						ref_timeout = timeouts[trajIdx];
+						ref_timestart = t_now;	
+					}
 				}
 			}
 		}
