@@ -600,7 +600,8 @@ Vector6d computeTorques(const Vector6d& state, double& ul, double& ur, double& d
 void updateTrajectory () {
 
 	// allocate a buffer big enough for the incoming trjajectory
-	char buf[max_traj_msg_len * 3 * sizeof(double)];
+	// size: max_len x [two ints for shape, 3 doubles for pose, 1 double for timeout]
+	char buf[max_traj_msg_len * (2*sizeof(int) + 3*sizeof(double) + 1*sizeof(double))];
 
 	// Check if a message is received
 	size_t frame_size = 0;
@@ -841,6 +842,7 @@ void print_status(const Krang::Hardware* hw, const cx_t& cx)
 
 	printw("Reference state ([x,y,t,x.,y.,t.] in world frame):\n\t");
 	PRINT_VECTOR(refstate)
+	printw(" (%2.2lf)\n", ref_timeout);
 
 	printw("Wheel State (:\n\t");
 	PRINT_VECTOR(wheel_state)
@@ -927,7 +929,8 @@ void run () {
 				double lin_error = abs(err[0]); 	//< linear distance in controllable direction
 				double rot_error = abs(err[2]); 	//< angular distance to current waypoint
 
-				bool reached = ((lin_error < waypt_lin_thresh)) && (rot_error < waypt_rot_thresh);
+				bool reached = ((lin_error < waypt_lin_thresh)) && 
+								(rot_error < waypt_rot_thresh);
 
 				bool timeout = false;
 				if (time_advance_waypts) {
