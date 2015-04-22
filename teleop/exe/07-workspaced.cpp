@@ -153,6 +153,10 @@ const char* compliance_mode_to_string(int mode){
 #define L_GRIP   0     // left gripper
 #define R_GRIP   1     // right gripper
 
+#define REF_ERR_LIN_THRESH 0.03
+#define REF_ERR_ANG_THRESH 0.15
+
+
 /* Prints a Eigen row or column vector. */
 #define PRINT_VECTOR(X)                                   \
 			printw("(%d x %d) ", (X).rows(), (X).cols()); \
@@ -207,18 +211,23 @@ typedef struct {
 	std::string init_wd; // The initial working directory
 
 	// set by key-bindings when daemon is running
-	int synch_mode;         //< 3-modes off, on-left primary, on-right primary
-	bool send_motor_cmds;   //< boolean on or off
-	int input_mode;         //< vel or pose
-	int imu_mode;           //< int 0=off, 1=on (not bool b/c we might add more options)
-	int compliance_mode;    //< int: COMPLIANCE_OFF, COMPLIANCE_ON
-	bool show_key_bindings; //< if true, show key bindings in ncurses display
+	int synch_mode;         	//< 3-modes off, on-left primary, on-right primary
+	bool send_motor_cmds;   	//< boolean on or off
+	int input_mode;         	//< vel or pose
+	int imu_mode;           	//< int 0=off, 1=on (not bool b/c we might add more options)
+	int compliance_mode;    	//< int: COMPLIANCE_OFF, COMPLIANCE_ON
+	bool err_advance_waypts;	//< bool: on or off
+	bool time_advance_waypts;	//< bool: on or off
+	bool show_key_bindings; 	//< if true, show key bindings in ncurses display
 
-	Eigen::VectorXd ref_poses[2];   // for pose input mode
+	Eigen::VectorXd ref_pose[2];   	// for pose input mode
 	Eigen::VectorXd ref_vel[2];     // for vel input mode
+	double ref_timeout[2];			// timeout for current reference
+	double ref_timestart[2];		//< timespec for trajectory timeout mode
 
 	// store the list of waypoints. First element is the first element.
 	vector<Eigen::VectorXd> refTraj[2];
+	vector<double> refTimeouts[2];
 	int numWayPtsReached;
 
 	Eigen::MatrixXd T_off_to_pri;
@@ -461,6 +470,8 @@ void print_key_bindings(){
 	 "'q'    : Quit                                                             \n"
 	 "'r'    : Reset Motors                                                     \n"
 	 "'p'    : Toggle input mode between VELOCITY and POSE control              \n"
+	 "'e'    : Toggle error waypoint advance mode                               \n"
+	 "'t'    : Toggle timeout waypoint advance mode                             \n"
 	 "'1'    : Close left gripper                                               \n"
 	 "'2'    : Open left gripper                                                \n"
 	 "'3'    : Close right gripper                                              \n"
@@ -499,11 +510,14 @@ void setInputMode(int inputMode){
 		ach_flush(&waypts_channel[L_GRIP]);
 		ach_flush(&waypts_channel[R_GRIP]);
 
-		cx.ref_poses[L_GRIP] = getCurPose(wss[Krang::LEFT]->endEffector);
-		cx.ref_poses[R_GRIP] = getCurPose(wss[Krang::RIGHT]->endEffector);
+		cx.ref_pose[L_GRIP] = getCurPose(wss[Krang::LEFT]->endEffector);
+		cx.ref_pose[R_GRIP] = getCurPose(wss[Krang::RIGHT]->endEffector);
 
 		cx.refTraj[L_GRIP].clear();
 		cx.refTraj[R_GRIP].clear();
+
+		cx.refTimeouts[L_GRIP].clear();
+		cx.refTimeouts[R_GRIP].clear();
 	}
 	return;
 }
@@ -621,6 +635,14 @@ void *kbhit(void *) {
             else
                 hw->setImuOff();
             break;
+		case 'e': {
+			cx.err_advance_waypts = !cx.err_advance_waypts;
+			break;
+		}
+		case 't': {
+			cx.time_advance_waypts = !cx.time_advance_waypts;
+			break;
+		}
         case 'g': // update the gains
             double tGain, oGain;
             readComplianceGains(&tGain, &oGain);
@@ -675,12 +697,19 @@ void print_robot_state(const Krang::Hardware* hw,
         l_ws->compliance_translation_gain,
         l_ws->compliance_orientation_gain);
     printw("CURRENT CONF. (use key-bindings to change)\n\r");
-    printw("   Synch Mode: %s\n\r", synch_mode_to_string(cx.synch_mode));
-    printw("   Send commands to Motor:");
+    printw("\tSync Mode: \t\t\t%s\n\r", synch_mode_to_string(cx.synch_mode));
+    printw("\tSend commands to Motor:\t\t");
     printw(cx.send_motor_cmds ? "ON\n" : "OFF\n");
-    printw("    Input Mode: %s\n\r", input_mode_to_string(cx.input_mode));
-    printw("    Sensor (IMU) update Mode: IMU_%s\n\r", bool_to_stringOnOff(cx.imu_mode));
-    printw("    Compliance Mode: %s\n\r", compliance_mode_to_string(cx.compliance_mode));
+    printw("\tInput Mode: \t\t\t%s\n\r", input_mode_to_string(cx.input_mode));
+    printw("\tSensor (IMU) update Mode: \tIMU_%s\n\r", bool_to_stringOnOff(cx.imu_mode));
+    printw("\tCompliance Mode: \t\t%s\n\r", compliance_mode_to_string(cx.compliance_mode));
+
+    printw("\tWaypoint error advance:\t\t");
+	printw(cx.err_advance_waypts ? "ON\n" : "OFF\n");
+
+	printw("\tWaypoint time advance:\t\t");
+	printw(cx.time_advance_waypts ? "ON\n" : "OFF\n");
+
     printw("----------------------------------\n");
 
 	Eigen::VectorXd pose = Eigen::VectorXd::Zero(6);
@@ -704,8 +733,8 @@ void print_robot_state(const Krang::Hardware* hw,
 	pose = getCurPose(l_ws->endEffector);
 	PRINT_VECTOR(pose)
 
-	printw(" Ref Pose (in Robot Frame):\n     ");
-	PRINT_VECTOR(cx.ref_poses[L_GRIP])
+	printw(" Ref Pose (in Robot Frame) [T.O.: %2.2lf]:\n     ", cx.ref_timeout[L_GRIP]);
+	PRINT_VECTOR(cx.ref_pose[L_GRIP])
 
 	printw(" Ref Vel (in Robot Frame):\n     ");
 	PRINT_VECTOR(cx.ref_vel[L_GRIP])
@@ -724,8 +753,8 @@ void print_robot_state(const Krang::Hardware* hw,
 	pose = getCurPose(r_ws->endEffector);
 	PRINT_VECTOR(pose)
 
-	printw(" Ref Pose (in Robot Frame):\n    ");
-	PRINT_VECTOR(cx.ref_poses[R_GRIP])
+	printw(" Ref Pose (in Robot Frame) [T.O.: %2.2lf]:\n     ", cx.ref_timeout[R_GRIP]);
+	PRINT_VECTOR(cx.ref_pose[R_GRIP])
 
 	printw(" Ref Vel (in Robot Frame):\n\r     ");
 	PRINT_VECTOR(cx.ref_vel[R_GRIP])
@@ -817,28 +846,40 @@ void publish_to_channels(const Krang::Hardware* hw,
  * Returns true if next waypoints read successfully from the channel, false
  *  otherwise. */
 bool poll_waypnts_channel(ach_channel_t& chan, 
-									std::vector<Eigen::VectorXd>& refTraj) { 
+						  std::vector<Eigen::VectorXd>& refTraj,
+						  std::vector<double>& refTimeouts) { 
 	size_t frame_size = 0;
 	
-	char buf[2 * sizeof(int) + MAX_NUM_WAYPTS * 6 * sizeof(double)];
+	// allocate a buffer big enough for the incoming trjajectory
+	// size: max_len x [two ints for shape, 6 doubles for pose, 1 double for timeout]
+	char buf[MAX_NUM_WAYPTS * (2*sizeof(int) + 6*sizeof(double) + 1*sizeof(double))];
 
 	enum ach_status r = ach_get(&chan, buf, sizeof(buf), &frame_size, NULL, ACH_O_LAST);
 	if(!(r == ACH_OK || r == ACH_MISSED_FRAME))
 		return false;
 
 	Eigen::MatrixXd refTrajM = deserialize_to_Matrix(buf);
-	if(refTrajM.cols() != 6){
-		printw("Error at Line %d: Length of way-point is not 6\n\r", __LINE__);
+	if(refTrajM.cols() < 6 || refTrajM.cols() > 7){
+		printw("Error at Line %d: Length of waypoint must be 6 or 7\n\r", __LINE__);
 		return false;
 	}
 	
 	refTraj.clear();
+	refTimeouts.clear();
 
 	Eigen::VectorXd temp;
 	for(int i=0; i < refTrajM.rows(); i++){
+
 		temp = refTrajM.row(i);
 		refTraj.push_back(temp);
+
+		// if a 7th element was provided, it's a timestamp
+		if (temp.size() > 6)
+			refTimeouts.push_back(temp(6));
+		else
+			refTimeouts.push_back(0.0);
 	}
+
 	return true;
 }
 
@@ -946,10 +987,10 @@ void run() {
 	// Pose of Gripper in World Frame
 	Eigen::Matrix4d T_gripper_to_world;
 	T_gripper_to_world =  wss[Krang::LEFT]->endEffector->getWorldTransform();
-	cx.ref_poses[L_GRIP] = Krang::transformToEuler(T_gripper_to_world, math::XYZ);
+	cx.ref_pose[L_GRIP] = Krang::transformToEuler(T_gripper_to_world, math::XYZ);
 
 	T_gripper_to_world = wss[Krang::RIGHT]->endEffector->getWorldTransform();
-	cx.ref_poses[R_GRIP] = Krang::transformToEuler(T_gripper_to_world, math::XYZ);
+	cx.ref_pose[R_GRIP] = Krang::transformToEuler(T_gripper_to_world, math::XYZ);
 
 	cx.ref_vel[L_GRIP] = Eigen::VectorXd::Zero(6);
 	cx.ref_vel[R_GRIP] = Eigen::VectorXd::Zero(6);
@@ -1040,14 +1081,14 @@ void run() {
 
 			else { // Pose mode. Apply K_p and get velocity in task space              
 				Eigen::MatrixXd T_ref;
-				T_ref = Krang::eulerToTransform(cx.ref_poses[side], math::XYZ);
+				T_ref = Krang::eulerToTransform(cx.ref_pose[side], math::XYZ);
 
 				
 				// if (synch mode on) and (it is off hand) then follow primary hand
 				if ((cx.synch_mode == SYNCH_ON_L_PRIM && sde == Krang::RIGHT) ||
 					  (cx.synch_mode == SYNCH_ON_R_PRIM && sde == Krang::LEFT)){
 					
-					T_ref = Krang::eulerToTransform(cx.ref_poses[1-side], math::XYZ);
+					T_ref = Krang::eulerToTransform(cx.ref_pose[1-side], math::XYZ);
 					T_ref = T_ref * cx.T_off_to_pri;        
 				}
 				wss[sde]->updateFromUIPos(T_ref, hw->fts[sde]->lastExternal,
@@ -1076,12 +1117,23 @@ void run() {
 
 			// Check for messages on the waypoint channels
 			bool r;
-			r = poll_waypnts_channel(waypts_channel[side], cx.refTraj[side]);
-			if (r == true){ // update ref pose
+			r = poll_waypnts_channel(waypts_channel[side], cx.refTraj[side], cx.refTimeouts[side]);
+
+			if (r == true){ // update ref pose and timeout
 				printw("Waypoints channel polled. \n\r");
+				cx.numWayPtsReached = 0;
+
+				// update reference
 				if (! cx.refTraj[side].empty()){
-					cx.ref_poses[side] = cx.refTraj[side][0];
+					cx.ref_pose[side] = cx.refTraj[side][0];
 					cx.refTraj[side].erase(cx.refTraj[side].begin());
+				}
+
+				// update timeout
+				if (! cx.refTimeouts[side].empty()){
+					cx.ref_timeout[side] = cx.refTimeouts[side][0];
+					cx.refTimeouts[side].erase(cx.refTimeouts[side].begin());
+					cx.ref_timestart[side] = time_last;
 				}
 			}
 
@@ -1090,17 +1142,34 @@ void run() {
 			/* Test if target position has been reached by checking if current 
 			pose is within some finite neighbourhood of target pose and if 
 			reached update the ref pose to next waypoint in the trajectory. */
-			if (abs(cx.ref_poses[side][0] - x[0]) < 0.03 &&    // x-dir 1 cm
-				abs(cx.ref_poses[side][1] - x[1]) < 0.03 &&    // y-dir 1 cm
-				abs(cx.ref_poses[side][2] - x[2]) < 0.03 &&    // z-dir 1 cm 
-				abs(cx.ref_poses[side][3] - x[3]) < 0.15  &&    // roll  0.3 rad
-				abs(cx.ref_poses[side][4] - x[4]) < 0.15  &&    // pitch 0.3 rad
-				abs(cx.ref_poses[side][5] - x[5]) < 0.15) {     // yaw   0.3 rad
+
+			bool reached = (abs(cx.ref_pose[side][0] - x[0]) < REF_ERR_LIN_THRESH &&    // x-dir 1 cm
+							abs(cx.ref_pose[side][1] - x[1]) < REF_ERR_LIN_THRESH &&    // y-dir 1 cm
+							abs(cx.ref_pose[side][2] - x[2]) < REF_ERR_LIN_THRESH &&    // z-dir 1 cm 
+							abs(cx.ref_pose[side][3] - x[3]) < REF_ERR_ANG_THRESH &&    // roll  0.3 rad
+							abs(cx.ref_pose[side][4] - x[4]) < REF_ERR_ANG_THRESH &&    // pitch 0.3 rad
+							abs(cx.ref_pose[side][5] - x[5]) < REF_ERR_ANG_THRESH);
+
+			bool timeout = false;
+			if (cx.time_advance_waypts) {
+				double ref_dt = time_last - cx.ref_timestart[side];
+				if (ref_dt > cx.ref_timeout[side])
+					timeout = true;
+			}	
+
+			if (reached && cx.err_advance_waypts || timeout && cx.time_advance_waypts) {
 			   
-				if (! cx.refTraj[side].empty()){
+			   	// advance the reference index in the trajectory
+				if (!cx.refTraj[side].empty()) {
 					cx.numWayPtsReached++;
-					cx.ref_poses[side] = cx.refTraj[side][0];
+					cx.ref_pose[side] = cx.refTraj[side][0];
 					cx.refTraj[side].erase(cx.refTraj[side].begin());
+				}
+
+				if (cx.time_advance_waypts && !cx.refTimeouts[side].empty()) {
+					cx.ref_timeout[side] = cx.refTimeouts[side][0];
+					cx.refTimeouts[side].erase(cx.refTimeouts[side].begin());
+					cx.ref_timestart[side] = time_last;	
 				}
 			}
 		}
@@ -1108,7 +1177,7 @@ void run() {
 		poll_cmd_channel(cx.channel_cmd);
 
 		//std::cout<<"Left gripper pose in world frame" << std::endl<<'\r';
-		//std::cout<<cx.ref_poses[L_GRIP] <<std::endl<<'\r';
+		//std::cout<<cx.ref_pose[L_GRIP] <<std::endl<<'\r';
 
 		// print various things to the output
 		move(0, 0);
@@ -1234,6 +1303,8 @@ void init() {
     cx.synch_mode = SYNCH_OFF;
     cx.input_mode = INPUT_MODE_POSE;
     cx.compliance_mode = COMPLIANCE_ON;//COMPLIANCE_ON;
+    cx.err_advance_waypts = true;
+    cx.time_advance_waypts = false;
 	cx.show_key_bindings = true;
 
 	for(int i=0; i<7; i++) cx.maxCurrent[L_GRIP][i] = cx.maxCurrent[R_GRIP][i] = 0.0;
