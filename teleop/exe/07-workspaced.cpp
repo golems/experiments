@@ -899,6 +899,7 @@ void poll_cmd_channel(ach_channel_t& chan){
             (val == 0) ? 
                 setInputMode(INPUT_MODE_POSE)
                     : setInputMode(INPUT_MODE_VEL);
+            break;
         case 1:     // close/open both grippers
             if(val == 0){
                 openGripper(hw->grippers[Krang::LEFT]);
@@ -915,7 +916,7 @@ void poll_cmd_channel(ach_channel_t& chan){
             else
                 closeGripper(hw->grippers[Krang::LEFT]);
             break;
-        case 3: break;
+        case 3:
             if(val == 0)
                 openGripper(hw->grippers[Krang::RIGHT]);
             else
@@ -1218,10 +1219,9 @@ void init() {
 	Trel_pri_to_off = wss[primary_hand]->Tref.inverse() * wss[off_hand]->Tref;
 
 	// set up nullspace stuff
-	//nullspace_q_refs[Krang::LEFT] = (Krang::Vector7d()   << 0, -1.0, 0, -0.5, 0, -0.8, 0).finished();
+	//nullspace_q_refs[Krang::LEFT] = (Krang::Vector7d()   << 0.88, -1.0, 0, -0.5, 0, -0.8, 0).finished();
 	nullspace_q_refs[Krang::LEFT] = (Krang::Vector7d()   << 0.88, -1.0, 0, -0.5, 0, -0.8, 0).finished();
 	nullspace_q_refs[Krang::RIGHT] = (Krang::Vector7d()  << -0.88,  1.0, 0,  0.5, 0,  0.8, 0).finished();
-	//nullspace_q_masks[Krang::LEFT] = (Krang::Vector7d()  << 0,    0, 0,    1, 0,    0, 0).finished();
 	nullspace_q_masks[Krang::LEFT] = (Krang::Vector7d()  << 1, 0, 0, 0, 0, 0, 0).finished();
 	nullspace_q_masks[Krang::RIGHT] = (Krang::Vector7d() << 1, 0, 0, 0, 0, 0, 0).finished();
 
