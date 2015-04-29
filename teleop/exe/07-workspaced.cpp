@@ -216,6 +216,7 @@ typedef struct {
 	int input_mode;         	//< vel or pose
 	int imu_mode;           	//< int 0=off, 1=on (not bool b/c we might add more options)
 	int compliance_mode;    	//< int: COMPLIANCE_OFF, COMPLIANCE_ON
+	int compliance_mult;		//< int: multiplier for base compliance gain
 	bool err_advance_waypts;	//< bool: on or off
 	bool time_advance_waypts;	//< bool: on or off
 	bool show_key_bindings; 	//< if true, show key bindings in ncurses display
@@ -464,6 +465,7 @@ void print_key_bindings(){
 	 "          'ON - right primary' . If synch mode is ON, then trajectory on  \n"
 	 "          waypoints channel for off hand is ignored.                      \n"
 	 "'c'    : toggle COMPLIANCE mode (ON or OFF)                               \n"
+	 "'h'    : increment compliance multiplier (range: 1-3)                     \n"
 	 "'i'    : toggle IMU mode (ON or OFF)                                      \n"
 	 "'g'    : Re-read and update compliance gains from file                    \n"
 	 "          (workspaced-compliance-gains.txt)                               \n"
@@ -582,9 +584,19 @@ void *kbhit(void *) {
             somatic_motor_reset(&daemon_cx, hw->arms[Krang::RIGHT]);
         } break;
         case 'h': {
-            cx.send_motor_cmds = false;
-            somatic_motor_halt(&daemon_cx, hw->arms[Krang::LEFT]);
-            somatic_motor_halt(&daemon_cx, hw->arms[Krang::RIGHT]);
+            // cx.send_motor_cmds = false;
+            // somatic_motor_halt(&daemon_cx, hw->arms[Krang::LEFT]);
+            // somatic_motor_halt(&daemon_cx, hw->arms[Krang::RIGHT]);
+
+        	// note: doesn't update properly after re-reading gains, but who cares?
+            cx.compliance_mult = ((cx.compliance_mult + 1) % 3);
+            double base_multiplier = 2;
+            double C = (base_multiplier * cx.compliance_mult) + 1;
+            static double tGain = wss[Krang::LEFT]->compliance_translation_gain;
+            static double oGain = wss[Krang::LEFT]->compliance_orientation_gain;
+            wss[Krang::LEFT]->updateComplianceGains(C * tGain, C * oGain);
+            wss[Krang::RIGHT]->updateComplianceGains(C * tGain, C * oGain);
+
         } break;              
         case 'p':
             setInputMode(!cx.input_mode);
@@ -696,6 +708,7 @@ void print_robot_state(const Krang::Hardware* hw,
     printw("Compliance lin/ang gains: %f %f\n", 
         l_ws->compliance_translation_gain,
         l_ws->compliance_orientation_gain);
+    printw("Compliance multiplier: %d\n", cx.compliance_mult + 1);
     printw("CURRENT CONF. (use key-bindings to change)\n\r");
     printw("\tSync Mode: \t\t\t%s\n\r", synch_mode_to_string(cx.synch_mode));
     printw("\tSend commands to Motor:\t\t");
@@ -967,6 +980,24 @@ void poll_cmd_channel(ach_channel_t& chan){
             if(val) hw->setImuOn();
             else hw->setImuOff();
             break;
+        case 5: { // toggle error advance mode
+			if (val == 0)
+				cx.err_advance_waypts = false;
+			else if (val == 1)
+				cx.err_advance_waypts = true;
+			else
+				printw("Error at Line %d: Invalid message on command code\n\r", __LINE__);				
+			break;
+		}
+		case 6: { // toggle time advance mode
+			if (val == 0)
+				cx.time_advance_waypts = false;
+			else if (val == 1)
+				cx.time_advance_waypts = true;
+			else
+				printw("Error at Line %d: Invalid message on command code\n\r", __LINE__);				
+			break;
+		}
         default: 
             break;
     }
