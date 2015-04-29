@@ -198,8 +198,8 @@ bool start = false; 				//< send motor velocities
 bool dbg = false;					//< print debug output
 bool update_gains = false; 			//< if true, read new gains from the text file
 size_t mode = 1;					//< 0 sitting, 1 keyboard commands, 2 trajectory following
-bool err_advance_waypts = true; 		//< if true, allow trajectory advance on waypoint error
-bool time_advance_waypts = true; 		//< if true, allow trajectory advance on timeouts
+bool err_advance_waypts = true; 	//< if true, allow trajectory advance on waypoint error
+bool time_advance_waypts = false;	//< if true, allow trajectory advance on timeouts
 bool wait_for_global_vision_msg_at_startup = false;
 bool use_steering_method = false; 	//< if true, use a steering controller
 bool vision_updates = false;		//< if true, upate base pose from vision channel
@@ -385,6 +385,24 @@ void poll_cmd_channel(){
 		}
 		case 2:	{ // single vision update
 			poll_vision_channel(false, false);
+			break;
+		}
+		case 3: { // toggle error advance mode
+			if (val == 0)
+				err_advance_waypts = false;
+			else if (val == 1)
+				err_advance_waypts = true;
+			else
+				printw("Error at Line %d: Invalid message on command code\n\r", __LINE__);				
+			break;
+		}
+		case 4: { // toggle time advance mode
+			if (val == 0)
+				time_advance_waypts = false;
+			else if (val == 1)
+				time_advance_waypts = true;
+			else
+				printw("Error at Line %d: Invalid message on command code\n\r", __LINE__);				
 			break;
 		}
 		default: 

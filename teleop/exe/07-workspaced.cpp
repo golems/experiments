@@ -216,6 +216,7 @@ typedef struct {
 	int input_mode;         	//< vel or pose
 	int imu_mode;           	//< int 0=off, 1=on (not bool b/c we might add more options)
 	int compliance_mode;    	//< int: COMPLIANCE_OFF, COMPLIANCE_ON
+	int compliance_mult;		//< int: multiplier for base compliance gain
 	bool err_advance_waypts;	//< bool: on or off
 	bool time_advance_waypts;	//< bool: on or off
 	bool show_key_bindings; 	//< if true, show key bindings in ncurses display
@@ -425,12 +426,12 @@ Krang::Side primary_hand = Krang::LEFT;
 Krang::Side off_hand = Krang::RIGHT;
 
 // debug information
-bool debug_print_this_it;       ///< whether we print
+// bool debug_print_this_it;       ///< whether we print
 
 /// Clean up
 void destroy() {
 
-	Krang::destroy_curses();   // close display
+	// Krang::destroy_curses();   // close display
 
 	// Stop the daemon
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
@@ -464,6 +465,7 @@ void print_key_bindings(){
 	 "          'ON - right primary' . If synch mode is ON, then trajectory on  \n"
 	 "          waypoints channel for off hand is ignored.                      \n"
 	 "'c'    : toggle COMPLIANCE mode (ON or OFF)                               \n"
+	 "'h'    : increment compliance multiplier (range: 1-3)                     \n"
 	 "'i'    : toggle IMU mode (ON or OFF)                                      \n"
 	 "'g'    : Re-read and update compliance gains from file                    \n"
 	 "          (workspaced-compliance-gains.txt)                               \n"
@@ -585,9 +587,19 @@ void *kbhit(void *) {
             somatic_motor_reset(&daemon_cx, hw->arms[Krang::RIGHT]);
         } break;
         case 'h': {
-            cx.send_motor_cmds = false;
-            somatic_motor_halt(&daemon_cx, hw->arms[Krang::LEFT]);
-            somatic_motor_halt(&daemon_cx, hw->arms[Krang::RIGHT]);
+            // cx.send_motor_cmds = false;
+            // somatic_motor_halt(&daemon_cx, hw->arms[Krang::LEFT]);
+            // somatic_motor_halt(&daemon_cx, hw->arms[Krang::RIGHT]);
+
+        	// note: doesn't update properly after re-reading gains, but who cares?
+            cx.compliance_mult = ((cx.compliance_mult + 1) % 3);
+            double base_multiplier = 2;
+            double C = (base_multiplier * cx.compliance_mult) + 1;
+            static double tGain = wss[Krang::LEFT]->compliance_translation_gain;
+            static double oGain = wss[Krang::LEFT]->compliance_orientation_gain;
+            wss[Krang::LEFT]->updateComplianceGains(C * tGain, C * oGain);
+            wss[Krang::RIGHT]->updateComplianceGains(C * tGain, C * oGain);
+
         } break;              
         case 'p':
             setInputMode(!cx.input_mode);
@@ -718,6 +730,7 @@ void print_robot_state(const Krang::Hardware* hw,
     printw("Compliance lin/ang gains: %f %f\n", 
         l_ws->compliance_translation_gain,
         l_ws->compliance_orientation_gain);
+    printw("Compliance multiplier: %d\n", cx.compliance_mult + 1);
     printw("CURRENT CONF. (use key-bindings to change)\n\r");
     printw("\tSync Mode: \t\t\t%s\n\r", synch_mode_to_string(cx.synch_mode));
     printw("\tSend commands to Motor:\t\t");
@@ -989,6 +1002,24 @@ void poll_cmd_channel(ach_channel_t& chan){
             if(val) hw->setImuOn();
             else hw->setImuOff();
             break;
+        case 5: { // toggle error advance mode
+			if (val == 0)
+				cx.err_advance_waypts = false;
+			else if (val == 1)
+				cx.err_advance_waypts = true;
+			else
+				printw("Error at Line %d: Invalid message on command code\n\r", __LINE__);				
+			break;
+		}
+		case 6: { // toggle time advance mode
+			if (val == 0)
+				cx.time_advance_waypts = false;
+			else if (val == 1)
+				cx.time_advance_waypts = true;
+			else
+				printw("Error at Line %d: Invalid message on command code\n\r", __LINE__);				
+			break;
+		}
         default: 
             break;
     }
@@ -1019,11 +1050,13 @@ void run() {
 
 	Eigen::VectorXd x; // current position of the gripper
 
+	char buf[256];
+
 	while(!somatic_sig_received) {
 
 		pthread_mutex_lock(&mutex);     
 
-		Krang::curses_display_row = CURSES_DEBUG_DISPLAY_START;
+		// Krang::curses_display_row = CURSES_DEBUG_DISPLAY_START;
 
 		// ========================================================================================
 		// Update state: get passed time and kinematics, sensor input and check for current limit
@@ -1034,28 +1067,49 @@ void run() {
 		time_last = time_now;
 
 		// set up debug printing
-		debug_print_this_it = (time_now - time_last_display) > (1.0 / DISPLAY_FREQUENCY);
-		if(debug_print_this_it) time_last_display = time_now;
-		wss[Krang::LEFT]->debug_to_curses = debug_print_this_it;
-		wss[Krang::RIGHT]->debug_to_curses = debug_print_this_it;
+		// debug_print_this_it = (time_now - time_last_display) > (1.0 / DISPLAY_FREQUENCY);
+		// if(debug_print_this_it) time_last_display = time_now;
+		// wss[Krang::LEFT]->debug_to_curses = debug_print_this_it;
+		// wss[Krang::RIGHT]->debug_to_curses = debug_print_this_it;
 
 		/* Read the robot state from sensors. This includes reading joint 
 		   angles for arms. It also update internal kinematics. */
 		hw->updateSensors(time_delta);
 
-		// Check for too high currents
-		if(Krang::checkCurrentLimits(hw->arms[Krang::LEFT]->cur, 7)
-		   && Krang::checkCurrentLimits(hw->arms[Krang::RIGHT]->cur, 7)) {
-			if (cx.send_motor_cmds) {
-				cx.send_motor_cmds = false;
-				somatic_motor_halt(&daemon_cx, hw->arms[Krang::LEFT]);
-				somatic_motor_halt(&daemon_cx, hw->arms[Krang::RIGHT]);
-			}
+		// // Check for too high currents
+		// if (Krang::checkCurrentLimits(hw->arms[Krang::LEFT]->cur, 7)
+		//    || Krang::checkCurrentLimits(hw->arms[Krang::RIGHT]->cur, 7)) {
 
-			// // TODO: handle this more nicely
-			// destroy();
-			// exit(EXIT_FAILURE);
-		}
+		//    	sprintf(buf, "ERROR: Halting arms because of over-current");
+		//     recordEvent(buf);
+
+		// 	if (cx.send_motor_cmds) {
+		// 		cx.send_motor_cmds = false;
+		// 		somatic_motor_halt(&daemon_cx, hw->arms[Krang::LEFT]);
+		// 		somatic_motor_halt(&daemon_cx, hw->arms[Krang::RIGHT]);
+		// 	}
+
+		// 	// // TODO: handle this more nicely
+		// 	// destroy();
+		// 	// exit(EXIT_FAILURE);
+		// } else {
+			// print warnings current vals
+			for(size_t i = 0; i < 7; i++) {
+				// print warnings for left arm
+				if (hw->arms[Krang::LEFT]->cur[i] > Krang::CURRENT_WARN_LIMITS[i]) {
+					sprintf(buf,"WARNING: Current at module %zu has passed %lf amps: %lf amps", i+1, 	
+				       Krang::CURRENT_WARN_LIMITS[i], hw->arms[Krang::LEFT]->cur[i]);
+					recordEvent(buf);
+				}
+				
+				// print warnings for right arm
+				if (hw->arms[Krang::RIGHT]->cur[i] > Krang::CURRENT_WARN_LIMITS[i]) {
+					sprintf(buf, "WARNING: Current at module %zu has passed %lf amps: %lf amps", i+1, 	
+				       Krang::CURRENT_WARN_LIMITS[i], hw->arms[Krang::RIGHT]->cur[i]);
+					recordEvent(buf);
+				}
+			}
+		// }
 
 		// update max currents till now
 		for (int i=0; i<7; i++){
@@ -1209,7 +1263,7 @@ void run() {
 		printw("----------------------------------\n");
 		print_robot_state(hw, wss[Krang::LEFT], wss[Krang::RIGHT], cx);
 		printw("----------------------------------\n");
-		//printEvents();
+		printEvents();
 		printw("----------------------------------\n");
 		refresh();  // refresh the ncurses screen
 
@@ -1234,7 +1288,7 @@ void init() {
 	// Initalize dart. Do this before we initialize the daemon because initalizing the daemon 
 	// changes our current directory to somewhere in /var/run.
 	DartLoader dl;
-	world = dl.parseWorld("/etc/kore/scenes/01-World-Robot.urdf");
+	world = dl.parseWorld("/etc/kore/scenes/01-World-Robot-LJFT-PRL80.urdf");
 	assert((world != NULL) && "Could not find the world");
 	robot = world->getSkeleton("Krang");
 
@@ -1316,6 +1370,9 @@ void init() {
 	nullspace_q_masks[Krang::LEFT] = (Krang::Vector7d()  << 1, 0, 0, 0, 0, 0, 0).finished();
 	nullspace_q_masks[Krang::RIGHT] = (Krang::Vector7d() << 1, 0, 0, 0, 0, 0, 0).finished();
 
+	// disable printing in kore
+	Krang::doing_curses = true;
+
 	// Create a thread to wait for user input
 	pthread_t kbhitThread;
 	pthread_create(&kbhitThread, NULL, &kbhit, NULL);
@@ -1358,25 +1415,35 @@ A simple implementation of events.
 Each event is just a character string.
 One function records the event. Another functions prints the events. Prev events
 may be over-written with new ones. Current it supports recording only last
-event. It can be extended to record more events. */
+event. It can be extended to record more events. 
+Max len of string is 256
+Max number of events recorded is 10 */
 typedef struct {
 	char events[10][256];
-	unsigned int numEvents;
-	int start;
+	unsigned int numEvents; // numEvent stored
+	int startIndex;
+	int eventNum; // event Num of last store event
 } EventQ_t;
 
-EventQ_t g_EventQ {.events = {0}, .numEvents = 0, .start = 0};
+EventQ_t g_EventQ {.events = {0}, .numEvents = 0, .startIndex = 0, .eventNum = 1};
 
 void recordEvent(const char* event){
-	strncpy(g_EventQ.events[g_EventQ.start], event, 256);
-	g_EventQ.start = (g_EventQ.start+1)%10;
-	g_EventQ.numEvents++;
-	return;
+	if (g_EventQ.numEvents < 10){
+		strncpy(g_EventQ.events[(g_EventQ.startIndex + g_EventQ.numEvents)%10], event, 256);		
+		g_EventQ.numEvents++;
+	}
+	else{
+		strncpy(g_EventQ.events[g_EventQ.startIndex], event, 256);
+		g_EventQ.startIndex = (g_EventQ.startIndex+1)%10;
+		g_EventQ.eventNum = g_EventQ.eventNum + 1;
+	}
 }
 
 void printEvents(){
 	printw("EVENTS\n");
-	for(int i=0; i<10; i++)
-		printw("    %d: %s\n", g_EventQ.numEvents + i, g_EventQ.events[(g_EventQ.start + i)%10]);
+	for(int i=0; i < g_EventQ.numEvents; i++)
+		printw("   %d: %s\n", g_EventQ.eventNum + i, g_EventQ.events[(g_EventQ.startIndex + i)%10]);
+	printw("\n");
 	return;
 }
+/* *************************************** */
