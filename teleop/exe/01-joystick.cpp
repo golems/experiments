@@ -70,8 +70,8 @@ void readJoystick() {
 		b[i] = js_msg->buttons->data[i] ? 1 : 0;
 	memcpy(x, js_msg->axes->data, sizeof(x));
 
-	// scale the js for lower sensitivity [jon 3/8/2015]
-	for (int i=0; i<6; ++i)
+	// scale the js for lower sensitivity [jon 3/8/2015] only for thumbsticks
+	for (int i=0; i<4; ++i)
 		x[i] = x[i] * js_axis_scale;
 
 	// Free the joystick message
@@ -193,6 +193,21 @@ void controlRobotiq() {
 	}
 }
 
+
+/* ********************************************************************************************* */
+void printCurrentState(){
+	printf("[JOYSTICK]\n");
+	printf(" buttons: ");
+	for (int i=0; i<10; i++)
+		printf("%d ", b[i]);
+	printf("\n");
+	printf(" axes: ");
+	for (int i=0; i<6; i++)
+		printf("%f ", x[i]);
+	printf("\n");
+	return;
+}
+
 /* ********************************************************************************************* */
 /// Continuously process the joystick data and sets commands to the modules
 void run() {
@@ -222,6 +237,10 @@ void run() {
 
 		// Free buffers allocated during this cycle
 		aa_mem_region_release(&daemon_cx.memreg);	
+
+		// print current state
+		printCurrentState();
+
 		usleep(1e4);
 	}
 
@@ -229,6 +248,7 @@ void run() {
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
 					 SOMATIC__EVENT__CODES__PROC_STOPPING, NULL, NULL);
 }
+
 
 /* ********************************************************************************************* */
 void init () {
