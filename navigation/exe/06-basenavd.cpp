@@ -202,6 +202,7 @@ bool err_advance_waypts = true; 	//< if true, allow trajectory advance on waypoi
 bool time_advance_waypts = false;	//< if true, allow trajectory advance on timeouts
 bool wait_for_global_vision_msg_at_startup = false;
 bool use_steering_method = false; 	//< if true, use a steering controller
+bool high_current_mode = false; 	//< if true, allow a boost in allowed wheel currents
 bool vision_updates = false;		//< if true, upate base pose from vision channel
 bool odom_updates = true;			//< if true, upate base pose from wheel odometry
 bool show_key_bindings = true;		//< if true, show key bindings in ncurses display
@@ -215,7 +216,8 @@ bool error_integration = false;
 Eigen::Vector3d int_err;			//< accumulator for integral error (x,y,theta in robot frame)
 double u_hard_max = 22.0;			//< never write values higher than this
 double u_spin_max = 20.0; 			//< thershold on spin contribution
-double u_lin_max = 15.0; 			//< threshold on linear contribution
+double u_lin_max = 16.0; 			//< threshold on linear contribution
+double u_high_boost = 12.0; 			//< number of additional amps to add during high current mode
 
 /* ******************************************************************************************** */
 typedef Eigen::Matrix<double,6,1> Vector6d;
@@ -600,14 +602,17 @@ Vector6d computeTorques(const Vector6d& state, double& ul, double& ur, double& d
 	// fflush(log_file);
 
 	// Limit the output torques
-	u_theta = max(-u_spin_max, min(u_spin_max, u_theta));
-	u_x     = max(-u_lin_max, min(u_lin_max, u_x));
+	double u_boost = 0;
+	if (high_current_mode)
+		u_boost = u_high_boost;
+	u_theta = max(-u_spin_max-u_boost, min(u_spin_max+u_boost, u_theta));
+	u_x     = max(-u_lin_max-u_boost, min(u_lin_max+u_boost, u_x));
 	if(dbg) printw("u_x: %lf, u_theta: %lf\n", u_x, u_theta);
 
 	ul = u_x - u_theta;
 	ur = u_x + u_theta;
-	ul = max(-u_hard_max, min(u_hard_max, ul));
-	ur = max(-u_hard_max, min(u_hard_max, ur));
+	ul = max(-u_hard_max-u_boost, min(u_hard_max+u_boost, ul));
+	ur = max(-u_hard_max-u_boost, min(u_hard_max+u_boost, ur));
 	if(dbg) printw("ul: %lf, ur: %lf\n", ul, ur);
 
 	return err_robot;
@@ -687,7 +692,8 @@ void print_key_bindings(){
 	 "'j'    : Keyboard control: turn left                                      \n\r"
 	 "'l'    : Keyboard control: turn right                                     \n\r"
 	 "'i'    : Keyboard control: drive forward                                  \n\r"
-	 "'k'    : Keyboard control: drive backward                                 \n\r";
+	 "'k'    : Keyboard control: drive backward                                 \n\r"
+	 "'h'    : High-current mode (increases current limits; be careful!)        \n\r";
 
 	 const char *shortstr =
 	 "'b': show key bindings                                                    \n\r";
@@ -805,6 +811,10 @@ void *kbhit(void *) {
 				use_steering_method = !use_steering_method;
 				break;
 			}
+			case 'h': {
+				high_current_mode = !high_current_mode;
+				break;
+			}
 			default:
 				break;
 		}
@@ -864,6 +874,11 @@ void print_status(const Krang::Hardware* hw, const cx_t& cx)
 
 	printw("Wheel State (:\n\t");
 	PRINT_VECTOR(wheel_state)
+
+	printw("Current limits: %2.2lf %2.2lf %2.2lf (lin,ang,hard)\n", 
+		high_current_mode ? u_lin_max + u_high_boost : u_lin_max, 
+		high_current_mode ? u_spin_max + u_high_boost : u_spin_max, 
+		high_current_mode ? u_hard_max + u_high_boost : u_hard_max);
 
 	printw("Trajectory index: [%d/%d]\n", trajIdx, trajectory.size()-1);
 }
