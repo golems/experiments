@@ -574,6 +574,9 @@ void *kbhit(void *) {
     cbreak();                   // do not buffer by line (receive characters immediately)
     timeout(0);                 // non-blocking getch
 
+    Eigen::VectorXd x;
+    Eigen::Matrix4d T;
+
     while(true){ 
         ch = getch(); 
         pthread_mutex_lock(&mutex);
@@ -686,9 +689,28 @@ void *kbhit(void *) {
         case '4': 
             openGripper(hw->grippers[Krang::RIGHT]);
             break;
+        case '8':
+         	x << 0, 0, 0, 1.57, 1.57, 0;
+        	
+        	T = Krang::eulerToTransform(x, math::XYZ);
+        	printw("T = ");
+        	PRINT_MAT(T);
+        	break;   
         case '9': // debugging functionality
-        	cx.send_motor_cmds = false;
-			somatic_motor_halt(&daemon_cx, hw->arms[Krang::LEFT]);
+        	//cx.send_motor_cmds = false;
+			//somatic_motor_halt(&daemon_cx, hw->arms[Krang::LEFT]);
+        	//Eigen::VectorXd T;
+        	//T = wss[Krang::LEFT]->endEffector->getWorldTransform();
+        	//printf("Size = %d, rows = %d, cols = %d", T.size(), T.rows(), T.cols());
+        	T << 0, -1, 0, 0,
+        		 0, 0, -1, 0,
+        		 1, 0, 0, 0,
+        		 0, 0, 0, 1;
+        	
+        	x = Krang::transformToEuler(T, math::XYZ);
+        	printw("x = ");
+        	PRINT_VECTOR(x);
+        	PRINT_MAT(T);
         	break;
         default:
             //cout<<__LINE__<<": Value of ch is :" << (int)ch <<std::endl<<'\r';
