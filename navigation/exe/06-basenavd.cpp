@@ -231,7 +231,7 @@ vector <Vector6d> trajectory;		//< the goal trajectory
 vector <double> timeouts; 			//< associated list of timeouts (optional)
 struct timespec ref_timestart;		//< timespec for trajectory timeout mode
 double ref_timeout; 				//< the timeout for the current reference 
-const size_t max_traj_msg_len = 170;
+const size_t max_traj_msg_len = 500; // 170;
 size_t trajIdx = 0;
 
 /// for debugging
@@ -624,7 +624,7 @@ void updateTrajectory () {
 
 	// allocate a buffer big enough for the incoming trjajectory
 	// size: max_len x [two ints for shape, 3 doubles for pose, 1 double for timeout]
-	char buf[max_traj_msg_len * (2*sizeof(int) + 3*sizeof(double) + 1*sizeof(double))];
+	char buf[2*sizeof(int) + max_traj_msg_len * (3*sizeof(double) + 1*sizeof(double))];
 
 	// Check if a message is received
 	size_t frame_size = 0;
