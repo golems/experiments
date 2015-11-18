@@ -9,6 +9,7 @@ add_definitions(-DTOP_LEVEL_PATH="${CMAKE_SOURCE_DIR}" -g)
 
 # Set the C99 standard for the C files
 set(CMAKE_INSTALL_PREFIX /usr)
+set(CMAKE_CXX_FLAGS "-g -std=gnu++0x")
 
 # Guard against in-source builds
 if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
@@ -50,11 +51,25 @@ include_directories(../common)
 
 # Collect the source, script and fortran files
 file(GLOB main_source "src/*.cpp" "src/*.c")
-file(GLOB scripts_source "exe/*.cpp")
+
+message(STATUS "main_source: ")
+foreach(source ${main_source})
+    message(STATUS ${source})
+endforeach(source)
+
+# Add all the files we want to compile.
+#file(GLOB scripts_source "exe/*.cpp")
+
+# There is some error is some files. Adding only what we want.
+file(GLOB scripts_source "exe/06-basenavd.cpp")
+
+
+
+
 list(SORT scripts_source)
 
 # Build the library and set the executables that use it (have to hardcode for now)
-# add_library(Main SHARED ${main_source})
+add_library(Main SHARED ${main_source})
 set(MainDependents balancing)
 
 # Build scripts
@@ -63,7 +78,7 @@ foreach(script_src_file ${scripts_source})
 	get_filename_component(script_base ${script_src_file} NAME_WE)
 	message(STATUS "Adding script ${script_src_file} with base name ${script_base}" )
 	add_executable(${script_base} ${script_src_file})
-#	target_link_libraries(${script_base} Main) 
+	target_link_libraries(${script_base} Main) 
 	target_link_libraries(${script_base} ${GRIP_LIBRARIES} ${DART_LIBRARIES} ${DARTExt_LIBRARIES} ${wxWidgets_LIBRARIES} trajectory_io) 
 	add_custom_target(${script_base}.run ${script_base} ${ARGN})
 endforeach(script_src_file)

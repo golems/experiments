@@ -1,9 +1,11 @@
-# format: [linearP linearI linearD angularP angularI angularD pb_alpha pb_beta]
+# format: [linearP linearI linearD angularP angularI angularD pb_alpha pb_beta B_c epsilon I_l]
 # pb_alpha and pb_beta are parameters for an adaptive positional gain 
 # for overcoming static friction which falls off as velocity increases:
 # k_pb = pb_apha * exp(-pb_beta * ||v||)
 # To disable adaptive gains, set pb_alpha=0
 #
 # 100 0 15 100 0 5 20 50
-330 130 13 80 350 5 0 1000
-# 330 130 13 80 250 7 0 1000
+# 330 130 13 80 350 5 0 1000
+#100 100 6 20 30 5 0 1000 11.5
+20 5 2 0 20 0 5 0 9.0 1.0 0.1
+#0 0 0 0 0 0 0 0 11.5
