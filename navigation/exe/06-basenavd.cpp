@@ -54,6 +54,12 @@
 #include <argp.h>
 #include <ncurses.h>
 
+#include <easylogging++.h>	// for logging
+
+INITIALIZE_EASYLOGGINGPP
+
+#include <TrajGen.h>
+
 #define SQ(x) ((x) * (x))
 #define R2D(x) (((x) / M_PI) * 180.0)
 
@@ -81,6 +87,11 @@
 			}                                            \
 			printw("]\n");
 
+
+#define SIGN(x) ((x) >=0 ? 1 : -1 )
+
+#define IS_NEAR_ZERO(x, precision) (abs(x) < (precision))
+
 using namespace std;
 
 /**
@@ -96,8 +107,9 @@ std::string getcwd_str()
 /* ARGP Info  */
 /* ---------- */
 
-// argp struct
+// context struct
 typedef struct {
+	// maybe set by command line arguments
 	somatic_d_t d;
 	somatic_d_opts_t d_opts;
 	const char *opt_base_state_chan_name;
@@ -105,6 +117,18 @@ typedef struct {
 	const char *opt_base_waypts_chan_name;
 	const char *opt_base_cmd_chan_name;
 	int opt_verbosity;
+
+	double sample_time; // time of single loop (in msecs)
+	double traj_start_time; // time when target Pose is set TrajGen
+	double curr_time;	// current time in secs
+
+	// Parameters for friction model
+	double epsilon; // (rad/sec)
+	double B_c;	// static friction coefficient
+	double B_v;	// viscous friction coefficient
+
+	double integration_limit_x;
+
 } cx_t;
 
 static struct argp_option options[] = {
@@ -186,6 +210,10 @@ static int parse_opt( int key, char *arg, struct argp_state *state) {
 	return 0;
 }
 
+/* Dimenstions of the robot */
+static const double wheel_base = 0.692; //< krang wheel base (width) in meters (measured)
+static const double wheel_diameter = 0.536; // meters 0.543 (measured)
+
 /* ******************************************************************************************** */
 ach_channel_t state_chan, vision_chan, base_waypts_chan, cmd_chan;
 cx_t cx;							//< the arg parse struct
@@ -193,6 +221,7 @@ Krang::Hardware* krang;				//< Interface for the motor and sensors on the hardwa
 simulation::World* world;			//< the world representation in dart
 dynamics::SkeletonDynamics* robot;			//< the robot representation in dart
 
+TrajGen trajGen;
 /* ******************************************************************************************** */
 bool start = false; 				//< send motor velocities
 bool dbg = false;					//< print debug output
@@ -209,8 +238,9 @@ bool show_key_bindings = true;		//< if true, show key bindings in ncurses displa
 
 const double waypt_lin_thresh = 0.03; //0.015; 		// (meters) for advancing waypoints in traj.
 const double waypt_rot_thresh = 0.05; //0.025;		// (meters) for advancing waypoints in traj.
-const double kbd_lin_incr = 0.05;
+const double kbd_lin_incr = 1; //0.05;
 const double kbd_rot_incr = 0.1;
+const double integration_limit_theta = 0.6;
 
 bool error_integration = false;
 Eigen::Vector3d int_err;			//< accumulator for integral error (x,y,theta in robot frame)
@@ -226,7 +256,7 @@ Vector6d refstate;					//< reference state for controller (x,y,th,x.,y.,th.)
 Vector6d state;						//< current state (x,y,th,x.,y.,th.)
 Eigen::Vector4d wheel_state;		//< wheel pos and vels in radians (lphi, lphi., rphi, rphi.)
 Eigen::Vector4d last_wheel_state; 	//< last wheel state used to update the state 
-Eigen::VectorXd K = Eigen::VectorXd::Zero(8);	//< the gains for x and th of the state. y is ignored.
+Eigen::VectorXd K = Eigen::VectorXd::Zero(11);	//< the gains for x and th of the state. y is ignored.
 vector <Vector6d> trajectory;		//< the goal trajectory	
 vector <double> timeouts; 			//< associated list of timeouts (optional)
 struct timespec ref_timestart;		//< timespec for trajectory timeout mode
@@ -259,6 +289,9 @@ double unwrap(double angle)
 
 /// Read file for gains
 void readGains () {
+
+	LOG(INFO) << "Reading Gains from file: " << "../data/gains-PID.txt";
+
 	std::string gains_file = init_wd + "/../data/gains-PID.txt";
 	ifstream file(gains_file.c_str());
 	assert(file.is_open());
@@ -270,8 +303,21 @@ void readGains () {
 	std::stringstream stream(line, std::stringstream::in);
 	size_t i = 0;
 	double newDouble;
-	while ((i < 8) && (stream >> newDouble)) K(i++) = newDouble;
+	while ((i < 11) && (stream >> newDouble)) K(i++) = newDouble;
 	file.close();
+
+	cx.B_c = K[8];
+	cx.epsilon = K[9];
+	cx.integration_limit_x = K[10];
+}
+
+/* Returns Control force to tackle friction.
+ */
+double getFrictionalTorque(double thetaDot) {
+	if (abs(thetaDot) <= cx.epsilon)
+		return (cx.B_c * thetaDot)/cx.epsilon;
+	else
+		return cx.B_c * SIGN(thetaDot) + cx.B_v * thetaDot;
 }
 
 /*
@@ -281,6 +327,12 @@ void readGains () {
 void setReference(Vector6d& newRef) {
 	refstate = newRef;
 	int_err.setZero();
+
+	trajGen.setTargetState(state, newRef);
+	cx.traj_start_time = cx.curr_time;
+
+	LOG(INFO) << "Setting reference: x = " << newRef(0) << " y = " << newRef(1)
+				<< " theta = " << newRef(2);
 }
 
 /*
@@ -300,7 +352,8 @@ void poll_vision_channel(bool block, bool reset_reference=true)
 	char buf[bufsize];
 
 	size_t frame_size = 0;
-	int options = block ? ACH_O_WAIT : ACH_O_LAST;
+
+	int options = block ? ACH_O_WAIT | ACH_O_LAST : ACH_O_LAST;
 	int r = ach_get(&vision_chan, &buf, bufsize, &frame_size, NULL, options); 
 	if(!(r == ACH_OK || r == ACH_MISSED_FRAME)) 
 		return;
@@ -336,15 +389,18 @@ void poll_vision_channel(bool block, bool reset_reference=true)
  * 
  * Command messages are 1x2 trajectory messages that get rounded
  * to ints, and are parsed as (cmd-code, cmd-value) tuples.
+ *
+ * When, this list is modified, 'Krang Software Manual' document should be
+ * updated.
  * 
  * Currently supported commands:
- * code 0: toggle odometry updating
+ *  code 0: toggle odometry updating
  * 		val=0: off, val=1: on
  * 
- * code 1: toggle vision updating
+ *  code 1: toggle vision updating
  * 		val=0: off, val=1: on
  * 
- * code 2: single vision update
+ *  code 2: single vision update
  * 		[value N/A]
  */
 void poll_cmd_channel(){
@@ -386,7 +442,7 @@ void poll_cmd_channel(){
 			break;
 		}
 		case 2:	{ // single vision update
-			poll_vision_channel(false, false);
+			poll_vision_channel(true, false);
 			break;
 		}
 		case 3: { // toggle error advance mode
@@ -427,8 +483,7 @@ void poll_cmd_channel(){
 void updateWheelsState(Eigen::Vector4d& wheel_state, double dt) {
 
 	// Model constants
-	static const double wheel_base = 0.692; //< krang wheel base (width) in meters (measured)
-	static const double wheel_diameter = 0.536; // meters 0.543 (measured)
+
 	static const double wheel_radius = wheel_diameter/2;
 
 	// Update the sensor information
@@ -534,15 +589,21 @@ Vector6d computeError(const Vector6d& state, const Vector6d& refstate, bool rota
 	return err;
 }
 
-/* ******************************************************************************************** */
-Vector6d computeTorques(const Vector6d& state, double& ul, double& ur, double& dt)
+/* ***************************************************************
+ * Returns Error
+ */
+void computeTorques(const Vector6d& state, double& ul, double& ur, double& dt)
 {
-	Vector6d err_robot = computeError(state, refstate, true);
+	
+	Vector6d refStateTraj = 
+				trajGen.getReferenceState(cx.curr_time - cx.traj_start_time);
+
+	//Vector6d err_robot = computeError(state, refstate, true);
+	Vector6d err_robot = computeError(state, refStateTraj, true);
 
 	// Set reference based on the mode
 	if(mode == 1 || mode == 0) {
 		ul = ur = 0.0;
-		return err_robot;
 	}
 
 	// Static-friction compensation: adaptive p-gain: falls inversely with vel to get robot started
@@ -552,6 +613,13 @@ Vector6d computeTorques(const Vector6d& state, double& ul, double& ur, double& d
 	if (error_integration) {
 		Vector6d cur_err = err_robot * dt;
 		int_err += cur_err.head(3);
+
+		if (abs(int_err[0]) >= cx.integration_limit_x)
+			int_err[0] = SIGN(int_err[0]) * cx.integration_limit_x;
+		
+		if (abs(int_err[2]) >= integration_limit_theta)
+			int_err[2] = SIGN(int_err[2]) * integration_limit_theta;
+
 		// err_hist.push_front(cur_err);
 
 		// if (err_hist.size() > err_hist_len) {
@@ -613,9 +681,29 @@ Vector6d computeTorques(const Vector6d& state, double& ul, double& ur, double& d
 	ur = u_x + u_theta;
 	ul = max(-u_hard_max-u_boost, min(u_hard_max+u_boost, ul));
 	ur = max(-u_hard_max-u_boost, min(u_hard_max+u_boost, ur));
-	if(dbg) printw("ul: %lf, ur: %lf\n", ul, ur);
+	
 
-	return err_robot;
+
+	// Get the frictional component
+	// Convert to robot frame (des mean desired)
+	double v_des = refStateTraj[3] * cos(state[2]) + refStateTraj[4] * sin(state[2]);
+	double thetaDot_des = refStateTraj[5];
+	double v_r_des = v_des + thetaDot_des * wheel_base/2;
+	double v_l_des = v_des - thetaDot_des * wheel_base/2;
+
+	double thetaDot_r_des = v_r_des * 2/wheel_diameter;
+	double thetaDot_l_des = v_l_des * 2/wheel_diameter;
+
+	ul = ul + getFrictionalTorque(ul); // thetaDot_l_des);
+	ur = ur + getFrictionalTorque(ur); // thetaDot_r_des);
+	/*
+	if (abs(ul) > 1)
+		ul = ul + SIGN(ul) * cx.B_c;
+
+	if (abs(ur) > 1)
+		ur = ur + SIGN(ur) * cx.B_c;
+*/
+	if(dbg) printw("ul: %lf, ur: %lf\n", ul, ur);
 }
 
 /* ******************************************************************************************** */
@@ -711,6 +799,8 @@ void *kbhit(void *) {
 	// char input;
 	char ch;
 	
+	Vector6d newRefState;
+
 	while(true){ 
 		// input=cin.get(); 
 		ch = getch(); 
@@ -772,28 +862,36 @@ void *kbhit(void *) {
 			case 'i': {
 				if (mode != MODE_KBD) break;
 				// input is in the the robot frame, so we rotate to world for refstate
-				refstate(0) += kbd_lin_incr * cos(state[2]);
-				refstate(1) += kbd_lin_incr * sin(state[2]);
+				newRefState = refstate;
+				newRefState(0) += kbd_lin_incr * cos(state[2]);
+				newRefState(1) += kbd_lin_incr * sin(state[2]);
+				setReference(newRefState);
 				int_err.setZero();
 				break;
 			}
 			case 'k': {
 				if (mode != MODE_KBD) break;
 				// input is in the the robot frame, so we rotate to world for refstate
-				refstate(0) -= kbd_lin_incr * cos(state[2]);
-				refstate(1) -= kbd_lin_incr * sin(state[2]);
+				newRefState = refstate;
+				newRefState(0) -= kbd_lin_incr * cos(state[2]);
+				newRefState(1) -= kbd_lin_incr * sin(state[2]);
+				setReference(newRefState);
 				int_err.setZero();
 				break;
 			}
 			case 'j': {
 				if (mode != MODE_KBD) break;
-				refstate(2) += kbd_rot_incr;
+				newRefState = refstate;
+				newRefState(2) = unwrap(newRefState(2) + kbd_rot_incr);
+				setReference(newRefState);
 				int_err.setZero();
 				break;
 			}
 			case 'l': {
 				if (mode != MODE_KBD) break;
-				refstate(2) -= kbd_rot_incr;
+				newRefState = refstate;
+				newRefState(2) = unwrap(newRefState(2) - kbd_rot_incr);
+				setReference(newRefState);
 				int_err.setZero();
 				break;
 			}
@@ -872,6 +970,10 @@ void print_status(const Krang::Hardware* hw, const cx_t& cx)
 	PRINT_VECTOR(refstate)
 	printw(" (%2.2lf)\n", ref_timeout);
 
+	printw("TrajGen Reference state\n");
+	Vector6d trajGenRefState = trajGen.getReferenceState(cx.curr_time - cx.traj_start_time);
+	PRINT_VECTOR(trajGenRefState)
+
 	printw("Wheel State (:\n\t");
 	PRINT_VECTOR(wheel_state)
 
@@ -881,6 +983,11 @@ void print_status(const Krang::Hardware* hw, const cx_t& cx)
 		high_current_mode ? u_hard_max + u_high_boost : u_hard_max);
 
 	printw("Trajectory index: [%d/%d]\n", trajIdx, trajectory.size()-1);
+
+	printw("Forward Speed %f m/sec\n", wheel_state[2]);
+	printw("Angular Speed %f rad/sec\n", wheel_state[3]);
+
+	printw("Sample Loop Time: %.2f msecs\n", cx.sample_time * 1000);
 }
 
 void run () {
@@ -919,6 +1026,9 @@ void run () {
 		double dt = (double)aa_tm_timespec2sec(aa_tm_sub(t_now, t_prev));	
 		t_prev = t_now;
 
+		cx.sample_time = dt;
+		cx.curr_time = (double)aa_tm_timespec2sec(t_now);
+
 		// poll cmd_chan for updates 
 		poll_cmd_channel();
 
@@ -942,7 +1052,7 @@ void run () {
 
 		// Compute the torques based on the state and the mode
 		double ul, ur;
-		Vector6d err = computeTorques(state, ul, ur, dt);
+		computeTorques(state, ul, ur, dt);
 
 		// Apply the torque
 		double input[2] = {ul, ur};
@@ -957,13 +1067,18 @@ void run () {
 			// Check if a new trajectory data is given
 			updateTrajectory();
 
+			Vector6d err = computeError(state, refstate, true);
+
 			if (!trajectory.empty()) {
 				// Vector6d err = computeError(state, refstate, true);
 				double lin_error = abs(err[0]); 	//< linear distance in controllable direction
 				double rot_error = abs(err[2]); 	//< angular distance to current waypoint
 
-				bool reached = ((lin_error < waypt_lin_thresh)) && 
-								(rot_error < waypt_rot_thresh);
+				// for 
+				bool reached = ((lin_error < waypt_lin_thresh)) &&
+								IS_NEAR_ZERO(wheel_state[2], 0.001) &&	// linear velocity
+								(rot_error < waypt_rot_thresh) &&
+								IS_NEAR_ZERO(wheel_state[3], 0.001);	// angular velocity
 
 				bool timeout = false;
 				if (time_advance_waypts) {
@@ -973,6 +1088,8 @@ void run () {
 				}			
 
 				if(dbg) {
+					printw("reached = t");
+					printw(reached ? "TRUE\n" : "FALSE\n");
 					printw("lin_error: %f (thresh=%f)\n", lin_error, waypt_lin_thresh); 
 					printw("rot_error: %f (thresh=%f)\n", rot_error, waypt_rot_thresh); 
 					printw("reached: %d, xreached: %d, threached: %d\n", reached,
@@ -984,8 +1101,11 @@ void run () {
 					int_err.setZero();
 
 					// advance the reference index in the trajectory, or stop if done		
-					trajIdx = min((trajIdx + 1), (trajectory.size() - 1));
-					setReference(trajectory[trajIdx]);
+					// trajIdx = min((trajIdx + 1), (trajectory.size() - 1));
+					if(trajIdx < trajectory.size() - 1) {
+						trajIdx++;
+						setReference(trajectory[trajIdx]);
+					}
 
 					if (time_advance_waypts) {
 						ref_timeout = timeouts[trajIdx];
@@ -1039,6 +1159,18 @@ void init()
 	// Open the log file (this is just for debugging)
 	log_file = fopen((init_wd + "/basenavd_log.txt").c_str(), "w+");
 	assert((log_file != NULL) && "Could not open the file");
+
+	cx.sample_time = 0;
+	cx.traj_start_time = 0;
+	cx.curr_time = 0;
+
+	cx.epsilon = 0.1;
+	cx.B_c = 0;
+	cx.B_v = 0;
+	cx.integration_limit_x = 0.1;
+
+	// Read the gains
+	readGains();
 
 	// initialize errors (not really used anymore)
 	int_err.setZero();
@@ -1111,14 +1243,12 @@ int main(int argc, char* argv[]) {
 	// 	cout << i << ": angle=" << angle << ", unwraped: " << unwrap(angle) << endl;
 	// }
 	// return 0;
+	LOG(INFO) << "basenavd has started.";
 
 	init_wd = getcwd_str();
 
 	// parse command line arguments
 	parse_args(argc, argv);
-
-	// Read the gains
-	readGains();
 
 	// Load the world and the robot
 	DartLoader dl;
