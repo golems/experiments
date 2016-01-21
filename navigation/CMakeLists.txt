@@ -60,11 +60,8 @@ endforeach(source)
 # Add all the files we want to compile.
 #file(GLOB scripts_source "exe/*.cpp")
 
-# There is some error is some files. Adding only what we want.
-file(GLOB scripts_source "exe/06-basenavd.cpp")
-
-
-
+# HACK!! There is some error is some files. Adding only what we want.
+file(GLOB scripts_source "exe/06-basenavd.cpp" "exe/TrajGenMultiDim_test.cpp" "exe/TrajGen_test.cpp")
 
 list(SORT scripts_source)
 

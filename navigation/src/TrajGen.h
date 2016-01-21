@@ -2,7 +2,8 @@
  * Author : Nehchal J. (nehchal@gatech.edu)
  * Georgia Institute of Technology
  *
- * Description: Trajectory Generator implementing trapezoidal motion profile.
+ * Description: Trajectory Generator implementing trapezoidal motion profile
+ *              for one dimension.
  * 
  * Reference:
  *      "Design Trends" Motion Designs Inc. Aug, 2010.
@@ -22,14 +23,19 @@ class TrajGen {
 public:
     TrajGen();
 
-    /* Set the Target Pose
-        start_time: [IN] the time when motion starts
-        pose: [IN] target pose */
-    void setTargetState(const Vector6d& start_state, const Vector6d& target_state);
+    /* Set the trajectory. Assumes initial position to be zero
+        start_pos: [IN] starting position
+        start_vel: [IN] starting velocity
+        target_pos: [IN] target position 
+        t : [IN] total time. Should be positive */
+    void initializeTrajectory(float v_i, float D, float T);
 
     /* Returns the reference pose at time t
-     t : [IN] current time (in secs) */
-    Vector6d getReferenceState(double t);
+     t : [IN] time elaspsed since trajectory was set (in secs) */
+    void getReferenceState(double t, float& x_ref, float& v_ref);
+
+    /* Returns total time of trajectory */
+    double getTotalTime();
 
 private:
     double _start_time;
@@ -38,17 +44,10 @@ private:
     double _T_a; // acceleration time
     double _T_d; // deceleration time
     double _T;   // Time taken to reach target
-    double _sDot_max;    // Maximum velocity
+    double _v_cruise;    // Velocity during cruising phase
 
-    Vector6d _start_state;
-    Vector6d _end_state;
-
-    // Linear limits of the robot
-    double _vel_avg_lin;    // m/sec
-
-    // Rotational limits of the robot
-    double _vel_avg_rot;    // rad/sec
+    float _v_i; // initial velocity
 };
 
 
- #endif
+ #endif // TRAJ_GEN

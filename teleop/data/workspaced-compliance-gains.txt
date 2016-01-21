@@ -1,4 +1,4 @@
-# format: [translationGain orientatationGain]
+# format: [translationGain orientatationGain K_p]
 # Do not leave any empty lines.
 # 0.003 0.04 
 #0.001 0.01

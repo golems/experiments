@@ -33,8 +33,9 @@
  * demonstrations. Moves the Krang robot grippers with workspace control
  *
  * Supports:
- *    . Synch mode where relative transforms b/w two grippers remains same
- *    . Velocity control and pose control.
+ *    . Synch mode: where relative transform b/w the two grippers remains same
+ *    . Velocity control
+ *    . Pose Control.
  * 
  * On chaning input mode, any previous data on the ACH channels is discarded.
  * VEL -> POSE: Current position is set at reference position till any new
@@ -56,22 +57,25 @@
  *        for changing input mode.        
  *
  *
- * The program runs in two threads:
+ * The program has two threads:
  *      kbhit - This takes input from key-board and takes appropriate action
  *      run - everything else including receiving from and publishing to ACH 
  *            channels, running pose/vel control, printing to screen, etc.
  *      
  *      Some variables are written by both threads, so mutex lock has been 
  *      used.
+ *
+ * For logging. Easylogging++ library has been used. 
+ * 		URL: https://github.com/easylogging/easyloggingpp
  * 
  * Default Settings
 		. Compliance Mode - ON
 		. Input Mode - Pose
  *
  *  TODOs
-		. Display current values on the screen
-		. Search for TODO in this file. Some tasks may be mentioned int the comments/
- *
+	  . Display current values on the screen
+	  . Search for TODO in this file. Some tasks may be mentioned in the comments
+ *
  */
 
 #include <kore.hpp>
@@ -96,13 +100,17 @@
 #include <stdio.h>
 
 #include <argp.h>
-#include <ncurses.h>
+#include <ncurses.h>		// for printing
+
+#include <easylogging++.h>	// for logging
+
+INITIALIZE_EASYLOGGINGPP
  
 
 using namespace std;
 
 /* Configuration */
-#define MAX_NUM_WAYPTS  10
+#define MAX_NUM_WAYPTS 50
 
 const char *g_default_cmd_chan_name = "cmd_workspaced";
 
@@ -340,7 +348,7 @@ static char doc[] = "Moves the Krang robot grippers with workspace control";
 /// argp object
 static struct argp argp = {options, parse_opt, args_doc, doc, NULL, NULL, NULL };
 
-/* Find implementation later in this file */
+/* Find implementation at the of the file */
 void recordEvent(const char* event);
 void printEvents();
 
@@ -373,8 +381,10 @@ void parse_args(int argc, char* argv[])
    }
 }
 
+
+
 // initializers for the workspace control constants
-const double K_WORKERR_P = 1.00;
+const double K_WORKERR_P = 2.00;
 const double NULLSPACE_GAIN = 0.5; //0.1;
 const double DAMPING_GAIN = 0.005;
 const double SPACENAV_ORIENTATION_GAIN = 0.50; // maximum 50 cm per second from spacenav
@@ -425,8 +435,14 @@ Eigen::MatrixXd Trel_pri_to_off; ///< translation from the primary hand to the o
 Krang::Side primary_hand = Krang::LEFT;
 Krang::Side off_hand = Krang::RIGHT;
 
-// debug information
-// bool debug_print_this_it;       ///< whether we print
+const char* side_to_str(Krang::Side side) {
+	if(side == Krang::LEFT)
+		return "LEFT";
+	else if(side == Krang::RIGHT)
+		return "RIGHT";
+	else
+		return "UNKNOWN";
+}
 
 /// Clean up
 void destroy() {
@@ -721,17 +737,17 @@ void *kbhit(void *) {
     }
 }
 
-/* Prints the current status of the machine */
-void print_robot_state(const Krang::Hardware* hw,
-					   const Krang::WorkspaceControl *l_ws, 
-					   const Krang::WorkspaceControl *r_ws, 
-					   const cx_t& cx){
+/* Prints the current configuration */
+void print_configuration(const Krang::Hardware* hw,
+					    const Krang::WorkspaceControl *l_ws, 
+					    const Krang::WorkspaceControl *r_ws, 
+					    const cx_t& cx) {
 
-    printw("Compliance lin/ang gains: %f %f\n", 
+	 printw("Compliance lin/ang gains: %f %f\n", 
         l_ws->compliance_translation_gain,
         l_ws->compliance_orientation_gain);
     printw("Compliance multiplier: %d\n", cx.compliance_mult + 1);
-    printw("CURRENT CONF. (use key-bindings to change)\n\r");
+    
     printw("\tSync Mode: \t\t\t%s\n\r", synch_mode_to_string(cx.synch_mode));
     printw("\tSend commands to Motor:\t\t");
     printw(cx.send_motor_cmds ? "ON\n" : "OFF\n");
@@ -744,23 +760,26 @@ void print_robot_state(const Krang::Hardware* hw,
 
 	printw("\tWaypoint time advance:\t\t");
 	printw(cx.time_advance_waypts ? "ON\n" : "OFF\n");
+}
 
-    printw("----------------------------------\n");
+/* Prints the current status of the machine */
+void print_robot_state(const Krang::Hardware* hw,
+					   const Krang::WorkspaceControl *l_ws, 
+					   const Krang::WorkspaceControl *r_ws, 
+					   const cx_t& cx){
 
 	Eigen::VectorXd pose = Eigen::VectorXd::Zero(6);
 	Eigen::VectorXd pincher_state = Eigen::VectorXd::Zero(2);
 
-	printw("ROBOT STATE\n\r");
-
 	// TODO the pose used exponential coordinates. Covert it to euler
-	printw("Base pose (in World Frame):\n");
-	pose = hw->robot->getConfig(Krang::dart_root_dof_ids);
-	printw("\texp:   ");
-	PRINT_VECTOR(pose)
-	printw("\teuler: ");
-	kinematics::BodyNode* baseBodyNode = hw->robot->getNode("Base");
-	pose = Krang::transformToEuler(baseBodyNode->getWorldTransform(), math::XYZ);
-	PRINT_VECTOR(pose)
+	//printw("Base pose (in World Frame):\n");
+	//pose = hw->robot->getConfig(Krang::dart_root_dof_ids);
+	//printw("\texp:   ");
+	//PRINT_VECTOR(pose)
+	//printw("\teuler: ");
+	//kinematics::BodyNode* baseBodyNode = hw->robot->getNode("Base");
+	//pose = Krang::transformToEuler(baseBodyNode->getWorldTransform(), math::XYZ);
+	//PRINT_VECTOR(pose)
 
 	printw("\n[Left Gripper]\n");
 
@@ -810,9 +829,9 @@ void print_robot_state(const Krang::Hardware* hw,
 	printw("Force/Torque values [Right Gripper]\n    ");
 	PRINT_VECTOR(hw->fts[Krang::RIGHT]->lastExternal)
 
-	printw("Krang Body Config\n    ");
-	pose = hw->robot->getPose();
-	PRINT_VECTOR(pose)
+	//printw("Krang Body Config\n    ");
+	//pose = hw->robot->getPose();
+	//PRINT_VECTOR(pose)
 
 	printw("Current (Amps) [Left]: ");
 	PRINT_ARRAY_FLOAT(hw->arms[Krang::LEFT]->cur, 7)
@@ -874,10 +893,14 @@ void publish_to_channels(const Krang::Hardware* hw,
 }
 
 /**
- * Reads the next waypoint from the given ACH channel.
+ * Reads the next waypoints from the |chan| ACH channel. Size of refTraj and
+ * refTimeouts is same. If new waypoints are available, all the previous 
+ * waypoints and timouts are cleared from refTraj and refTimeouts vectors. If
+ * timeout value for particular waypoints in not specified, it is set to zero.
  * 
  * @param chan : [IN/OUT] the ACH channel to read from.
- * @param waypnt: [OUT] the read data is written to this. 
+ * @param refTraj: [OUT] sequences of poses in robot frame.
+ * @param refTimeouts: [OUT] sequences of timeouts.
  * Returns true if next waypoints read successfully from the channel, false
  *  otherwise. */
 bool poll_waypnts_channel(ach_channel_t& chan, 
@@ -908,7 +931,7 @@ bool poll_waypnts_channel(ach_channel_t& chan,
 		temp = refTrajM.row(i);
 		refTraj.push_back(temp);
 
-		// if a 7th element was provided, it's a timestamp
+		// if a 7th element was provided, it's a timeout value
 		if (temp.size() > 6)
 			refTimeouts.push_back(temp(6));
 		else
@@ -949,7 +972,8 @@ bool poll_ref_vel_channel(ach_channel_t& chan, Eigen::VectorXd& vel) {
 }
 
 /* Reads the command channel and takes action. Makes changes to global 
- * variable cx.
+ * variable cx. Refer to "Krang Software Manual" google doc for command 
+ * details.
  *  chan :[IN] the channel to read the command from */
 void poll_cmd_channel(ach_channel_t& chan){
 
@@ -959,67 +983,54 @@ void poll_cmd_channel(ach_channel_t& chan){
     enum ach_status r = ach_get(&chan, buf, sizeof(buf), &frame_size, NULL, ACH_O_LAST);
     if(!(r == ACH_OK || r == ACH_MISSED_FRAME)) return;
 
-    // printw("\n%d:I am inside %s()\n", __LINE__, __func__);
-
     Eigen::MatrixXd cmdM = deserialize_to_Matrix(buf);
     if(cmdM.size() != 2)
-        printw("Error at Line %d: Invalid message on command code\n\r", __LINE__);
+        LOG(ERROR) << "Invalid message on command channel";
 
     // printw("\n%d:I am inside %s()\n", __LINE__, __func__);
 
     int cmdCode = int(cmdM(0) + 0.5);   // round the value
     int val = int(cmdM(1) + 0.5);       // round the value
 
+    LOG(INFO) << "Command Received. Cmd Code: " << cmdCode << " Value: " << val;
+
     switch(cmdCode){ // round a command code
         case 0: 
-            (val == 0) ? 
-                setInputMode(INPUT_MODE_POSE)
-                    : setInputMode(INPUT_MODE_VEL);
+            val ? setInputMode(INPUT_MODE_VEL) : setInputMode(INPUT_MODE_POSE);
             break;
         case 1:     // close/open both grippers
-            if(val == 0){
-                openGripper(hw->grippers[Krang::LEFT]);
-                openGripper(hw->grippers[Krang::RIGHT]);
-            }
-            else{
+            if(val){
                 closeGripper(hw->grippers[Krang::LEFT]);
                 closeGripper(hw->grippers[Krang::RIGHT]);
+            }
+            else {
+                openGripper(hw->grippers[Krang::LEFT]);
+                openGripper(hw->grippers[Krang::RIGHT]);
             }
             break;
         case 2: 
-            if(val == 0)
-                openGripper(hw->grippers[Krang::LEFT]);
-            else
-                closeGripper(hw->grippers[Krang::LEFT]);
+			val ? closeGripper(hw->grippers[Krang::LEFT]) 
+				: openGripper(hw->grippers[Krang::LEFT]);
             break;
         case 3:
-            if(val == 0)
-                openGripper(hw->grippers[Krang::RIGHT]);
-            else
-                closeGripper(hw->grippers[Krang::RIGHT]);
+			val ? closeGripper(hw->grippers[Krang::RIGHT]) 
+				: openGripper(hw->grippers[Krang::RIGHT]);
             break;
         case 4: 
-            if(val) hw->setImuOn();
-            else hw->setImuOff();
+            val ? hw->setImuOn() : hw->setImuOff();
             break;
-        case 5: { // toggle error advance mode
-			if (val == 0)
-				cx.err_advance_waypts = false;
-			else if (val == 1)
-				cx.err_advance_waypts = true;
+        case 5:// toggle error advance mode
+			if(val == 0 || val == 1)
+				cx.err_advance_waypts = val;
 			else
-				printw("Error at Line %d: Invalid message on command code\n\r", __LINE__);				
+				LOG(ERROR) << "Invalid message on command channel";
 			break;
-		}
-		case 6: { // toggle time advance mode
-			if (val == 0)
-				cx.time_advance_waypts = false;
-			else if (val == 1)
-				cx.time_advance_waypts = true;
+		case 6:// toggle time advance mode
+			if(val == 0 || val == 1)
+				cx.time_advance_waypts = val;
 			else
-				printw("Error at Line %d: Invalid message on command code\n\r", __LINE__);				
+				LOG(ERROR) << "Invalid message on command channel";
 			break;
-		}
         default: 
             break;
     }
@@ -1028,8 +1039,7 @@ void poll_cmd_channel(ach_channel_t& chan){
     return;
 }
 
-/* ********************************************************************************************* */
-/// The main loop
+/// The main loop. This function has a loop that runs repeatedly.
 void run() {
 
 	// start some timers
@@ -1050,8 +1060,9 @@ void run() {
 
 	Eigen::VectorXd x; // current position of the gripper
 
-	char buf[256];
+	char buf[256]; // buffer to store tempory strings for recordEvent()
 
+	// Continouos loop
 	while(!somatic_sig_received) {
 
 		pthread_mutex_lock(&mutex);     
@@ -1073,26 +1084,26 @@ void run() {
 		// wss[Krang::RIGHT]->debug_to_curses = debug_print_this_it;
 
 		/* Read the robot state from sensors. This includes reading joint 
-		   angles for arms. It also update internal kinematics. */
+		   angles for arms. It also updates internal kinematics. */
 		hw->updateSensors(time_delta);
 
-		// // Check for too high currents
-		// if (Krang::checkCurrentLimits(hw->arms[Krang::LEFT]->cur, 7)
-		//    || Krang::checkCurrentLimits(hw->arms[Krang::RIGHT]->cur, 7)) {
+		// Check for too high currents
+		if (Krang::checkCurrentLimits(hw->arms[Krang::LEFT]->cur, 7)
+		    || Krang::checkCurrentLimits(hw->arms[Krang::RIGHT]->cur, 7)) {
 
-		//    	sprintf(buf, "ERROR: Halting arms because of over-current");
-		//     recordEvent(buf);
+		    sprintf(buf, "ERROR: Halting arms because of over-current");
+		    recordEvent(buf);
 
-		// 	if (cx.send_motor_cmds) {
-		// 		cx.send_motor_cmds = false;
-		// 		somatic_motor_halt(&daemon_cx, hw->arms[Krang::LEFT]);
-		// 		somatic_motor_halt(&daemon_cx, hw->arms[Krang::RIGHT]);
-		// 	}
+		    if (cx.send_motor_cmds) {
+		 		cx.send_motor_cmds = false;
+		 		somatic_motor_halt(&daemon_cx, hw->arms[Krang::LEFT]);
+		 		somatic_motor_halt(&daemon_cx, hw->arms[Krang::RIGHT]);
+		 	}
 
-		// 	// // TODO: handle this more nicely
-		// 	// destroy();
-		// 	// exit(EXIT_FAILURE);
-		// } else {
+		 	// // TODO: handle this more nicely
+		 	// destroy();
+		 	// exit(EXIT_FAILURE);
+		 } else {
 			// print warnings current vals
 			for(size_t i = 0; i < 7; i++) {
 				// print warnings for left arm
@@ -1109,7 +1120,7 @@ void run() {
 					recordEvent(buf);
 				}
 			}
-		// }
+	    }
 
 		// update max currents till now
 		for (int i=0; i<7; i++){
@@ -1117,9 +1128,8 @@ void run() {
 			cx.maxCurrent[R_GRIP][i] = fmax(cx.maxCurrent[R_GRIP][i], abs(hw->arms[Krang::RIGHT]->cur[i]));
 		}
 
-		// ========================================================================================
 		// Perform workspace for each arm, changing the input for right arm based on synch mode
-
+		
 		for(int side = Krang::LEFT; side < 2; side++) {  // L_GRIP and L_RIGHT
 			// Get the arm side and the joint angles
 			Krang::Side sde = static_cast<Krang::Side>(side);
@@ -1195,8 +1205,9 @@ void run() {
 			bool r;
 			r = poll_waypnts_channel(waypts_channel[side], cx.refTraj[side], cx.refTimeouts[side]);
 
-			if (r == true){ // update ref pose and timeout
-				printw("Waypoints channel polled. \n\r");
+			if (r == true){ // update ref poses and timeouts
+				sprintf(buf, "%d waypoint(s) recvd for %s arm", cx.refTraj[side].size(), side_to_str(sde));
+				recordEvent(buf);
 				cx.numWayPtsReached = 0;
 
 				// update reference
@@ -1258,13 +1269,15 @@ void run() {
 		// print various things to the output
 		move(0, 0);
 		//clear();
-		printw("----------------------------------\n");
+		printw("----------  Workspaced  ----------\n");
 		print_key_bindings();
-		printw("----------------------------------\n");
+		printw("------ CURRENT CONF. (use key-bindings to change) ---\n\r");
+		print_configuration(hw, wss[Krang::LEFT], wss[Krang::RIGHT], cx);
+		printw("------  [ROBOT STATE]  ------------------------------\n");
 		print_robot_state(hw, wss[Krang::LEFT], wss[Krang::RIGHT], cx);
-		printw("----------------------------------\n");
+		printw("------  [EVENTS]  -----------------------------------\n");
 		printEvents();
-		printw("----------------------------------\n");
+		//printw("----------------------------------\n");
 		refresh();  // refresh the ncurses screen
 
 		// publish the left gripper and right gripper states on the ACH channels.
@@ -1303,7 +1316,6 @@ void init() {
 	somatic_d_init(&daemon_cx, &daemon_opt);
 
 	// Initialize ACH channels for reading waypoints for left and right grippers
-	enum ach_status r = ACH_OK;
 	assert(ACH_OK == ach_open(&waypts_channel[L_GRIP], cx.lgrip_waypnts_channel_name, NULL ));
 	assert(ACH_OK == ach_flush(&waypts_channel[L_GRIP]));
 
@@ -1348,6 +1360,7 @@ void init() {
 
 	// Initialize the hardware for the appropriate gripper mode
 	hw = new Krang::Hardware(Krang::Hardware::MODE_ALL_GRIPSCH, &daemon_cx, robot);
+    
     /* Above initialization takes the first reading from IMU. Now turn off the 
      imu to avoid noise in IMU reading */
     hw->setImuOff(); cx.imu_mode = false;
@@ -1384,7 +1397,7 @@ void init() {
     cx.compliance_mode = COMPLIANCE_ON;//COMPLIANCE_ON;
     cx.err_advance_waypts = true;
     cx.time_advance_waypts = false;
-	cx.show_key_bindings = true;
+	cx.show_key_bindings = false;
 
 	for(int i=0; i<7; i++) cx.maxCurrent[L_GRIP][i] = cx.maxCurrent[R_GRIP][i] = 0.0;
 
@@ -1393,14 +1406,14 @@ void init() {
 					SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
 }
 
-/* ******************************************************************************************** */
 /// The main thread
 int main(int argc, char* argv[]) {
+
+	LOG(INFO) << "workspace has started.";
 
 	/* Store the current working directory since somatic annoyingly changes it */
 	char temp[1024];
 	init_wd = getcwd(temp, 1024) ? std::string( temp ) : std::string("");
-	
 
 	// parse command line arguments
 	parse_args(argc, argv);
@@ -1410,7 +1423,7 @@ int main(int argc, char* argv[]) {
 	destroy();	// destroy
 }
 
-/* ***************************************
+/*
 A simple implementation of events.
 Each event is just a character string.
 One function records the event. Another functions prints the events. Prev events
@@ -1440,7 +1453,6 @@ void recordEvent(const char* event){
 }
 
 void printEvents(){
-	printw("EVENTS\n");
 	for(int i=0; i < g_EventQ.numEvents; i++)
 		printw("   %d: %s\n", g_EventQ.eventNum + i, g_EventQ.events[(g_EventQ.startIndex + i)%10]);
 	printw("\n");

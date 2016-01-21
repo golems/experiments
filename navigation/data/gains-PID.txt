@@ -1,4 +1,4 @@
-# format: [linearP linearI linearD angularP angularI angularD pb_alpha pb_beta B_c epsilon I_l]
+# format: [linearP linearI linearD angularP angularI angularD pb_alpha pb_beta B_c_slider B_c_tire epsilon I_l_lin I_l_ang]
 # pb_alpha and pb_beta are parameters for an adaptive positional gain 
 # for overcoming static friction which falls off as velocity increases:
 # k_pb = pb_apha * exp(-pb_beta * ||v||)
@@ -7,5 +7,7 @@
 # 100 0 15 100 0 5 20 50
 # 330 130 13 80 350 5 0 1000
 #100 100 6 20 30 5 0 1000 11.5
-20 5 2 0 20 0 5 0 9.0 1.0 0.1
+#15 20 0.0 10 10 0.0 10.0 6.0 0.0 9.0 2.0 0.04 0.1
+45 100 15 60 40 0.0 10.0 6.0 0.0 0.0 2.0 0.04 0.1
+#45 50 15 0 0 0.0 10.0 6.0 0.0 0.0 2.0 0.04 0.1
 #0 0 0 0 0 0 0 0 11.5
