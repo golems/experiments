@@ -252,17 +252,24 @@ void run() {
 
 /* ********************************************************************************************* */
 void init () {
-	
+	printf("%d: Reached here.\n", __LINE__);
 	// Initialize this daemon (program!)
 	somatic_d_opts_t dopt;
 	memset(&dopt, 0, sizeof(dopt)); // zero initialize
+
+	printf("%d: Reached here.\n", __LINE__);
+
 	dopt.ident = "01-joystick";
 	somatic_d_init( &daemon_cx, &dopt );
+
+	printf("%d: Reached here.\n", __LINE__);
 
 	// Initialize the arms and the torso module
 	initArm(daemon_cx, llwa, "llwa");
 	initArm(daemon_cx, rlwa, "rlwa");
 	initTorso(daemon_cx, torso);
+
+	printf("%d: Reached here.\n", __LINE__);
 
 	// Initialize the joystick channel
 	int r = ach_open(&js_chan, "joystick-data", NULL);
@@ -271,6 +278,8 @@ void init () {
 
 	// Initialize the waist channel
 	somatic_d_channel_open(&daemon_cx, &waistCmdChan, "waistd-cmd", NULL);
+
+	printf("%d: Reached here.\n", __LINE__);
 }
 
 /* ********************************************************************************************* */
@@ -300,9 +309,13 @@ void destroy() {
 /* ********************************************************************************************* */
 int main() {
 
+	printf("%d: Reached here.\n", __LINE__);
 	init();
+	printf("%d: Reached here.\n", __LINE__);
 	run();
+	printf("%d: Reached here.\n", __LINE__);
 	destroy();
+	printf("%d: Reached here.\n", __LINE__);
 
 	return 0;
 }

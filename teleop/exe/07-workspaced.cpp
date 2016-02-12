@@ -444,17 +444,11 @@ const char* side_to_str(Krang::Side side) {
 		return "UNKNOWN";
 }
 
-/// Clean up
+// Clean up
 void destroy() {
-
-	// Krang::destroy_curses();   // close display
-
 	// Stop the daemon
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
 					SOMATIC__EVENT__CODES__PROC_STOPPING, NULL, NULL);
-	
-	// close the channel we use for publishing visualization data
-	// somatic_d_channel_close(&daemon_cx, &vis_chan);
 
 	// Clean up the workspace stuff
 	delete wss[Krang::LEFT];
@@ -937,7 +931,6 @@ bool poll_waypnts_channel(ach_channel_t& chan,
 		else
 			refTimeouts.push_back(0.0);
 	}
-
 	return true;
 }
 
@@ -971,28 +964,50 @@ bool poll_ref_vel_channel(ach_channel_t& chan, Eigen::VectorXd& vel) {
 	return true;
 }
 
+/* Coverts command to corresponding command string.
+ *  cmdCode: [IN] The command code*/
+const char* cmd_code_to_str(int cmdCode) {
+	switch(cmdCode) {
+		case 0: return "Set trajectory input mode"; break;
+		case 1: return "Set both grippers"; 		break;
+		case 2: return "Set left gripper"; 			break;
+		case 3: return "Set right gripper"; 		break;
+		case 4: return "Set IMU updating"; 			break;
+		case 5: return "Set error advance mode"; 	break;
+		case 6: return "Set time advance mode"; 	break;
+		default: return "Unknown command code"; 	break;
+	}
+}
+
 /* Reads the command channel and takes action. Makes changes to global 
  * variable cx. Refer to "Krang Software Manual" google doc for command 
  * details.
  *  chan :[IN] the channel to read the command from */
 void poll_cmd_channel(ach_channel_t& chan){
-
     size_t frame_size = 0;  
     char buf[2 * sizeof(int) + 2 * sizeof(double)];
 
     enum ach_status r = ach_get(&chan, buf, sizeof(buf), &frame_size, NULL, ACH_O_LAST);
-    if(!(r == ACH_OK || r == ACH_MISSED_FRAME)) return;
+    if(r != ACH_OK && r != ACH_MISSED_FRAME) return;
+
+    if(r == ACH_MISSED_FRAME) LOG(DEBUG) << "Frame has been missed.";
 
     Eigen::MatrixXd cmdM = deserialize_to_Matrix(buf);
-    if(cmdM.size() != 2)
+    if(cmdM.size() != 2) {
         LOG(ERROR) << "Invalid message on command channel";
-
-    // printw("\n%d:I am inside %s()\n", __LINE__, __func__);
+        return;
+    }
 
     int cmdCode = int(cmdM(0) + 0.5);   // round the value
     int val = int(cmdM(1) + 0.5);       // round the value
 
-    LOG(INFO) << "Command Received. Cmd Code: " << cmdCode << " Value: " << val;
+    LOG(INFO) << "Command Received. Cmd Code: " << cmdCode << " (" 
+    	<< cmd_code_to_str(cmdCode) << ") Value: " << val;
+    
+    if(val != 0 && val != 1){
+    	LOG(ERROR) << "Value " << val << " invalid";
+    	return;
+    }
 
     switch(cmdCode){ // round a command code
         case 0: 
@@ -1019,23 +1034,24 @@ void poll_cmd_channel(ach_channel_t& chan){
         case 4: 
             val ? hw->setImuOn() : hw->setImuOff();
             break;
-        case 5:// toggle error advance mode
-			if(val == 0 || val == 1)
-				cx.err_advance_waypts = val;
-			else
-				LOG(ERROR) << "Invalid message on command channel";
+        case 5: // toggle error advance mode
+			cx.err_advance_waypts = val;
 			break;
-		case 6:// toggle time advance mode
-			if(val == 0 || val == 1)
-				cx.time_advance_waypts = val;
-			else
-				LOG(ERROR) << "Invalid message on command channel";
+		case 6: // toggle time advance mode
+			cx.time_advance_waypts = val;
 			break;
+		case 7: // set advance mode
+            if (val >=0 && val <=3) {
+                cx.err_advance_waypts = val & 0b10;  // 2nd bit
+                cx.time_advance_waypts = val & 0b01; // 1st bit
+            }
+            else
+                printw("Error at Line %d: Invalid message on command code\n\r", __LINE__);                
+            break;
         default: 
             break;
     }
 
-    printw("\nReceived cmd. cmd = %d, val = %d\n", cmdCode, val);
     return;
 }
 
